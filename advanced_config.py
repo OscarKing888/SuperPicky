@@ -8,6 +8,7 @@ SuperPicky V3.1 - 高级配置管理
 import json
 import os
 from pathlib import Path
+import sys
 
 
 class AdvancedConfig:
@@ -32,9 +33,26 @@ class AdvancedConfig:
         "language": "zh_CN",        # zh_CN | en_US
     }
 
-    def __init__(self, config_file="advanced_config.json"):
+    def __init__(self, config_file=None):
         """初始化配置"""
-        self.config_file = config_file
+        # 如果没有指定配置文件路径，使用用户目录
+        if config_file is None:
+            # 获取用户主目录下的配置目录
+            if sys.platform == "darwin":  # macOS
+                config_dir = Path.home() / "Library" / "Application Support" / "SuperPicky"
+            elif sys.platform == "win32":  # Windows
+                config_dir = Path.home() / "AppData" / "Local" / "SuperPicky"
+            else:  # Linux
+                config_dir = Path.home() / ".config" / "SuperPicky"
+
+            # 创建配置目录（如果不存在）
+            config_dir.mkdir(parents=True, exist_ok=True)
+
+            # 配置文件路径
+            self.config_file = str(config_dir / "advanced_config.json")
+        else:
+            self.config_file = config_file
+
         self.config = self.DEFAULT_CONFIG.copy()
         self.load()
 

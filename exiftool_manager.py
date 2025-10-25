@@ -136,7 +136,7 @@ class ExifToolManager:
         files_metadata: List[Dict[str, any]]
     ) -> Dict[str, int]:
         """
-        批量设置元数据（更高效）
+        批量设置元数据（使用-execute分隔符，支持不同文件不同参数）
 
         Args:
             files_metadata: 文件元数据列表
@@ -151,9 +151,9 @@ class ExifToolManager:
         """
         stats = {'success': 0, 'failed': 0}
 
-        # ExifTool批量模式：为每个文件单独设置参数
-        # 格式: exiftool -TAG1=value1 -TAG2=value2 file1 -TAG1=value3 file2 ... -overwrite_original
-        cmd = [self.exiftool_path]
+        # ExifTool批量模式：使用 -execute 分隔符为每个文件单独设置参数
+        # 格式: exiftool -TAG1=value1 file1 -execute -TAG2=value2 file2 -execute ...
+        cmd = [self.exiftool_path, '-overwrite_original']
 
         for item in files_metadata:
             file_path = item['file']
@@ -168,7 +168,7 @@ class ExifToolManager:
                 stats['failed'] += 1
                 continue
 
-            # 为这个文件添加命令
+            # 为这个文件添加命令参数
             cmd.extend([
                 f'-Rating={rating}',
                 f'-XMP:Pick={pick}',
@@ -192,8 +192,8 @@ class ExifToolManager:
 
             cmd.append(file_path)
 
-        # 添加通用参数
-        cmd.append('-overwrite_original')
+            # 添加 -execute 分隔符（除了最后一个文件）
+            cmd.append('-execute')
 
         # 执行批量命令
         try:
@@ -317,7 +317,7 @@ class ExifToolManager:
             print(f"❌ ExifTool异常: {e}")
             return False
 
-    def batch_reset_metadata(self, file_paths: List[str], batch_size: int = 50, log_callback=None) -> Dict[str, int]:
+    def batch_reset_metadata(self, file_paths: List[str], batch_size: int = 50, log_callback=None, i18n=None) -> Dict[str, int]:
         """
         批量重置元数据（使用ExifTool条件过滤，最快速度）
 
@@ -328,6 +328,7 @@ class ExifToolManager:
             file_paths: 文件路径列表
             batch_size: 每批处理的文件数量（默认50，避免命令行过长）
             log_callback: 日志回调函数（可选，用于UI显示）
+            i18n: I18n instance for internationalization (optional)
 
         Returns:
             统计结果 {'success': 成功数, 'failed': 失败数, 'skipped': 跳过数}
@@ -342,9 +343,14 @@ class ExifToolManager:
         stats = {'success': 0, 'failed': 0, 'skipped': 0}
         total = len(file_paths)
 
-        log(f"📦 开始重置 {total} 个文件的EXIF元数据...")
-        log(f"   使用ExifTool条件过滤（-if参数）")
-        log(f"   注意：自动保留 4-5 星照片，只重置 ≤3 星的照片\n")
+        if i18n:
+            log(i18n.t("logs.batch_reset_start", total=total))
+            log(i18n.t("logs.batch_reset_filter"))
+            log(i18n.t("logs.batch_reset_note") + "\n")
+        else:
+            log(f"📦 开始重置 {total} 个文件的EXIF元数据...")
+            log(f"   使用ExifTool条件过滤（-if参数）")
+            log(f"   注意：自动保留 4-5 星照片，只重置 ≤3 星的照片\n")
 
         # 分批处理（避免命令行参数过长）
         for batch_start in range(0, total, batch_size):
@@ -388,7 +394,10 @@ class ExifToolManager:
                         updated_count = int(match.group(1))
                         stats['success'] += updated_count
                         stats['skipped'] += len(valid_files) - updated_count  # 4-5星被自动跳过
-                        log(f"  ✅ 批次 {batch_start+1}-{batch_end}: {updated_count} 成功, {len(valid_files) - updated_count} 跳过(4-5星)")
+                        if i18n:
+                            log(i18n.t("logs.batch_progress", start=batch_start+1, end=batch_end, success=updated_count, skipped=len(valid_files) - updated_count))
+                        else:
+                            log(f"  ✅ 批次 {batch_start+1}-{batch_end}: {updated_count} 成功, {len(valid_files) - updated_count} 跳过(4-5星)")
                     else:
                         # 如果没有匹配到输出，假设全部成功
                         stats['success'] += len(valid_files)

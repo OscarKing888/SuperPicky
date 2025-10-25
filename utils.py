@@ -48,11 +48,23 @@ def write_to_csv(data: dict, directory: str, header: bool = False):
 
     report_file = os.path.join(tmp_dir, "report.csv")
 
-    # 定义CSV列顺序
+    # 定义CSV列顺序（英文字段名，便于代码分析）
     fieldnames = [
-        "文件名", "是否有鸟", "置信度", "X坐标", "Y坐标",
-        "鸟占比", "像素数", "原始锐度", "归一化锐度", "NIMA美学", "BRISQUE技术", "星等", "评分",
-        "面积达标", "居中", "锐度达标", "类别ID"
+        "filename",         # 文件名（不含扩展名）
+        "has_bird",         # 是否有鸟 (yes/no)
+        "confidence",       # AI置信度 (0-1)
+        "center_x",         # 鸟中心X坐标（归一化 0-1）
+        "center_y",         # 鸟中心Y坐标（归一化 0-1）
+        "area_ratio",       # BBox面积占比 (0-1)
+        "bbox_width",       # BBox宽度（像素）
+        "bbox_height",      # BBox高度（像素）
+        "mask_pixels",      # Mask有效像素数
+        "sharpness_raw",    # 原始锐度（拉普拉斯方差）
+        "sharpness_norm",   # 归一化锐度
+        "norm_method",      # 归一化方法 (log_compression/sqrt/linear等)
+        "nima_score",       # NIMA美学评分 (1-10)
+        "brisque_score",    # BRISQUE技术质量 (越低越好)
+        "rating"            # 最终评分 (-1/0/1/2/3)
     ]
 
     try:

@@ -136,7 +136,11 @@
       "Read(//Users/jameszhenyu/Desktop/**)",
       "Read(//Volumes/990PRO4TB/2025/2025-08-19/**)",
       "Bash(xargs -I {} basename {})",
-      "Bash(git remote set-url origin https://github.com/jamesphotography/SuperPicky.git)"
+      "Bash(git remote set-url origin https://github.com/jamesphotography/SuperPicky.git)",
+      "Read(//Volumes/990PRO4TB/2025/**)",
+      "Read(//Users/jameszhenyu/Library/**)",
+      "Bash(xargs:*)",
+      "Bash(../../../exiftool -if '$Rating eq 3' -Rating -XMP:Pick -filename *.NEF)"
     ],
     "deny": [],
     "ask": []

@@ -42,8 +42,8 @@ class PostAdjustmentEngine:
                 reader = csv.DictReader(f)
 
                 # 验证必需字段
-                required_fields = ['文件名', '是否有鸟', '置信度', '归一化锐度',
-                                  'NIMA美学', 'BRISQUE技术', '评分']
+                required_fields = ['filename', 'has_bird', 'confidence', 'sharpness_norm',
+                                  'nima_score', 'brisque_score', 'rating']
 
                 if not all(field in reader.fieldnames for field in required_fields):
                     return False, "CSV文件格式不正确，缺少必需字段"
@@ -54,7 +54,7 @@ class PostAdjustmentEngine:
                 # 只加载有鸟的照片（评分 >= 0）
                 self.photos_data = [
                     photo for photo in all_photos
-                    if photo['是否有鸟'] == '是'
+                    if photo['has_bird'] == 'yes'
                 ]
 
                 total_count = len(all_photos)
@@ -121,19 +121,19 @@ class PostAdjustmentEngine:
         for photo in photos:
             # 解析CSV中的数据
             try:
-                conf = float(photo['置信度'])
-                sharpness = float(photo['归一化锐度'])
+                conf = float(photo['confidence'])
+                sharpness = float(photo['sharpness_norm'])
 
                 # 处理 "-" 值（某些照片可能没有美学/失真评分）
-                nima_str = photo['NIMA美学']
-                brisque_str = photo['BRISQUE技术']
+                nima_str = photo['nima_score']
+                brisque_str = photo['brisque_score']
 
                 nima_score = float(nima_str) if nima_str != '-' else None
                 brisque_score = float(brisque_str) if brisque_str != '-' else None
 
             except (ValueError, KeyError) as e:
                 # 数据格式错误，跳过该照片
-                print(f"警告: 照片 {photo.get('文件名', 'unknown')} 数据格式错误: {e}")
+                print(f"警告: 照片 {photo.get('filename', 'unknown')} 数据格式错误: {e}")
                 continue
 
             # 判定星级（与 ai_model.py:357-378 完全一致）
@@ -190,7 +190,7 @@ class PostAdjustmentEngine:
         # 需要过滤掉没有美学评分的照片
         photos_with_nima = [
             p for p in star_3_photos
-            if p['NIMA美学'] != '-'
+            if p['nima_score'] != '-'
         ]
 
         if len(photos_with_nima) == 0:
@@ -198,18 +198,18 @@ class PostAdjustmentEngine:
 
         sorted_by_nima = sorted(
             photos_with_nima,
-            key=lambda x: float(x['NIMA美学']),
+            key=lambda x: float(x['nima_score']),
             reverse=True
         )
-        nima_top_files = set([photo['文件名'] for photo in sorted_by_nima[:top_count]])
+        nima_top_files = set([photo['filename'] for photo in sorted_by_nima[:top_count]])
 
         # 按锐度排序，取Top N%
         sorted_by_sharpness = sorted(
             star_3_photos,
-            key=lambda x: float(x['归一化锐度']),
+            key=lambda x: float(x['sharpness_norm']),
             reverse=True
         )
-        sharpness_top_files = set([photo['文件名'] for photo in sorted_by_sharpness[:top_count]])
+        sharpness_top_files = set([photo['filename'] for photo in sorted_by_sharpness[:top_count]])
 
         # 计算交集（同时在美学和锐度Top N%中的照片）
         picked_files = nima_top_files & sharpness_top_files
@@ -235,7 +235,7 @@ class PostAdjustmentEngine:
         }
 
         for photo in photos:
-            rating = photo.get('新星级', photo.get('评分', 0))
+            rating = photo.get('新星级', photo.get('rating', 0))
             if isinstance(rating, str):
                 rating = int(rating)
 

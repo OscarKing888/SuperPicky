@@ -34,7 +34,7 @@ def raw_to_jpeg(raw_file_path):
     except Exception as e:
         log_message(f"Error occurred while converting the RAW file:{raw_file_path}, Error: {e}", directory_path)
 
-def reset(directory, log_callback=None):
+def reset(directory, log_callback=None, i18n=None):
     """
     重置工作目录：
     1. 清理临时文件和日志
@@ -43,6 +43,7 @@ def reset(directory, log_callback=None):
     Args:
         directory: 工作目录
         log_callback: 日志回调函数（可选，用于UI显示）
+        i18n: I18n instance for internationalization (optional)
     """
     def log(msg):
         """统一日志输出"""
@@ -52,22 +53,58 @@ def reset(directory, log_callback=None):
             print(msg)
 
     if not os.path.exists(directory):
-        log(f"ERROR: {directory} does not exist")
+        if i18n:
+            log(i18n.t("errors.dir_not_exist", directory=directory))
+        else:
+            log(f"ERROR: {directory} does not exist")
         return False
 
-    log(f"🔄 开始重置目录: {directory}")
+    if i18n:
+        log(i18n.t("logs.reset_start"))
+        log(i18n.t("logs.reset_dir", directory=directory))
+    else:
+        log(f"🔄 开始重置目录: {directory}")
 
     # 1. 清理临时文件、日志和Crop图片
-    log("\n📁 清理临时文件...")
+    if i18n:
+        log("\n" + i18n.t("logs.clean_tmp"))
+    else:
+        log("\n📁 清理临时文件...")
 
     # 1.1 清理 _tmp 目录（包含所有临时文件、日志、crop图片等）
     tmp_dir = os.path.join(directory, "_tmp")
     if os.path.exists(tmp_dir) and os.path.isdir(tmp_dir):
         try:
-            shutil.rmtree(tmp_dir)
-            log(f"  ✅ 已删除 _tmp 目录及其所有内容")
+            # 先尝试修改权限，然后删除
+            def force_remove_readonly(func, path, exc_info):
+                """处理只读文件的删除"""
+                import stat
+                os.chmod(path, stat.S_IWRITE)
+                func(path)
+
+            shutil.rmtree(tmp_dir, onerror=force_remove_readonly)
+            if i18n:
+                log(i18n.t("logs.tmp_deleted"))
+            else:
+                log(f"  ✅ 已删除 _tmp 目录及其所有内容")
         except Exception as e:
-            log(f"  ❌ 删除 _tmp 目录失败: {e}")
+            if i18n:
+                log(i18n.t("logs.tmp_delete_failed", error=str(e)))
+            else:
+                log(f"  ❌ 删除 _tmp 目录失败: {e}")
+            # 尝试使用系统命令强制删除（macOS/Linux）
+            try:
+                import subprocess
+                subprocess.run(['rm', '-rf', tmp_dir], check=True)
+                if i18n:
+                    log(i18n.t("logs.tmp_force_delete"))
+                else:
+                    log(f"  ✅ 使用系统命令强制删除 _tmp 成功")
+            except Exception as e2:
+                if i18n:
+                    log(i18n.t("logs.tmp_force_failed", error=str(e2)))
+                else:
+                    log(f"  ❌ 强制删除也失败: {e2}")
 
     # 1.2 清理旧版本的日志和CSV文件（如果存在于根目录）
     files_to_clean = [".report.csv", ".process_log.txt"]
@@ -97,13 +134,19 @@ def reset(directory, log_callback=None):
             log(f"  ✅ 临时JPEG删除完成: {deleted_tmp} 成功")
 
     # 2. 删除所有XMP侧车文件（Lightroom会优先读取XMP）
-    log("\n🗑️  删除XMP侧车文件...")
+    if i18n:
+        log("\n" + i18n.t("logs.delete_xmp"))
+    else:
+        log("\n🗑️  删除XMP侧车文件...")
     xmp_pattern = os.path.join(directory, "*.xmp")
     xmp_files = glob.glob(xmp_pattern)
     # 过滤掉隐藏文件
     xmp_files = [f for f in xmp_files if not os.path.basename(f).startswith('.')]
     if xmp_files:
-        log(f"  发现 {len(xmp_files)} 个XMP文件，正在删除...")
+        if i18n:
+            log(i18n.t("logs.xmp_found", count=len(xmp_files)))
+        else:
+            log(f"  发现 {len(xmp_files)} 个XMP文件，正在删除...")
         deleted_xmp = 0
         for xmp_file in xmp_files:
             try:
@@ -111,12 +154,21 @@ def reset(directory, log_callback=None):
                 deleted_xmp += 1
             except Exception as e:
                 log(f"  ❌ 删除失败 {os.path.basename(xmp_file)}: {e}")
-        log(f"  ✅ XMP文件删除完成: {deleted_xmp} 成功")
+        if i18n:
+            log(i18n.t("logs.xmp_deleted", count=deleted_xmp))
+        else:
+            log(f"  ✅ XMP文件删除完成: {deleted_xmp} 成功")
     else:
-        log("  ℹ️  未找到XMP文件")
+        if i18n:
+            log(i18n.t("logs.xmp_not_found"))
+        else:
+            log("  ℹ️  未找到XMP文件")
 
     # 3. 重置所有图片文件的EXIF元数据
-    log("\n🏷️  重置EXIF元数据...")
+    if i18n:
+        log("\n" + i18n.t("logs.reset_exif"))
+    else:
+        log("\n🏷️  重置EXIF元数据...")
 
     # 支持的图片格式
     image_extensions = ['*.NEF', '*.nef', '*.CR2', '*.cr2', '*.ARW', '*.arw',
@@ -132,20 +184,35 @@ def reset(directory, log_callback=None):
         image_files.extend(files)
 
     if image_files:
-        log(f"  发现 {len(image_files)} 个图片文件")
+        if i18n:
+            log(i18n.t("logs.images_found", count=len(image_files)))
+        else:
+            log(f"  发现 {len(image_files)} 个图片文件")
 
         try:
-            # 使用批量重置功能（传递log_callback）
+            # 使用批量重置功能（传递log_callback和i18n）
             manager = get_exiftool_manager()
-            stats = manager.batch_reset_metadata(image_files, log_callback=log_callback)
+            stats = manager.batch_reset_metadata(image_files, log_callback=log_callback, i18n=i18n)
 
-            log(f"  ✅ EXIF重置完成: {stats['success']} 成功, {stats.get('skipped', 0)} 跳过(4-5星), {stats['failed']} 失败")
+            if i18n:
+                log(i18n.t("logs.batch_complete", success=stats['success'], skipped=stats.get('skipped', 0), failed=stats['failed']))
+            else:
+                log(f"  ✅ EXIF重置完成: {stats['success']} 成功, {stats.get('skipped', 0)} 跳过(4-5星), {stats['failed']} 失败")
 
         except Exception as e:
-            log(f"  ❌ EXIF重置失败: {e}")
+            if i18n:
+                log(i18n.t("logs.exif_reset_failed", error=str(e)))
+            else:
+                log(f"  ❌ EXIF重置失败: {e}")
             return False
     else:
-        log("  ⚠️  未找到图片文件")
+        if i18n:
+            log(i18n.t("logs.no_images"))
+        else:
+            log("  ⚠️  未找到图片文件")
 
-    log("\n✅ 目录重置完成！")
+    if i18n:
+        log("\n" + i18n.t("logs.reset_complete"))
+    else:
+        log("\n✅ 目录重置完成！")
     return True

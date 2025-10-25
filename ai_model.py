@@ -70,7 +70,7 @@ def _get_iqa_scorer():
     return _iqa_scorer
 
 
-def detect_and_draw_birds(image_path, model, output_path, dir, ui_settings):
+def detect_and_draw_birds(image_path, model, output_path, dir, ui_settings, i18n=None):
     """
     检测并标记鸟类（V3.1 - 简化版，移除预览功能）
 
@@ -80,6 +80,7 @@ def detect_and_draw_birds(image_path, model, output_path, dir, ui_settings):
         output_path: 输出路径（带框图片）
         dir: 工作目录
         ui_settings: [ai_confidence, sharpness_threshold, nima_threshold, save_crop, normalization_mode]
+        i18n: I18n instance for internationalization (optional)
     """
     # V3.1: 从 ui_settings 获取参数
     ai_confidence = ui_settings[0] / 100  # AI置信度：50-100 -> 0.5-1.0（仅用于过滤）
@@ -136,26 +137,30 @@ def detect_and_draw_birds(image_path, model, output_path, dir, ui_settings):
             log_message(f"❌ AI推理完全失败: {cpu_error}", dir)
             # 返回"无鸟"结果（V3.1）
             data = {
-                "文件名": os.path.splitext(os.path.basename(image_path))[0],
-                "是否有鸟": "否",
-                "置信度": "0.00",
-                "X坐标": "-",
-                "Y坐标": "-",
-                "鸟占比": "0.00%",
-                "像素数": "0",
-                "原始锐度": "0.00",
-                "归一化锐度": "0.00",
-                "NIMA美学": "-",
-                "BRISQUE技术": "-",
-                "星等": "❌",
-                "评分": -1,
-                "类别ID": "-"
+                "filename": os.path.splitext(os.path.basename(image_path))[0],
+                "has_bird": "no",
+                "confidence": 0.0,
+                "center_x": 0.0,
+                "center_y": 0.0,
+                "area_ratio": 0.0,
+                "bbox_width": 0,
+                "bbox_height": 0,
+                "mask_pixels": 0,
+                "sharpness_raw": 0.0,
+                "sharpness_norm": 0.0,
+                "norm_method": "-",
+                "nima_score": "-",
+                "brisque_score": "-",
+                "rating": -1
             }
             write_to_csv(data, dir, False)
             return found_bird, bird_result, 0.0, 0.0, None, None
 
     yolo_time = (time.time() - step_start) * 1000
-    log_message(f"  ⏱️  [2/7] YOLO推理: {yolo_time:.1f}ms", dir)
+    if i18n:
+        log_message(i18n.t("logs.yolo_inference", time=yolo_time), dir)
+    else:
+        log_message(f"  ⏱️  [2/7] YOLO推理: {yolo_time:.1f}ms", dir)
 
     # Step 3: 解析检测结果
     step_start = time.time()
@@ -181,25 +186,29 @@ def detect_and_draw_birds(image_path, model, output_path, dir, ui_settings):
                 bird_idx = idx
 
     parse_time = (time.time() - step_start) * 1000
-    log_message(f"  ⏱️  [3/7] 结果解析: {parse_time:.1f}ms", dir)
+    if i18n:
+        log_message(i18n.t("logs.result_parsing", time=parse_time), dir)
+    else:
+        log_message(f"  ⏱️  [3/7] 结果解析: {parse_time:.1f}ms", dir)
 
     # 如果没有找到鸟，记录到CSV并返回（V3.1）
     if bird_idx == -1:
         data = {
-            "文件名": os.path.splitext(os.path.basename(image_path))[0],
-            "是否有鸟": "否",
-            "置信度": "0.00",
-            "X坐标": "-",
-            "Y坐标": "-",
-            "鸟占比": "0.00%",
-            "像素数": "0",
-            "原始锐度": "0.00",
-            "归一化锐度": "0.00",
-            "NIMA美学": "-",
-            "BRISQUE技术": "-",
-            "星等": "❌",
-            "评分": -1,
-            "类别ID": "-"
+            "filename": os.path.splitext(os.path.basename(image_path))[0],
+            "has_bird": "no",
+            "confidence": 0.0,
+            "center_x": 0.0,
+            "center_y": 0.0,
+            "area_ratio": 0.0,
+            "bbox_width": 0,
+            "bbox_height": 0,
+            "mask_pixels": 0,
+            "sharpness_raw": 0.0,
+            "sharpness_norm": 0.0,
+            "norm_method": "-",
+            "nima_score": "-",
+            "brisque_score": "-",
+            "rating": -1
         }
         write_to_csv(data, dir, False)
         return found_bird, bird_result, 0.0, 0.0, None, None
@@ -213,12 +222,20 @@ def detect_and_draw_birds(image_path, model, output_path, dir, ui_settings):
             nima_score = scorer.calculate_nima(image_path)
             nima_time = (time.time() - step_start) * 1000
             if nima_score is not None:
-                log_message(f"🎨 NIMA 美学评分: {nima_score:.2f} / 10", dir)
-                log_message(f"  ⏱️  [4/7] NIMA评分: {nima_time:.1f}ms", dir)
+                if i18n:
+                    log_message(i18n.t("logs.nima_score", score=nima_score), dir)
+                    log_message(i18n.t("logs.nima_timing", time=nima_time), dir)
+                else:
+                    log_message(f"🎨 NIMA 美学评分: {nima_score:.2f} / 10", dir)
+                    log_message(f"  ⏱️  [4/7] NIMA评分: {nima_time:.1f}ms", dir)
         except Exception as e:
             nima_time = (time.time() - step_start) * 1000
-            log_message(f"⚠️  NIMA 计算失败: {e}", dir)
-            log_message(f"  ⏱️  [4/7] NIMA评分(失败): {nima_time:.1f}ms", dir)
+            if i18n:
+                log_message(i18n.t("logs.nima_failed", error=str(e)), dir)
+                log_message(i18n.t("logs.nima_timing_failed", time=nima_time), dir)
+            else:
+                log_message(f"⚠️  NIMA 计算失败: {e}", dir)
+                log_message(f"  ⏱️  [4/7] NIMA评分(失败): {nima_time:.1f}ms", dir)
             nima_score = None
 
     # 只处理面积最大的那只鸟
@@ -265,12 +282,20 @@ def detect_and_draw_birds(image_path, model, output_path, dir, ui_settings):
                 brisque_score = scorer.calculate_brisque(crop_img)
                 brisque_time = (time.time() - step_start) * 1000
                 if brisque_score is not None:
-                    log_message(f"🔧 BRISQUE 技术质量: {brisque_score:.2f} / 100 (越低越好)", dir)
-                    log_message(f"  ⏱️  [5/7] BRISQUE评分: {brisque_time:.1f}ms", dir)
+                    if i18n:
+                        log_message(i18n.t("logs.brisque_score", score=brisque_score), dir)
+                        log_message(i18n.t("logs.brisque_timing", time=brisque_time), dir)
+                    else:
+                        log_message(f"🔧 BRISQUE 技术质量: {brisque_score:.2f} / 100 (越低越好)", dir)
+                        log_message(f"  ⏱️  [5/7] BRISQUE评分: {brisque_time:.1f}ms", dir)
             except Exception as e:
                 brisque_time = (time.time() - step_start) * 1000
-                log_message(f"⚠️  BRISQUE 计算失败: {e}", dir)
-                log_message(f"  ⏱️  [5/7] BRISQUE评分(失败): {brisque_time:.1f}ms", dir)
+                if i18n:
+                    log_message(i18n.t("logs.brisque_failed", error=str(e)), dir)
+                    log_message(i18n.t("logs.brisque_timing_failed", time=brisque_time), dir)
+                else:
+                    log_message(f"⚠️  BRISQUE 计算失败: {e}", dir)
+                    log_message(f"  ⏱️  [5/7] BRISQUE评分(失败): {brisque_time:.1f}ms", dir)
                 brisque_score = None
 
             # Step 6: 使用新的基于掩码的锐度计算
@@ -325,7 +350,10 @@ def detect_and_draw_birds(image_path, model, output_path, dir, ui_settings):
                 effective_pixels = sharpness_result['effective_pixels']
 
             sharpness_time = (time.time() - step_start) * 1000
-            log_message(f"  ⏱️  [6/7] 锐度计算: {sharpness_time:.1f}ms", dir)
+            if i18n:
+                log_message(i18n.t("logs.sharpness_timing", time=sharpness_time), dir)
+            else:
+                log_message(f"  ⏱️  [6/7] 锐度计算: {sharpness_time:.1f}ms", dir)
 
             cv2.rectangle(image, (x, y), (x + w, y + h), (0, 0, 255), 2)
 
@@ -378,20 +406,21 @@ def detect_and_draw_birds(image_path, model, output_path, dir, ui_settings):
                 rating_value = 1
 
             data = {
-                "文件名": os.path.splitext(os.path.basename(image_path))[0],
-                "是否有鸟": "是" if found_bird else "否",
-                "置信度": f"{conf:.2f}",
-                "X坐标": f"{center_x:.2f}",
-                "Y坐标": f"{center_y:.2f}",
-                "鸟占比": f"{area_ratio * 100:.2f}%",
-                "像素数": f"{effective_pixels}",
-                "原始锐度": f"{real_sharpness:.2f}",
-                "归一化锐度": f"{sharpness:.2f}",
-                "NIMA美学": f"{nima_score:.2f}" if nima_score is not None else "-",
-                "BRISQUE技术": f"{brisque_score:.2f}" if brisque_score is not None else "-",
-                "星等": rating_stars,
-                "评分": rating_value,
-                "类别ID": class_id
+                "filename": os.path.splitext(os.path.basename(image_path))[0],
+                "has_bird": "yes" if found_bird else "no",
+                "confidence": float(f"{conf:.2f}"),
+                "center_x": float(f"{center_x:.2f}"),
+                "center_y": float(f"{center_y:.2f}"),
+                "area_ratio": float(f"{area_ratio:.4f}"),
+                "bbox_width": w,
+                "bbox_height": h,
+                "mask_pixels": int(effective_pixels),
+                "sharpness_raw": float(f"{real_sharpness:.2f}"),
+                "sharpness_norm": float(f"{sharpness:.2f}"),
+                "norm_method": normalization_mode if normalization_mode else "none",
+                "nima_score": float(f"{nima_score:.2f}") if nima_score is not None else "-",
+                "brisque_score": float(f"{brisque_score:.2f}") if brisque_score is not None else "-",
+                "rating": rating_value
             }
 
             # Step 7: CSV写入

@@ -11,6 +11,7 @@ from typing import Dict, List, Set, Optional
 from post_adjustment_engine import PostAdjustmentEngine
 from exiftool_manager import get_exiftool_manager
 from advanced_config import get_advanced_config
+from i18n import get_i18n
 
 
 class PostAdjustmentDialog:
@@ -29,7 +30,12 @@ class PostAdjustmentDialog:
             on_complete_callback: 完成后的回调函数
         """
         self.window = tk.Toplevel(parent)
-        self.window.title("二次选鸟 - 优化评分标准")
+
+        # 初始化配置和国际化
+        self.config = get_advanced_config()
+        self.i18n = get_i18n(self.config.language)
+
+        self.window.title(self.i18n.t("post_adjustment.title"))
         self.window.geometry("750x800")  # 高度增加100
         self.window.resizable(False, False)
 
@@ -38,9 +44,6 @@ class PostAdjustmentDialog:
 
         # 初始化引擎
         self.engine = PostAdjustmentEngine(directory)
-
-        # 加载配置
-        self.config = get_advanced_config()
 
         # 0星阈值变量（从高级配置加载）
         self.min_confidence_var = tk.DoubleVar(value=self.config.min_confidence)
@@ -81,10 +84,9 @@ class PostAdjustmentDialog:
         desc_frame = ttk.Frame(self.window, padding=15)
         desc_frame.pack(fill=tk.X)
 
-        desc_text = "📊 基于已有AI分析结果，快速调整评分标准（无需重新运行AI）"
         ttk.Label(
             desc_frame,
-            text=desc_text,
+            text=self.i18n.t("post_adjustment.description"),
             font=("PingFang SC", 16),
             foreground="#666"
         ).pack()
@@ -92,7 +94,7 @@ class PostAdjustmentDialog:
         # ===== 2. 当前统计区域 =====
         stats_frame = ttk.LabelFrame(
             self.window,
-            text="当前星级分布",
+            text=self.i18n.t("stats.current_stats"),
             padding=15
         )
         stats_frame.pack(fill=tk.X, padx=15, pady=(15, 10))
@@ -212,7 +214,7 @@ class PostAdjustmentDialog:
         # 左侧取消按钮
         ttk.Button(
             btn_frame,
-            text="取消",
+            text=self.i18n.t("buttons.cancel"),
             command=self.window.destroy,
             width=15
         ).pack(side=tk.LEFT, padx=5)
@@ -220,7 +222,7 @@ class PostAdjustmentDialog:
         # 右侧应用按钮
         self.apply_btn = ttk.Button(
             btn_frame,
-            text="应用新评分",
+            text=self.i18n.t("buttons.apply"),
             command=self._apply_new_ratings,
             width=15,
             state='disabled'
@@ -311,8 +313,8 @@ class PostAdjustmentDialog:
         star_3_photos = []
 
         for photo in self.original_photos:
-            rating_str = photo.get('评分', '0')
-            rating = int(rating_str) if rating_str.isdigit() else 0
+            rating_str = photo.get('rating', 0)
+            rating = int(rating_str) if isinstance(rating_str, (int, str)) and str(rating_str).isdigit() else 0
 
             if rating == 0:
                 stats['star_0'] += 1
@@ -344,7 +346,7 @@ class PostAdjustmentDialog:
         text = f"总共: {total} 张有鸟照片\n\n"
 
         if stats.get('picked', 0) > 0:
-            text += f"🏆 精选旗标: {stats['picked']} 张\n\n"
+            text += f"🏆 精选旗标: {stats['picked']} 张\n"
 
         text += f"⭐⭐⭐ 3星: {stats['star_3']} 张 ({stats['star_3']/total*100:.1f}%)\n"
         text += f"⭐⭐ 2星: {stats['star_2']} 张 ({stats['star_2']/total*100:.1f}%)\n"
@@ -464,7 +466,7 @@ class PostAdjustmentDialog:
         not_found_count = 0
 
         for photo in self.updated_photos:
-            filename = photo['文件名']
+            filename = photo['filename']
             file_path = self.engine.find_image_file(filename)
 
             if not file_path:
@@ -516,9 +518,22 @@ class PostAdjustmentDialog:
 
     def _center_window(self):
         """居中窗口"""
-        self.window.update_idletasks()
-        width = self.window.winfo_width()
-        height = self.window.winfo_height()
-        x = (self.window.winfo_screenwidth() // 2) - (width // 2)
-        y = (self.window.winfo_screenheight() // 2) - (height // 2)
-        self.window.geometry(f'{width}x{height}+{x}+{y}')
+        try:
+            # 确保窗口已经完全创建
+            self.window.update_idletasks()
+
+            # 使用指定的宽高（750x800）
+            width = 750
+            height = 800
+
+            # 计算居中位置
+            screen_width = self.window.winfo_screenwidth()
+            screen_height = self.window.winfo_screenheight()
+            x = (screen_width // 2) - (width // 2)
+            y = (screen_height // 2) - (height // 2)
+
+            # 设置窗口位置
+            self.window.geometry(f'{width}x{height}+{x}+{y}')
+        except Exception as e:
+            # 如果居中失败，不影响窗口显示
+            print(f"警告: 窗口居中失败: {e}")
