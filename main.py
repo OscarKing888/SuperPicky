@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 SuperPicky - 简化版 (Pure Tkinter, 无PyQt依赖)
-Version: 3.2.0 - 二次选鸟功能 (Post-DA)
+Version: 3.2.1 - 二次选鸟功能 (Post-DA)
 """
 
 import tkinter as tk
@@ -67,15 +67,20 @@ class WorkerThread(threading.Thread):
             'avg_time': 0
         }
 
-    @staticmethod
-    def _format_time(seconds):
+    def _format_time(self, seconds):
         """格式化时间：秒转为 分钟+秒 格式"""
         if seconds < 60:
-            return f"{seconds:.1f}秒"
+            if self.i18n:
+                return f"{seconds:.1f}s"
+            else:
+                return f"{seconds:.1f}秒"
         else:
             minutes = int(seconds // 60)
             secs = seconds % 60
-            return f"{minutes}分{secs:.0f}秒"
+            if self.i18n:
+                return f"{minutes}m{secs:.0f}s"
+            else:
+                return f"{minutes}分{secs:.0f}秒"
 
     def _start_caffeinate(self):
         """启动caffeinate防止系统休眠和屏幕保护程序"""
@@ -92,7 +97,10 @@ class WorkerThread(threading.Thread):
             else:
                 self.log_callback("☕ 已启动防休眠保护（处理期间Mac不会休眠或启动屏幕保护程序）")
         except Exception as e:
-            self.log_callback(f"⚠️  防休眠启动失败: {e}（不影响正常处理）")
+            if self.i18n:
+                self.log_callback(self.i18n.t("logs.caffeinate_failed", error=str(e)))
+            else:
+                self.log_callback(f"⚠️  防休眠启动失败: {e}（不影响正常处理）")
             self.caffeinate_process = None
 
     def _stop_caffeinate(self):
@@ -101,7 +109,10 @@ class WorkerThread(threading.Thread):
             try:
                 self.caffeinate_process.terminate()
                 self.caffeinate_process.wait(timeout=2)
-                self.log_callback("☕ 已停止防休眠保护")
+                if self.i18n:
+                    self.log_callback(self.i18n.t("logs.caffeinate_stopped"))
+                else:
+                    self.log_callback("☕ 已停止防休眠保护")
             except Exception:
                 # 如果terminate失败，强制kill
                 try:
@@ -303,9 +314,15 @@ class WorkerThread(threading.Thread):
             # 构建IQA评分显示文本
             iqa_text = ""
             if nima is not None:
-                iqa_text += f", 美学:{nima:.2f}"
+                if self.i18n:
+                    iqa_text += self.i18n.t("logs.iqa_aesthetic", score=nima)
+                else:
+                    iqa_text += f", 美学:{nima:.2f}"
             if brisque is not None:
-                iqa_text += f", 失真:{brisque:.2f}"
+                if self.i18n:
+                    iqa_text += self.i18n.t("logs.iqa_distortion", score=brisque)
+                else:
+                    iqa_text += f", 失真:{brisque:.2f}"
 
             # V3.1: 新的评分逻辑（带具体原因，使用高级配置）
             config = get_advanced_config()
@@ -314,23 +331,38 @@ class WorkerThread(threading.Thread):
 
             if not detected:
                 rating_value = -1
-                reject_reason = "完全没鸟"
+                if self.i18n:
+                    reject_reason = self.i18n.t("logs.reject_no_bird")
+                else:
+                    reject_reason = "完全没鸟"
             elif selected:
                 rating_value = 3
             else:
                 # 检查0星的具体原因（使用配置阈值）
                 if confidence < config.min_confidence:
                     rating_value = 0
-                    quality_issue = f"置信度太低({confidence:.0%}<{config.min_confidence:.0%})"
+                    if self.i18n:
+                        quality_issue = self.i18n.t("logs.quality_low_confidence", confidence=confidence, threshold=config.min_confidence)
+                    else:
+                        quality_issue = f"置信度太低({confidence:.0%}<{config.min_confidence:.0%})"
                 elif brisque is not None and brisque > config.max_brisque:
                     rating_value = 0
-                    quality_issue = f"失真过高({brisque:.1f}>{config.max_brisque})"
+                    if self.i18n:
+                        quality_issue = self.i18n.t("logs.quality_high_distortion", distortion=brisque, threshold=config.max_brisque)
+                    else:
+                        quality_issue = f"失真过高({brisque:.1f}>{config.max_brisque})"
                 elif nima is not None and nima < config.min_nima:
                     rating_value = 0
-                    quality_issue = f"美学太差({nima:.1f}<{config.min_nima:.1f})"
+                    if self.i18n:
+                        quality_issue = self.i18n.t("logs.quality_low_aesthetic", aesthetic=nima, threshold=config.min_nima)
+                    else:
+                        quality_issue = f"美学太差({nima:.1f}<{config.min_nima:.1f})"
                 elif sharpness < config.min_sharpness:
                     rating_value = 0
-                    quality_issue = f"锐度太低({sharpness:.0f}<{config.min_sharpness})"
+                    if self.i18n:
+                        quality_issue = self.i18n.t("logs.quality_low_sharpness", sharpness=sharpness, threshold=config.min_sharpness)
+                    else:
+                        quality_issue = f"锐度太低({sharpness:.0f}<{config.min_sharpness})"
                 elif sharpness >= self.ui_settings[1] or \
                      (nima is not None and nima >= self.ui_settings[2]):
                     rating_value = 2
@@ -406,7 +438,10 @@ class WorkerThread(threading.Thread):
         # V3.1: 计算精选旗标（3星照片中美学+锐度双排名交集）
         if len(star_3_photos) > 0:
             picked_start = time.time()
-            self.log_callback(f"\n🎯 计算精选旗标 (共{len(star_3_photos)}张3星照片)...")
+            if self.i18n:
+                self.log_callback(self.i18n.t("logs.picked_calculation_start", count=len(star_3_photos)))
+            else:
+                self.log_callback(f"\n🎯 计算精选旗标 (共{len(star_3_photos)}张3星照片)...")
             config = get_advanced_config()
             top_percent = config.picked_top_percentage / 100.0
 
@@ -425,9 +460,14 @@ class WorkerThread(threading.Thread):
             picked_files = nima_top_files & sharpness_top_files
 
             if len(picked_files) > 0:
-                self.log_callback(f"  📌 美学Top{config.picked_top_percentage}%: {len(nima_top_files)}张")
-                self.log_callback(f"  📌 锐度Top{config.picked_top_percentage}%: {len(sharpness_top_files)}张")
-                self.log_callback(f"  ⭐ 双排名交集: {len(picked_files)}张 → 设为精选")
+                if self.i18n:
+                    self.log_callback(self.i18n.t("logs.picked_aesthetic_top", percent=config.picked_top_percentage, count=len(nima_top_files)))
+                    self.log_callback(self.i18n.t("logs.picked_sharpness_top", percent=config.picked_top_percentage, count=len(sharpness_top_files)))
+                    self.log_callback(self.i18n.t("logs.picked_intersection", count=len(picked_files)))
+                else:
+                    self.log_callback(f"  📌 美学Top{config.picked_top_percentage}%: {len(nima_top_files)}张")
+                    self.log_callback(f"  📌 锐度Top{config.picked_top_percentage}%: {len(sharpness_top_files)}张")
+                    self.log_callback(f"  ⭐ 双排名交集: {len(picked_files)}张 → 设为精选")
 
                 # 批量写入Rating=3和Pick=1到这些照片（复用现有的exiftool_mgr）
                 # 注意：虽然之前已经写过Rating=3，但exiftool的batch模式需要完整参数
@@ -444,27 +484,48 @@ class WorkerThread(threading.Thread):
                 exif_picked_time = (time.time() - exif_picked_start) * 1000
 
                 if picked_stats['failed'] > 0:
-                    self.log_callback(f"  ⚠️  {picked_stats['failed']} 张照片精选旗标写入失败")
+                    if self.i18n:
+                        self.log_callback(self.i18n.t("logs.picked_exif_failed", failed=picked_stats['failed']))
+                    else:
+                        self.log_callback(f"  ⚠️  {picked_stats['failed']} 张照片精选旗标写入失败")
                 else:
-                    self.log_callback(f"  ✅ 精选旗标写入成功")
-                self.log_callback(f"  ⏱️  精选EXIF写入耗时: {exif_picked_time:.1f}ms")
+                    if self.i18n:
+                        self.log_callback(self.i18n.t("logs.picked_exif_success"))
+                    else:
+                        self.log_callback(f"  ✅ 精选旗标写入成功")
+                if self.i18n:
+                    self.log_callback(self.i18n.t("logs.picked_exif_time", time=exif_picked_time))
+                else:
+                    self.log_callback(f"  ⏱️  精选EXIF写入耗时: {exif_picked_time:.1f}ms")
 
                 # 更新统计数据
                 self.stats['picked'] = len(picked_files) - picked_stats.get('failed', 0)
             else:
-                self.log_callback(f"  ℹ️  双排名交集为空，未设置精选旗标")
+                if self.i18n:
+                    self.log_callback(self.i18n.t("logs.picked_no_intersection"))
+                else:
+                    self.log_callback(f"  ℹ️  双排名交集为空，未设置精选旗标")
                 self.stats['picked'] = 0
 
             picked_total_time = (time.time() - picked_start) * 1000
-            self.log_callback(f"  ⏱️  精选旗标计算总耗时: {picked_total_time:.1f}ms")
+            if self.i18n:
+                self.log_callback(self.i18n.t("logs.picked_total_time", time=picked_total_time))
+            else:
+                self.log_callback(f"  ⏱️  精选旗标计算总耗时: {picked_total_time:.1f}ms")
 
         # AI检测总耗时
         ai_total_time_sec = time.time() - ai_total_start
         avg_ai_time_sec = ai_total_time_sec / total_files if total_files > 0 else 0
-        self.log_callback(f"\n⏱️  AI检测总耗时: {self._format_time(ai_total_time_sec)} (平均 {avg_ai_time_sec:.1f}秒/张)")
+        if self.i18n:
+            self.log_callback(self.i18n.t("logs.ai_detection_total", time_str=self._format_time(ai_total_time_sec), avg=avg_ai_time_sec))
+        else:
+            self.log_callback(f"\n⏱️  AI检测总耗时: {self._format_time(ai_total_time_sec)} (平均 {avg_ai_time_sec:.1f}秒/张)")
 
         # V3.1: 清理临时JPG文件
-        self.log_callback("\n🧹 清理临时文件...")
+        if self.i18n:
+            self.log_callback(self.i18n.t("logs.cleaning_temp"))
+        else:
+            self.log_callback("\n🧹 清理临时文件...")
         deleted_count = 0
         for filename in files_tbr:
             file_prefix, file_ext = os.path.splitext(filename)
@@ -476,10 +537,16 @@ class WorkerThread(threading.Thread):
                         os.remove(jpg_path)
                         deleted_count += 1
                 except Exception as e:
-                    self.log_callback(f"  ⚠️  删除失败 {filename}: {e}")
+                    if self.i18n:
+                        self.log_callback(self.i18n.t("logs.delete_failed", filename=filename, error=str(e)))
+                    else:
+                        self.log_callback(f"  ⚠️  删除失败 {filename}: {e}")
 
         if deleted_count > 0:
-            self.log_callback(f"✅ 已删除 {deleted_count} 个临时JPG文件")
+            if self.i18n:
+                self.log_callback(self.i18n.t("logs.temp_deleted", count=deleted_count))
+            else:
+                self.log_callback(f"✅ 已删除 {deleted_count} 个临时JPG文件")
 
         # 记录结束时间
         end_time = time.time()
@@ -555,8 +622,8 @@ class AboutWindow:
         """填充关于窗口的内容"""
         content = """慧眼选鸟 (SuperPicky)
 
-版本: V3.2.0
-发布日期: 2025-10-25
+版本: V3.2.1
+发布日期: 2025-10-28
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -796,7 +863,7 @@ class SuperPickyApp:
         button_container = ttk.Frame(btn_frame)
         button_container.pack(side=tk.RIGHT)
 
-        ttk.Label(button_container, text="V3.2.0 - EXIF Mode", font=("Arial", 9)).pack(side=tk.RIGHT, padx=10)
+        ttk.Label(button_container, text="V3.2.1 - EXIF Mode", font=("Arial", 9)).pack(side=tk.RIGHT, padx=10)
 
         self.reset_btn = ttk.Button(button_container, text=self.i18n.t("buttons.reset"), command=self.reset_directory, width=15, state='disabled')
         self.reset_btn.pack(side=tk.RIGHT, padx=5)
@@ -840,7 +907,7 @@ class SuperPickyApp:
         report_path = os.path.join(self.directory_path, "_tmp", "report.csv")
         if os.path.exists(report_path):
             self.post_da_btn.config(state='normal')
-            self.log("📊 检测到历史分析数据，可使用'二次选鸟'功能\n")
+            self.log(f"📊 {self.i18n.t('messages.report_detected')}\n")
         else:
             self.post_da_btn.config(state='disabled')
 
@@ -898,7 +965,7 @@ class SuperPickyApp:
         self.dir_entry.delete(0, tk.END)
         self.dir_entry.insert(0, directory)
         self.reset_btn.config(state='normal')
-        self.log(f"📂 已选择目录: {directory}\n")
+        self.log(f"📂 {self.i18n.t('messages.dir_selected', directory=directory)}\n")
 
         # 检测是否存在 report.csv，启用/禁用"二次选鸟"按钮
         self._check_report_csv()

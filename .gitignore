@@ -56,3 +56,11 @@ venv/
 # 模型文件（太大，不上传到GitHub）
 temp_models/
 *.pth
+
+# 构建和发布文件
+*.dmg
+*.log
+build_*.sh
+test_*.sh
+quick_test.sh
+DEBUG_VERSION_README.md

@@ -6,11 +6,55 @@ IQA (Image Quality Assessment) 评分器
 """
 
 import os
+import sys
+import shutil
 import torch
 import pyiqa
 from typing import Tuple, Optional
 import numpy as np
 from PIL import Image
+
+
+def setup_pyiqa_cache():
+    """
+    将打包的PyIQA模型复制到期望的缓存位置
+    这样可以避免首次运行时从网络下载模型（208MB+）
+    """
+    from torch.hub import get_dir
+
+    cache_dir = os.path.join(get_dir(), 'pyiqa')
+    os.makedirs(cache_dir, exist_ok=True)
+
+    # 获取打包的模型路径
+    if hasattr(sys, '_MEIPASS'):
+        # PyInstaller打包后的路径
+        bundled_models = os.path.join(sys._MEIPASS, 'pyiqa_models')
+    else:
+        # 开发环境路径
+        bundled_models = os.path.join(os.path.dirname(__file__), 'temp_models', 'pyiqa')
+
+    models = [
+        'brisque_svm_weights.pth',
+        'NIMA_InceptionV2_ava-b0c77c00.pth'
+    ]
+
+    for model in models:
+        src = os.path.join(bundled_models, model)
+        dst = os.path.join(cache_dir, model)
+
+        if os.path.exists(src) and not os.path.exists(dst):
+            print(f"📥 复制PyIQA模型: {model} → {cache_dir}")
+            try:
+                shutil.copy2(src, dst)
+                print(f"✅ 模型复制成功: {model}")
+            except Exception as e:
+                print(f"⚠️  模型复制失败 {model}: {e}")
+                print(f"   将在首次运行时从网络下载")
+        elif os.path.exists(dst):
+            print(f"✅ PyIQA模型已存在: {model}")
+        else:
+            print(f"⚠️  打包的模型文件不存在: {src}")
+            print(f"   将在首次运行时从网络下载")
 
 
 class IQAScorer:
@@ -23,6 +67,9 @@ class IQAScorer:
         Args:
             device: 计算设备 ('mps', 'cuda', 'cpu')
         """
+        # 首先设置PyIQA模型缓存（避免网络下载）
+        setup_pyiqa_cache()
+
         self.device = self._get_device(device)
         print(f"🎨 IQA 评分器初始化中... (设备: {self.device})")
 

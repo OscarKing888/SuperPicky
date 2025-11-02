@@ -121,7 +121,7 @@ class PostAdjustmentDialog:
         # ===== 3. 阈值调整区域 =====
         threshold_frame = ttk.LabelFrame(
             self.window,
-            text="调整评分阈值",
+            text=self.i18n.t("post_adjustment.threshold_group"),
             padding=15
         )
         threshold_frame.pack(fill=tk.X, padx=15, pady=(0, 10))
@@ -134,7 +134,7 @@ class PostAdjustmentDialog:
         # 说明
         ttk.Label(
             threshold_frame,
-            text="拖动滑块调整阈值，实时预览变化",
+            text=self.i18n.t("post_adjustment.threshold_description"),
             font=("PingFang SC", 11),
             foreground="#666"
         ).pack(pady=(0, 12))
@@ -142,7 +142,7 @@ class PostAdjustmentDialog:
         # 锐度阈值
         self._create_slider(
             threshold_frame,
-            "鸟锐度阈值 (2/3星):",
+            self.i18n.t("post_adjustment.sharpness_threshold"),
             self.sharpness_threshold_var,
             from_=6000, to=9000,
             step=100,
@@ -152,7 +152,7 @@ class PostAdjustmentDialog:
         # 美学阈值
         self._create_slider(
             threshold_frame,
-            "摄影美学阈值 (2/3星):",
+            self.i18n.t("post_adjustment.nima_threshold"),
             self.nima_threshold_var,
             from_=4.5, to=5.5,
             step=0.1,
@@ -162,7 +162,7 @@ class PostAdjustmentDialog:
         # 精选百分比
         self._create_slider(
             threshold_frame,
-            "精选旗标百分比:",
+            self.i18n.t("post_adjustment.picked_percentage"),
             self.picked_percentage_var,
             from_=10, to=50,
             step=5,
@@ -172,7 +172,7 @@ class PostAdjustmentDialog:
         # ===== 4. 预览区域 =====
         preview_frame = ttk.LabelFrame(
             self.window,
-            text="调整后预览",
+            text=self.i18n.t("post_adjustment.preview_title"),
             padding=15
         )
         preview_frame.pack(fill=tk.X, padx=15, pady=(0, 10))
@@ -288,7 +288,7 @@ class PostAdjustmentDialog:
         success, message = self.engine.load_report()
 
         if not success:
-            messagebox.showerror("错误", message)
+            messagebox.showerror(self.i18n.t("errors.error_title"), message)
             self.window.destroy()
             return
 
@@ -343,15 +343,15 @@ class PostAdjustmentDialog:
         stats = self.current_stats
         total = stats['total']
 
-        text = f"总共: {total} 张有鸟照片\n\n"
+        text = self.i18n.t("stats.total_bird_photos", total=total) + "\n\n"
 
         if stats.get('picked', 0) > 0:
-            text += f"🏆 精选旗标: {stats['picked']} 张\n"
+            text += self.i18n.t("stats.picked_count", count=stats['picked']) + "\n"
 
-        text += f"⭐⭐⭐ 3星: {stats['star_3']} 张 ({stats['star_3']/total*100:.1f}%)\n"
-        text += f"⭐⭐ 2星: {stats['star_2']} 张 ({stats['star_2']/total*100:.1f}%)\n"
-        text += f"⭐ 1星: {stats['star_1']} 张 ({stats['star_1']/total*100:.1f}%)\n"
-        text += f"0星: {stats['star_0']} 张 ({stats['star_0']/total*100:.1f}%)"
+        text += self.i18n.t("stats.star_3_count", count=stats['star_3'], percent=stats['star_3']/total*100) + "\n"
+        text += self.i18n.t("stats.star_2_count", count=stats['star_2'], percent=stats['star_2']/total*100) + "\n"
+        text += self.i18n.t("stats.star_1_count", count=stats['star_1'], percent=stats['star_1']/total*100) + "\n"
+        text += self.i18n.t("stats.star_0_count", count=stats['star_0'], percent=stats['star_0']/total*100)
 
         self.current_stats_label.config(state=tk.NORMAL)
         self.current_stats_label.delete("1.0", tk.END)
@@ -408,11 +408,11 @@ class PostAdjustmentDialog:
             pct = new_val / total * 100 if total > 0 else 0
 
             if diff > 0:
-                return f"{new_val} 张 ({pct:.1f}%)  [+{diff}]"
+                return self.i18n.t("stats.count_with_percent_increase", count=new_val, percent=pct, diff=diff)
             elif diff < 0:
-                return f"{new_val} 张 ({pct:.1f}%)  [{diff}]"
+                return self.i18n.t("stats.count_with_percent_decrease", count=new_val, percent=pct, diff=diff)
             else:
-                return f"{new_val} 张 ({pct:.1f}%)  [无变化]"
+                return self.i18n.t("stats.count_with_percent_nochange", count=new_val, percent=pct)
 
         total = new['total']
         text = ""
@@ -425,18 +425,18 @@ class PostAdjustmentDialog:
             old_picked = old.get('picked', 0)
             picked_diff = picked_count - old_picked
             if picked_diff > 0:
-                text += f"🏆 精选旗标: {picked_count} 张 ({picked_pct:.1f}% of 3星)  [+{picked_diff}]\n\n"
+                text += self.i18n.t("stats.picked_diff_increase", count=picked_count, pct=picked_pct, diff=picked_diff) + "\n\n"
             elif picked_diff < 0:
-                text += f"🏆 精选旗标: {picked_count} 张 ({picked_pct:.1f}% of 3星)  [{picked_diff}]\n\n"
+                text += self.i18n.t("stats.picked_diff_decrease", count=picked_count, pct=picked_pct, diff=picked_diff) + "\n\n"
             else:
-                text += f"🏆 精选旗标: {picked_count} 张 ({picked_pct:.1f}% of 3星)  [无变化]\n\n"
+                text += self.i18n.t("stats.picked_diff_nochange", count=picked_count, pct=picked_pct) + "\n\n"
         else:
-            text += f"🏆 精选旗标: 0 张 (无3星照片)\n\n"
+            text += self.i18n.t("stats.picked_no_three_star") + "\n\n"
 
-        text += f"⭐⭐⭐ 3星: {format_diff(old['star_3'], new['star_3'], total)}\n"
-        text += f"⭐⭐ 2星: {format_diff(old['star_2'], new['star_2'], total)}\n"
-        text += f"⭐ 1星: {format_diff(old['star_1'], new['star_1'], total)}\n"
-        text += f"0星: {format_diff(old['star_0'], new['star_0'], total)}"
+        text += "⭐⭐⭐ 3星: " + format_diff(old['star_3'], new['star_3'], total) + "\n"
+        text += "⭐⭐ 2星: " + format_diff(old['star_2'], new['star_2'], total) + "\n"
+        text += "⭐ 1星: " + format_diff(old['star_1'], new['star_1'], total) + "\n"
+        text += "0星: " + format_diff(old['star_0'], new['star_0'], total)
 
         self.preview_stats_label.config(state=tk.NORMAL)
         self.preview_stats_label.delete("1.0", tk.END)
@@ -446,20 +446,22 @@ class PostAdjustmentDialog:
     def _apply_new_ratings(self):
         """应用新评分"""
         if not self.updated_photos:
-            messagebox.showwarning("提示", "没有可应用的数据")
+            messagebox.showwarning(
+                self.i18n.t("messages.hint"),
+                self.i18n.t("post_adjustment.no_data_warning")
+            )
             return
 
-        msg = (f"确定要应用新的评分标准吗？\n\n"
-               f"将更新 {len(self.updated_photos)} 张照片的星级和精选旗标。")
+        msg = self.i18n.t("post_adjustment.apply_confirm_msg", count=len(self.updated_photos))
 
-        if not messagebox.askyesno("确认应用", msg):
+        if not messagebox.askyesno(self.i18n.t("post_adjustment.apply_confirm_title"), msg):
             return
 
         self.apply_btn.config(state='disabled')
         self.window.protocol("WM_DELETE_WINDOW", lambda: None)
 
         self.progress_frame.pack(fill=tk.X, padx=15, pady=10)
-        self.progress_label.config(text=f"正在准备 {len(self.updated_photos)} 张照片的数据...")
+        self.progress_label.config(text=self.i18n.t("post_adjustment.preparing_data", count=len(self.updated_photos)))
         self.window.update()
 
         batch_data = []
@@ -483,12 +485,12 @@ class PostAdjustmentDialog:
             })
 
         if not_found_count > 0:
-            self.progress_label.config(text=f"警告: {not_found_count} 张照片未找到文件，已跳过")
+            self.progress_label.config(text=self.i18n.t("post_adjustment.files_not_found", count=not_found_count))
             self.window.update()
 
         try:
             self.progress_label.config(
-                text=f"⏳ 正在批量写入 {len(batch_data)} 张照片的EXIF元数据...\n这可能需要几秒到几十秒，请耐心等待..."
+                text=self.i18n.t("post_adjustment.writing_exif", count=len(batch_data))
             )
             self.window.update()
 
@@ -497,14 +499,17 @@ class PostAdjustmentDialog:
 
             self.progress_frame.pack_forget()
 
-            result_msg = (f"新评分已成功应用！\n\n"
-                         f"✅ 成功: {stats['success']} 张\n"
-                         f"❌ 失败: {stats['failed']} 张")
-
             if not_found_count > 0:
-                result_msg += f"\n⏭️  跳过(未找到): {not_found_count} 张"
+                result_msg = self.i18n.t("post_adjustment.apply_success_with_skip",
+                                        success=stats['success'],
+                                        failed=stats['failed'],
+                                        skipped=not_found_count)
+            else:
+                result_msg = self.i18n.t("post_adjustment.apply_success_msg",
+                                        success=stats['success'],
+                                        failed=stats['failed'])
 
-            messagebox.showinfo("完成", result_msg)
+            messagebox.showinfo(self.i18n.t("post_adjustment.apply_success_title"), result_msg)
 
             if self.on_complete_callback:
                 self.on_complete_callback()
@@ -514,7 +519,10 @@ class PostAdjustmentDialog:
         except Exception as e:
             self.progress_frame.pack_forget()
             self.apply_btn.config(state='normal')
-            messagebox.showerror("错误", f"应用失败：{str(e)}")
+            messagebox.showerror(
+                self.i18n.t("post_adjustment.apply_error_title"),
+                self.i18n.t("post_adjustment.apply_error_msg", error=str(e))
+            )
 
     def _center_window(self):
         """居中窗口"""

@@ -17,12 +17,17 @@ a = Analysis(
         # AI模型文件（只使用yolo11m-seg.pt）
         (os.path.join(base_path, 'models/yolo11m-seg.pt'), 'models'),
 
-        # ExifTool
-        (os.path.join(base_path, 'exiftool'), '.'),
+        # ExifTool 完整打包（整个 exiftool_bundle 目录，包含可执行文件 + Perl库）
         (os.path.join(base_path, 'exiftool_bundle'), 'exiftool_bundle'),
 
         # 图片资源
         (os.path.join(base_path, 'img'), 'img'),
+
+        # 国际化语言包（V3.2新增）
+        (os.path.join(base_path, 'locales'), 'locales'),
+
+        # PyIQA 预训练模型（V3.2新增 - 避免首次运行下载208MB）
+        (os.path.join(base_path, 'temp_models/pyiqa'), 'pyiqa_models'),
 
         # Ultralytics配置文件
         (os.path.join(venv_path, 'ultralytics/cfg/default.yaml'), 'ultralytics/cfg'),
@@ -62,6 +67,17 @@ a = Analysis(
         'pyiqa.metrics',
         'pyiqa.losses',
         'pyiqa.matlab_utils',
+        # PyIQA 依赖库（V3.2.1新增）
+        'scipy',
+        'scipy.stats',
+        'scipy.special',
+        'scipy.optimize',
+        'scipy.linalg',
+        'scipy.io',
+        'timm',
+        'timm.models',
+        'timm.models.layers',
+        'einops',
     ],
     hookspath=[],
     hooksconfig={},
@@ -112,8 +128,8 @@ app = BUNDLE(
         'NSHighResolutionCapable': 'True',
         'CFBundleName': 'SuperPicky',
         'CFBundleDisplayName': 'SuperPicky - 慧眼选鸟',
-        'CFBundleVersion': '3.1.3',
-        'CFBundleShortVersionString': '3.1.3',
+        'CFBundleVersion': '3.2.3',
+        'CFBundleShortVersionString': '3.2.3',
         'NSHumanReadableCopyright': 'Copyright © 2025 James Zhen Yu. All rights reserved.',
         'LSMinimumSystemVersion': '10.15',
         'NSRequiresAquaSystemAppearance': False,

@@ -30,7 +30,25 @@ class ExifToolManager:
         """获取exiftool可执行文件路径"""
         if hasattr(sys, '_MEIPASS'):
             # PyInstaller打包后的路径
-            return os.path.join(sys._MEIPASS, 'exiftool')
+            base_path = sys._MEIPASS
+            print(f"🔍 PyInstaller环境检测到")
+            print(f"   base_path (sys._MEIPASS): {base_path}")
+
+            # 直接使用 exiftool_bundle/exiftool 路径（唯一打包位置）
+            exiftool_path = os.path.join(base_path, 'exiftool_bundle', 'exiftool')
+            abs_path = os.path.abspath(exiftool_path)
+
+            print(f"   正在检查 exiftool...")
+            print(f"   路径: {abs_path}")
+            print(f"   存在: {os.path.exists(abs_path)}")
+            print(f"   可执行: {os.access(abs_path, os.X_OK) if os.path.exists(abs_path) else False}")
+
+            if os.path.exists(abs_path) and os.access(abs_path, os.X_OK):
+                print(f"   ✅ 找到 exiftool")
+                return abs_path
+            else:
+                print(f"   ⚠️  未找到可执行的 exiftool")
+                return abs_path
         else:
             # 开发环境路径
             project_root = os.path.dirname(os.path.abspath(__file__))
@@ -38,6 +56,10 @@ class ExifToolManager:
 
     def _verify_exiftool(self) -> bool:
         """验证exiftool是否可用"""
+        print(f"\n🧪 验证 ExifTool 是否可执行...")
+        print(f"   路径: {self.exiftool_path}")
+        print(f"   测试命令: {self.exiftool_path} -ver")
+
         try:
             result = subprocess.run(
                 [self.exiftool_path, '-ver'],
@@ -45,9 +67,23 @@ class ExifToolManager:
                 text=True,
                 timeout=5
             )
-            return result.returncode == 0
+            print(f"   返回码: {result.returncode}")
+            print(f"   stdout: {result.stdout.strip()}")
+            if result.stderr:
+                print(f"   stderr: {result.stderr.strip()}")
+
+            if result.returncode == 0:
+                print(f"   ✅ ExifTool 验证成功")
+                return True
+            else:
+                print(f"   ❌ ExifTool 返回非零退出码")
+                return False
+
+        except subprocess.TimeoutExpired:
+            print(f"   ❌ ExifTool 执行超时（5秒）")
+            return False
         except Exception as e:
-            print(f"❌ ExifTool验证失败: {e}")
+            print(f"   ❌ ExifTool 验证异常: {type(e).__name__}: {e}")
             return False
 
     def set_rating_and_pick(
@@ -401,19 +437,34 @@ class ExifToolManager:
                     else:
                         # 如果没有匹配到输出，假设全部成功
                         stats['success'] += len(valid_files)
-                        log(f"  ✅ 批次 {batch_start+1}-{batch_end}: {len(valid_files)} 个文件已处理")
+                        if i18n:
+                            log(i18n.t("logs.batch_progress", start=batch_start+1, end=batch_end, success=len(valid_files), skipped=0))
+                        else:
+                            log(f"  ✅ 批次 {batch_start+1}-{batch_end}: {len(valid_files)} 个文件已处理")
                 else:
                     stats['failed'] += len(valid_files)
-                    log(f"  ❌ 批次 {batch_start+1}-{batch_end} 失败: {result.stderr.strip()}")
+                    if i18n:
+                        log(f"  ❌ {i18n.t('logs.batch_failed', start=batch_start+1, end=batch_end, error=result.stderr.strip())}")
+                    else:
+                        log(f"  ❌ 批次 {batch_start+1}-{batch_end} 失败: {result.stderr.strip()}")
 
             except subprocess.TimeoutExpired:
                 stats['failed'] += len(valid_files)
-                log(f"  ⏱️  批次 {batch_start+1}-{batch_end} 超时")
+                if i18n:
+                    log(f"  ⏱️  {i18n.t('logs.batch_timeout', start=batch_start+1, end=batch_end)}")
+                else:
+                    log(f"  ⏱️  批次 {batch_start+1}-{batch_end} 超时")
             except Exception as e:
                 stats['failed'] += len(valid_files)
-                log(f"  ❌ 批次 {batch_start+1}-{batch_end} 错误: {e}")
+                if i18n:
+                    log(f"  ❌ {i18n.t('logs.batch_error', start=batch_start+1, end=batch_end, error=str(e))}")
+                else:
+                    log(f"  ❌ 批次 {batch_start+1}-{batch_end} 错误: {e}")
 
-        log(f"\n✅ 批量重置完成: {stats['success']} 成功, {stats['skipped']} 跳过(4-5星), {stats['failed']} 失败")
+        if i18n:
+            log(f"\n{i18n.t('logs.batch_complete', success=stats['success'], skipped=stats['skipped'], failed=stats['failed'])}")
+        else:
+            log(f"\n✅ 批量重置完成: {stats['success']} 成功, {stats['skipped']} 跳过(4-5星), {stats['failed']} 失败")
         return stats
 
 

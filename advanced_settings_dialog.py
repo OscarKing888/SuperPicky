@@ -122,17 +122,9 @@ class AdvancedSettingsDialog:
             format_func=lambda v: f"{int(v)}%"
         )
 
-        # CSV报告
-        csv_frame = ttk.LabelFrame(parent, text=self.i18n.t("advanced_settings.csv_report_label"), padding=10)
-        csv_frame.pack(fill=tk.X, pady=5)
-
-        self.vars["save_csv"] = tk.BooleanVar(value=True)
+        # CSV报告 - 隐藏（不再显示，因为用户不需要了解这个技术细节）
         # CSV保存强制启用,因为二次选鸟功能需要
-        csv_checkbox = ttk.Checkbutton(csv_frame, text=self.i18n.t("advanced_settings.csv_checkbox_label"),
-                       variable=self.vars["save_csv"], state='disabled')
-        csv_checkbox.pack(anchor=tk.W)
-        ttk.Label(csv_frame, text=self.i18n.t("advanced_settings.csv_description"),
-                 font=("Arial", 9), foreground="#888").pack(anchor=tk.W, padx=20)
+        self.vars["save_csv"] = tk.BooleanVar(value=True)
 
         # 日志详细程度
         log_frame = ttk.LabelFrame(parent, text=self.i18n.t("advanced_settings.log_level_label"), padding=10)
