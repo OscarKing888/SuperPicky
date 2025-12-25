@@ -267,8 +267,25 @@ def cmd_reset(args):
     # 批量重置EXIF
     print("🧹 清除EXIF评分...")
     try:
-        stats = exiftool_mgr.batch_reset_metadata(args.directory)
+        # 扫描目录中的所有RAW文件（包括子文件夹）
+        raw_extensions = ['.nef', '.cr2', '.cr3', '.arw', '.raf', '.orf', '.rw2', '.pef', '.dng', '.3fr', '.iiq']
+        raw_files = []
+        
+        # 递归扫描（包括子文件夹）
+        for root, dirs, files in os.walk(args.directory):
+            for filename in files:
+                if any(filename.lower().endswith(ext) for ext in raw_extensions):
+                    raw_files.append(os.path.join(root, filename))
+        
+        if not raw_files:
+            print("⚠️  未找到RAW文件")
+            return 0
+        
+        print(f"📁 找到 {len(raw_files)} 个RAW文件")
+        stats = exiftool_mgr.batch_reset_metadata(raw_files, log_callback=print)
         print(f"✅ 已重置 {stats['success']} 个文件")
+        if stats['skipped'] > 0:
+            print(f"⏭️  {stats['skipped']} 个文件跳过（4-5星）")
         if stats['failed'] > 0:
             print(f"⚠️  {stats['failed']} 个文件重置失败")
     except Exception as e:
