@@ -188,8 +188,8 @@ class ExifToolManager:
         stats = {'success': 0, 'failed': 0}
 
         # ExifTool批量模式：使用 -execute 分隔符为每个文件单独设置参数
-        # 格式: exiftool -TAG1=value1 file1 -execute -TAG2=value2 file2 -execute ...
-        cmd = [self.exiftool_path, '-overwrite_original']
+        # 格式: exiftool -TAG1=value1 file1 -overwrite_original -execute -TAG2=value2 file2 -overwrite_original -execute ...
+        cmd = [self.exiftool_path]
 
         for item in files_metadata:
             file_path = item['file']
@@ -227,6 +227,7 @@ class ExifToolManager:
                 cmd.append(f'-IPTC:Country-PrimaryLocationName={brisque_str}')
 
             cmd.append(file_path)
+            cmd.append('-overwrite_original')  # 放在每个文件之后
 
             # 添加 -execute 分隔符（除了最后一个文件）
             cmd.append('-execute')
