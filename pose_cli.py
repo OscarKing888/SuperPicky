@@ -97,6 +97,22 @@ def create_parser() -> argparse.ArgumentParser:
         help="以JSON格式输出统计"
     )
     
+    # ========== reset 命令 ==========
+    reset_parser = subparsers.add_parser(
+        "reset",
+        help="重置目录 - 清除EXIF评分并恢复文件位置"
+    )
+    reset_parser.add_argument(
+        "directory",
+        type=str,
+        help="照片目录路径"
+    )
+    reset_parser.add_argument(
+        "--restore-files",
+        action="store_true",
+        help="从manifest恢复文件位置"
+    )
+    
     # ========== detect 命令 ==========
     detect_parser = subparsers.add_parser(
         "detect",
@@ -222,6 +238,44 @@ def cmd_process(args):
     if args.json:
         print("\n" + json_module.dumps(stats, indent=2, ensure_ascii=False))
     
+    return 0
+
+
+def cmd_reset(args):
+    """执行重置命令"""
+    from exiftool_manager import get_exiftool_manager
+    
+    print_banner()
+    print(f"🔄 重置目录: {args.directory}\n")
+    
+    # 检查目录
+    if not os.path.isdir(args.directory):
+        print(f"❌ 错误: 目录不存在 - {args.directory}")
+        return 1
+    
+    exiftool_mgr = get_exiftool_manager()
+    
+    # 恢复文件位置
+    if args.restore_files:
+        print("📂 恢复文件位置...")
+        try:
+            exiftool_mgr.restore_files_from_manifest(args.directory, log_callback=print)
+            print("✅ 文件位置恢复完成\n")
+        except Exception as e:
+            print(f"⚠️  恢复失败: {e}\n")
+    
+    # 批量重置EXIF
+    print("🧹 清除EXIF评分...")
+    try:
+        stats = exiftool_mgr.batch_reset_metadata(args.directory)
+        print(f"✅ 已重置 {stats['success']} 个文件")
+        if stats['failed'] > 0:
+            print(f"⚠️  {stats['failed']} 个文件重置失败")
+    except Exception as e:
+        print(f"❌ 重置失败: {e}")
+        return 1
+    
+    print("\n✅ 重置完成！")
     return 0
 
 
@@ -449,6 +503,8 @@ def main():
     # 路由到对应命令
     if args.command == "process":
         return cmd_process(args)
+    elif args.command == "reset":
+        return cmd_reset(args)
     elif args.command == "detect":
         return cmd_detect(args)
     elif args.command == "info":
