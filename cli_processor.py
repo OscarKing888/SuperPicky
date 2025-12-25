@@ -28,9 +28,9 @@ class CLIProcessor:
         """
         self.verbose = verbose
         
-        # GUI默认设置: [50, 7500, 4.8, False, 'log']
+        # GUI默认设置: [50, 7500, 4.8, False, 'log_compression']
         if ui_settings is None:
-            ui_settings = [50, 7500, 4.8, False, 'log']
+            ui_settings = [50, 7500, 4.8, False, 'log_compression']
         
         # 转换为 ProcessingSettings
         settings = ProcessingSettings(
@@ -38,7 +38,7 @@ class CLIProcessor:
             sharpness_threshold=ui_settings[1],
             nima_threshold=ui_settings[2],
             save_crop=ui_settings[3] if len(ui_settings) > 3 else False,
-            normalization_mode=ui_settings[4] if len(ui_settings) > 4 else 'log'
+            normalization_mode=ui_settings[4] if len(ui_settings) > 4 else 'log_compression'
         )
         
         # 创建核心处理器

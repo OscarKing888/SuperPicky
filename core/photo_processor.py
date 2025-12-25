@@ -36,7 +36,7 @@ class ProcessingSettings:
     sharpness_threshold: int = 7500
     nima_threshold: float = 4.8
     save_crop: bool = False
-    normalization_mode: str = 'log'
+    normalization_mode: str = 'log_compression'  # 默认使用log_compression，与GUI一致
 
 
 @dataclass

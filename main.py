@@ -161,7 +161,7 @@ class WorkerThread(threading.Thread):
             sharpness_threshold=self.ui_settings[1],
             nima_threshold=self.ui_settings[2],
             save_crop=self.ui_settings[3] if len(self.ui_settings) > 3 else False,
-            normalization_mode=self.ui_settings[4] if len(self.ui_settings) > 4 else 'log'
+            normalization_mode=self.ui_settings[4] if len(self.ui_settings) > 4 else 'log_compression'
         )
         
         # 创建回调（包装日志以支持 i18n）
@@ -191,98 +191,6 @@ class WorkerThread(threading.Thread):
         # 目前直接传递，未来可以在这里添加 i18n 翻译
         self.log_callback(msg)
 
-    def _move_files_to_rating_folders(self, file_ratings, raw_dict):
-        """
-        V3.3: 将1-3星照片移动到对应评分文件夹
-        
-        Args:
-            file_ratings: dict, {文件名前缀: rating值}
-            raw_dict: dict, {文件名前缀: RAW扩展名}
-        """
-        import shutil
-        import json
-        from datetime import datetime
-        
-        # 筛选需要移动的文件（1-3星）
-        files_to_move = []
-        for prefix, rating in file_ratings.items():
-            if rating in [1, 2, 3] and prefix in raw_dict:
-                raw_ext = raw_dict[prefix]
-                raw_path = os.path.join(self.dir_path, prefix + raw_ext)
-                if os.path.exists(raw_path):
-                    files_to_move.append({
-                        'filename': prefix + raw_ext,
-                        'rating': rating,
-                        'folder': RATING_FOLDER_NAMES[rating]
-                    })
-        
-        if not files_to_move:
-            if self.i18n:
-                self.log_callback("\n📂 无需移动文件（没有1-3星照片）")
-            else:
-                self.log_callback("\n📂 无需移动文件（没有1-3星照片）")
-            return
-        
-        if self.i18n:
-            self.log_callback(f"\n📂 移动 {len(files_to_move)} 张照片到分类文件夹...")
-        else:
-            self.log_callback(f"\n📂 移动 {len(files_to_move)} 张照片到分类文件夹...")
-        
-        # 创建分类文件夹（只创建有照片的文件夹）
-        ratings_in_use = set(f['rating'] for f in files_to_move)
-        for rating in ratings_in_use:
-            folder_name = RATING_FOLDER_NAMES[rating]
-            folder_path = os.path.join(self.dir_path, folder_name)
-            if not os.path.exists(folder_path):
-                os.makedirs(folder_path)
-                self.log_callback(f"  📁 创建文件夹: {folder_name}/")
-        
-        # 移动文件
-        moved_count = 0
-        failed_files = []
-        
-        for file_info in files_to_move:
-            src_path = os.path.join(self.dir_path, file_info['filename'])
-            dst_folder = os.path.join(self.dir_path, file_info['folder'])
-            dst_path = os.path.join(dst_folder, file_info['filename'])
-            
-            try:
-                # 检查目标文件是否已存在
-                if os.path.exists(dst_path):
-                    self.log_callback(f"  ⚠️  跳过（已存在）: {file_info['filename']}")
-                    continue
-                    
-                shutil.move(src_path, dst_path)
-                moved_count += 1
-            except Exception as e:
-                failed_files.append(file_info['filename'])
-                self.log_callback(f"  ⚠️  移动失败: {file_info['filename']} - {e}")
-        
-        # 生成 manifest（用于Reset恢复）
-        manifest = {
-            "version": "1.0",
-            "created": datetime.now().isoformat(),
-            "app_version": "3.3.0",
-            "original_dir": self.dir_path,
-            "folder_structure": RATING_FOLDER_NAMES,
-            "files": files_to_move,
-            "stats": {
-                "total_moved": moved_count,
-                "failed": len(failed_files)
-            }
-        }
-        
-        manifest_path = os.path.join(self.dir_path, "_superpicky_manifest.json")
-        try:
-            with open(manifest_path, 'w', encoding='utf-8') as f:
-                json.dump(manifest, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            self.log_callback(f"  ⚠️  保存manifest失败: {e}")
-        
-        # 输出统计
-        self.log_callback(f"  ✅ 已移动 {moved_count} 张照片")
-        if failed_files:
-            self.log_callback(f"  ⚠️  {len(failed_files)} 张移动失败")
 
 
 class AboutWindow:
