@@ -3,6 +3,13 @@
 """
 Core Photo Processor - 核心照片处理器
 提取自 GUI 和 CLI 的共享业务逻辑
+
+职责：
+- 文件扫描和 RAW 转换
+- 调用 AI 检测
+- 调用 RatingEngine 评分
+- 写入 EXIF 元数据
+- 文件移动和清理
 """
 
 import os
@@ -20,6 +27,7 @@ from find_bird_util import raw_to_jpeg
 from ai_model import load_yolo_model, detect_and_draw_birds
 from exiftool_manager import get_exiftool_manager
 from advanced_config import get_advanced_config
+from core.rating_engine import RatingEngine, create_rating_engine_from_config
 
 # 文件夹名称映射
 RATING_FOLDER_NAMES = {
@@ -81,6 +89,14 @@ class PhotoProcessor:
         self.settings = settings
         self.callbacks = callbacks or ProcessingCallbacks()
         self.config = get_advanced_config()
+        
+        # 初始化评分引擎
+        self.rating_engine = create_rating_engine_from_config(self.config)
+        # 使用 UI 设置更新达标阈值
+        self.rating_engine.update_thresholds(
+            sharpness_threshold=settings.sharpness_threshold,
+            nima_threshold=settings.nima_threshold
+        )
         
         # DEBUG: 输出参数
         self._log(f"\n🔍 DEBUG - 处理参数:")
@@ -305,12 +321,20 @@ class PhotoProcessor:
                 self._log(f"  ❌ 处理异常: {e}", "error")
                 continue
             
-            detected, selected, confidence, sharpness, nima, brisque = result
+            # 解构 AI 结果（忽略 selected，由 RatingEngine 重新计算）
+            detected, _, confidence, sharpness, nima, brisque = result
             
-            # 评分逻辑
-            rating_value, pick, reason = self._calculate_rating(
-                detected, selected, confidence, sharpness, nima, brisque
+            # 使用 RatingEngine 计算评分
+            rating_result = self.rating_engine.calculate(
+                detected=detected,
+                confidence=confidence,
+                sharpness=sharpness,
+                nima=nima,
+                brisque=brisque
             )
+            rating_value = rating_result.rating
+            pick = rating_result.pick
+            reason = rating_result.reason
             
             # 显示结果
             self._log_photo_result(rating_value, reason, confidence, sharpness, nima, brisque)
@@ -350,46 +374,8 @@ class PhotoProcessor:
         avg_ai_time = ai_total_time / total_files if total_files > 0 else 0
         self._log(f"\n⏱️  AI检测总耗时: {ai_total_time:.1f}秒 (平均 {avg_ai_time:.1f}秒/张)")
     
-    def _calculate_rating(
-        self, 
-        detected: bool, 
-        selected: bool, 
-        confidence: float, 
-        sharpness: float, 
-        nima: Optional[float], 
-        brisque: Optional[float]
-    ) -> Tuple[int, int, str]:
-        """
-        计算评分 - 完全对标GUI逻辑
-        
-        Returns:
-            (rating_value, pick, reason)
-        """
-        if not detected:
-            return -1, -1, "完全没鸟"
-        
-        if selected:
-            return 3, 0, "优选照片"
-        
-        # 检查0星原因
-        if confidence < self.config.min_confidence:
-            return 0, 0, f"置信度太低({confidence:.0%}<{self.config.min_confidence:.0%})"
-        
-        if brisque is not None and brisque > self.config.max_brisque:
-            return 0, 0, f"失真过高({brisque:.1f}>{self.config.max_brisque})"
-        
-        if nima is not None and nima < self.config.min_nima:
-            return 0, 0, f"美学太差({nima:.1f}<{self.config.min_nima:.1f})"
-        
-        if sharpness < self.config.min_sharpness:
-            return 0, 0, f"锐度太低({sharpness:.0f}<{self.config.min_sharpness})"
-        
-        # 2星或1星判定
-        if sharpness >= self.settings.sharpness_threshold or \
-           (nima is not None and nima >= self.settings.nima_threshold):
-            return 2, 0, "良好照片"
-        else:
-            return 1, 0, "普通照片"
+    # 注意: _calculate_rating 方法已移至 core/rating_engine.py
+    # 现在使用 self.rating_engine.calculate() 替代
     
     def _log_photo_result(
         self, 
