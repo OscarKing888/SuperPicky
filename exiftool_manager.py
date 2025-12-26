@@ -451,6 +451,7 @@ class ExifToolManager:
     def restore_files_from_manifest(self, dir_path: str, log_callback=None) -> Dict[str, int]:
         """
         V3.3: 根据 manifest 将文件恢复到原始位置
+        V3.3.1: 增强版 - 也处理不在 manifest 中的文件
         
         Args:
             dir_path: str, 原始目录路径
@@ -462,68 +463,104 @@ class ExifToolManager:
         import json
         import shutil
         
+        # 评分文件夹名称
+        RATING_FOLDER_NAMES = {
+            3: "3星_优选",
+            2: "2星_良好",
+            1: "1星_普通"
+        }
+        
         def log(msg):
             if log_callback:
                 log_callback(msg)
             else:
                 print(msg)
         
-        manifest_path = os.path.join(dir_path, "_superpicky_manifest.json")
-        
-        if not os.path.exists(manifest_path):
-            log("ℹ️  未找到 manifest 文件，跳过文件恢复")
-            return {'restored': 0, 'failed': 0, 'not_found': 0}
-        
-        try:
-            with open(manifest_path, 'r', encoding='utf-8') as f:
-                manifest = json.load(f)
-        except Exception as e:
-            log(f"⚠️  读取 manifest 失败: {e}")
-            return {'restored': 0, 'failed': 0, 'not_found': 0}
-        
         stats = {'restored': 0, 'failed': 0, 'not_found': 0}
+        manifest_path = os.path.join(dir_path, "_superpicky_manifest.json")
         folders_to_check = set()
         
-        files = manifest.get('files', [])
-        if not files:
-            log("ℹ️  manifest 中没有文件记录")
-            return stats
-        
-        log(f"\n📂 恢复 {len(files)} 个文件到原始位置...")
-        
-        # 移动文件回原位置
-        for file_info in files:
-            filename = file_info['filename']
-            folder = file_info['folder']
-            
-            src_path = os.path.join(dir_path, folder, filename)
-            dst_path = os.path.join(dir_path, filename)
-            
-            folders_to_check.add(os.path.join(dir_path, folder))
-            
-            if not os.path.exists(src_path):
-                stats['not_found'] += 1
-                log(f"  ⚠️  文件不存在: {folder}/{filename}")
-                continue
-            
-            # 检查目标位置是否已有同名文件
-            if os.path.exists(dst_path):
-                stats['failed'] += 1
-                log(f"  ⚠️  目标已存在，跳过: {filename}")
-                continue
-            
+        # 第一步：从 manifest 恢复文件（如果存在）
+        if os.path.exists(manifest_path):
             try:
-                shutil.move(src_path, dst_path)
-                stats['restored'] += 1
+                with open(manifest_path, 'r', encoding='utf-8') as f:
+                    manifest = json.load(f)
+                
+                files = manifest.get('files', [])
+                if files:
+                    log(f"\n📂 从 manifest 恢复 {len(files)} 个文件...")
+                    
+                    for file_info in files:
+                        filename = file_info['filename']
+                        folder = file_info['folder']
+                        
+                        src_path = os.path.join(dir_path, folder, filename)
+                        dst_path = os.path.join(dir_path, filename)
+                        
+                        folders_to_check.add(os.path.join(dir_path, folder))
+                        
+                        if not os.path.exists(src_path):
+                            stats['not_found'] += 1
+                            continue
+                        
+                        if os.path.exists(dst_path):
+                            stats['failed'] += 1
+                            log(f"  ⚠️  目标已存在，跳过: {filename}")
+                            continue
+                        
+                        try:
+                            shutil.move(src_path, dst_path)
+                            stats['restored'] += 1
+                        except Exception as e:
+                            stats['failed'] += 1
+                            log(f"  ❌ 恢复失败: {filename} - {e}")
+                
+                # 删除 manifest 文件
+                try:
+                    os.remove(manifest_path)
+                    log("  🗑️  已删除 manifest 文件")
+                except Exception as e:
+                    log(f"  ⚠️  删除 manifest 失败: {e}")
+                    
             except Exception as e:
-                stats['failed'] += 1
-                log(f"  ❌ 恢复失败: {filename} - {e}")
+                log(f"⚠️  读取 manifest 失败: {e}")
+        else:
+            log("ℹ️  未找到 manifest 文件")
         
-        # 删除空的分类文件夹
+        # 第二步：扫描评分子目录，恢复任何剩余文件
+        log("\n📂 扫描评分子目录...")
+        for rating, folder_name in RATING_FOLDER_NAMES.items():
+            folder_path = os.path.join(dir_path, folder_name)
+            folders_to_check.add(folder_path)
+            
+            if not os.path.exists(folder_path):
+                continue
+            
+            # 移动所有文件回主目录
+            for filename in os.listdir(folder_path):
+                src_path = os.path.join(folder_path, filename)
+                dst_path = os.path.join(dir_path, filename)
+                
+                # 跳过子目录
+                if os.path.isdir(src_path):
+                    continue
+                
+                if os.path.exists(dst_path):
+                    log(f"  ⚠️  目标已存在，跳过: {filename}")
+                    continue
+                
+                try:
+                    shutil.move(src_path, dst_path)
+                    stats['restored'] += 1
+                    log(f"  ✅ 恢复: {folder_name}/{filename}")
+                except Exception as e:
+                    stats['failed'] += 1
+                    log(f"  ❌ 恢复失败: {filename} - {e}")
+        
+        # 第三步：删除空的分类文件夹
         for folder_path in folders_to_check:
             if os.path.exists(folder_path):
                 try:
-                    # 检查文件夹是否为空
                     if not os.listdir(folder_path):
                         os.rmdir(folder_path)
                         folder_name = os.path.basename(folder_path)
@@ -531,14 +568,7 @@ class ExifToolManager:
                 except Exception as e:
                     log(f"  ⚠️  删除文件夹失败: {e}")
         
-        # 删除 manifest 文件
-        try:
-            os.remove(manifest_path)
-            log("  🗑️  已删除 manifest 文件")
-        except Exception as e:
-            log(f"  ⚠️  删除 manifest 失败: {e}")
-        
-        log(f"✅ 文件恢复完成: 已恢复 {stats['restored']} 张")
+        log(f"\n✅ 文件恢复完成: 已恢复 {stats['restored']} 张")
         if stats['not_found'] > 0:
             log(f"⚠️  {stats['not_found']} 张文件未找到")
         if stats['failed'] > 0:
