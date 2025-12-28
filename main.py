@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 SuperPicky - 简化版 (Pure Tkinter, 无PyQt依赖)
-Version: 3.2.1 - 二次选鸟功能 (Post-DA)
+Version: 3.3 - 多鸟检测优化 + 目录分类
 """
 
 import tkinter as tk
@@ -260,7 +260,7 @@ class AboutWindow:
         """填充关于窗口的内容"""
         content = """慧眼选鸟 (SuperPicky)
 
-版本: V3.2.1
+版本: V3.3
 发布日期: 2025-10-28
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -501,7 +501,7 @@ class SuperPickyApp:
         button_container = ttk.Frame(btn_frame)
         button_container.pack(side=tk.RIGHT)
 
-        ttk.Label(button_container, text="V3.2.1 - EXIF Mode", font=("Arial", 9)).pack(side=tk.RIGHT, padx=10)
+        ttk.Label(button_container, text="V3.3", font=("Arial", 9)).pack(side=tk.RIGHT, padx=10)
 
         self.reset_btn = ttk.Button(button_container, text=self.i18n.t("buttons.reset"), command=self.reset_directory, width=15, state='disabled')
         self.reset_btn.pack(side=tk.RIGHT, padx=5)
@@ -936,6 +936,8 @@ class SuperPickyApp:
   • {self.i18n.t("help.rule_1_star")}
   • {self.i18n.t("help.rule_0_star")}
   • {self.i18n.t("help.rule_rejected")}
+
+{self.i18n.t("help.folder_info")}
 
 {self.i18n.t("help.ready")}
 {separator}

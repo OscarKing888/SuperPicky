@@ -2,10 +2,10 @@
   "_meta": {
     "language_name": "English",
     "language_code": "en_US",
-    "version": "3.2.0"
+    "version": "3.3.0"
   },
   "app": {
-    "title": "SuperPicky - AI Photo Selector v3.2",
+    "title": "SuperPicky - AI Photo Selector v3.3",
     "window_title": "SuperPicky - AI Photo Selector"
   },
   "menu": {
@@ -259,7 +259,7 @@
     "normalization": "Sharpness normalization method, affects fairness between large and small birds"
   },
   "help": {
-    "welcome_title": "Welcome to SuperPicky V3.2.0 - AI-Powered Bird Photo Selector",
+    "welcome_title": "Welcome to SuperPicky V3.3 - AI-Powered Bird Photo Selector",
     "usage_steps_title": "Usage Steps:",
     "step1": "Click 'Browse' to select photo directory (supports RAW/JPG)",
     "step2": "Adjust 3-star and pick flag parameters (optional, defaults recommended)",
@@ -271,7 +271,8 @@
     "rule_2_star": "⭐⭐ = Either sharpness or aesthetics meets threshold (2 stars)",
     "rule_1_star": "⭐ = Bird detected but below threshold (1 star)",
     "rule_0_star": "0 star = Poor technical quality (confidence/aesthetics/sharpness below threshold or both eyes hidden)",
-    "rule_rejected": "❌ = No bird detected",
+    "rule_rejected": "❌ = No bird detected → 0星_放弃/",
+    "folder_info": "📂 Folder assignment: 3★→3星_优选/ | 2★→2星_良好/ | 1★→1星_普通/ | 0★/-1★→0星_放弃/",
     "ready": "Ready? Select a directory to begin!",
     "tools_list_title": "More free tools by James:",
     "tool_1": "SuperPicky: AI bird photography selector",

@@ -2,10 +2,10 @@
   "_meta": {
     "language_name": "简体中文",
     "language_code": "zh_CN",
-    "version": "3.2.0"
+    "version": "3.3.0"
   },
   "app": {
-    "title": "慧眼选鸟 - AI智能照片筛选 v3.2",
+    "title": "慧眼选鸟 - AI智能照片筛选 v3.3",
     "window_title": "慧眼选鸟 - AI智能照片筛选"
   },
   "menu": {
@@ -259,7 +259,7 @@
     "normalization": "锐度归一化方法，影响大小鸟之间的公平性"
   },
   "help": {
-    "welcome_title": "欢迎使用 SuperPicky V3.2.0 - 慧眼选鸟 | 比你更聪明的选片工具",
+    "welcome_title": "欢迎使用 SuperPicky V3.3 - 慧眼选鸟 | 比你更聪明的选片工具",
     "usage_steps_title": "使用步骤：",
     "step1": "点击'浏览'选择照片目录（支持RAW/JPG）",
     "step2": "调整三星与精选参数（可选，推荐默认值）",
@@ -271,7 +271,8 @@
     "rule_2_star": "⭐⭐ = 锐度或美学达标之一（2星）",
     "rule_1_star": "⭐ = 有鸟但未达标（1星）",
     "rule_0_star": "0星 = 技术质量太差（置信度/美学/锐度不达标或双眼不可见）",
-    "rule_rejected": "❌ = 完全没鸟",
+    "rule_rejected": "❌ = 完全没鸟 → 0星_放弃/",
+    "folder_info": "📂 目录分配: 3星→3星_优选/ | 2星→2星_良好/ | 1星→1星_普通/ | 0星/-1星→0星_放弃/",
     "ready": "准备好了吗？选择目录开始吧！",
     "tools_list_title": "詹姆斯独立开发的更多免费工具：",
     "tool_1": "慧眼选鸟：AI 鸟类摄影选片工具",
