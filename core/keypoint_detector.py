@@ -67,7 +67,7 @@ class KeypointDetector:
     # 默认配置
     DEFAULT_MODEL_PATH = "models/cub200_keypoint_resnet50.pth"
     IMG_SIZE = 416
-    VISIBILITY_THRESHOLD = 0.7  # 至少一只眼睛可见性需≥0.7才算"眼睛可见"
+    VISIBILITY_THRESHOLD = 0.5  # 至少一只眼睛可见性需≥0.5才算"眼睛可见"
     RADIUS_MULTIPLIER = 1.2         # 有喙时的半径系数
     NO_BEAK_RADIUS_RATIO = 0.15     # 无喙时用检测框的15%
     
