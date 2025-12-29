@@ -18,7 +18,7 @@ class AdvancedConfig:
     DEFAULT_CONFIG = {
         # 评分阈值（影响0星判定）
         "min_confidence": 0.5,      # AI置信度最低阈值 (0.3-0.7) - 低于此值判定为0星
-        "min_sharpness": 250,       # 锐度最低阈值 (100-1000) - 低于此值判定为0星（头部区域锐度）
+        "min_sharpness": 250,       # 锐度最低阈值 (200-500) - 低于此值判定为0星（头部区域锐度）
         "min_nima": 4.0,            # NIMA美学最低阈值 (3.0-5.0) - 低于此值判定为0星
         # V3.2: 移除 max_brisque（不再使用 BRISQUE 评估）
 
@@ -120,8 +120,8 @@ class AdvancedConfig:
         self.config["min_confidence"] = max(0.3, min(0.7, float(value)))
 
     def set_min_sharpness(self, value):
-        """设置锐度最低阈值 (100-1000) - 头部区域锐度"""
-        self.config["min_sharpness"] = max(100, min(1000, int(value)))
+        """设置锐度最低阈值 (200-500) - 头部区域锐度"""
+        self.config["min_sharpness"] = max(200, min(500, int(value)))
 
     def set_min_nima(self, value):
         """设置美学最低阈值 (3.0-5.0)"""

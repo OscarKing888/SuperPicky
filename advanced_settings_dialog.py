@@ -77,8 +77,8 @@ class AdvancedSettingsDialog:
             key="min_sharpness",
             label=self.i18n.t("advanced_settings.min_sharpness_label"),
             description=self.i18n.t("advanced_settings.min_sharpness_description"),
-            from_=2000, to=6000, resolution=100,
-            default=4000,
+            from_=200, to=500, resolution=10,
+            default=250,
             format_func=lambda v: f"{int(v)}"
         )
 
@@ -116,16 +116,9 @@ class AdvancedSettingsDialog:
         # CSV报告 - 隐藏（不再显示，因为用户不需要了解这个技术细节）
         # CSV保存强制启用,因为重新评星功能需要
         self.vars["save_csv"] = tk.BooleanVar(value=True)
-
-        # 日志详细程度
-        log_frame = ttk.LabelFrame(parent, text=self.i18n.t("advanced_settings.log_level_label"), padding=10)
-        log_frame.pack(fill=tk.X, pady=5)
-
+        
+        # Bug 7: 日志详细程度设置已移除（用户不需要）
         self.vars["log_level"] = tk.StringVar(value="detailed")
-        ttk.Radiobutton(log_frame, text=self.i18n.t("advanced_settings.log_detailed_label"),
-                       variable=self.vars["log_level"], value="detailed").pack(anchor=tk.W)
-        ttk.Radiobutton(log_frame, text=self.i18n.t("advanced_settings.log_simple_label"),
-                       variable=self.vars["log_level"], value="simple").pack(anchor=tk.W)
 
         # 语言设置
         lang_frame = ttk.LabelFrame(parent, text=self.i18n.t("advanced_settings.language_settings"), padding=10)
