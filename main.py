@@ -351,9 +351,32 @@ class SuperPickyApp:
 
     def create_control_panel(self, parent):
         """创建控制面板"""
-        # 标题
-        title = ttk.Label(parent, text=self.i18n.t("labels.app_title"), font=("Arial", 16, "bold"))
-        title.pack(pady=10)
+        # V3.4: 配置飞行检测复选框样式（16pt字体）
+        style = ttk.Style()
+        style.configure("Flight.TCheckbutton", font=("Arial", 16))
+        # V3.4: 配置 LabelFrame 标题样式（16pt字体）
+        style.configure("TLabelframe.Label", font=("Arial", 16))
+        
+        # 标题 - V3.4: 使用图标+文字组合
+        title_frame = ttk.Frame(parent)
+        title_frame.pack(pady=10)
+        
+        # 📷 拍片一时爽，
+        ttk.Label(title_frame, text="拍片一时爽，", font=("Arial", 16, "bold")).pack(side=tk.LEFT)
+        
+        # 加载应用图标（缩小到24px）
+        icon_path = os.path.join(os.path.dirname(__file__), "img", "icon.png")
+        if os.path.exists(icon_path) and PIL_AVAILABLE:
+            try:
+                icon_img = Image.open(icon_path)
+                icon_img = icon_img.resize((24, 24), Image.LANCZOS)
+                self.title_icon = ImageTk.PhotoImage(icon_img)
+                ttk.Label(title_frame, image=self.title_icon).pack(side=tk.LEFT, padx=(0, 2))
+            except Exception:
+                pass
+        
+        # 选片照样爽
+        ttk.Label(title_frame, text="选片照样爽", font=("Arial", 16, "bold")).pack(side=tk.LEFT)
 
         # 目录选择
         dir_frame = ttk.LabelFrame(parent, text=self.i18n.t("labels.select_photo_dir"), padding=10)
@@ -367,9 +390,25 @@ class SuperPickyApp:
 
         ttk.Button(dir_frame, text=self.i18n.t("labels.browse"), command=self.browse_directory, width=10).pack(side=tk.LEFT)
 
-        # 参数设置
-        settings_frame = ttk.LabelFrame(parent, text=self.i18n.t("labels.rating_params"), padding=10)
+        # 参数设置 - V3.4: 自定义标题行，右侧添加飞行检测开关
+        settings_frame = ttk.LabelFrame(parent, text="", padding=10)
         settings_frame.pack(fill=tk.X, padx=10, pady=5)
+        
+        # 自定义标题行（左边标题，右边飞行检测复选框）
+        title_row = ttk.Frame(settings_frame)
+        title_row.pack(fill=tk.X, pady=(0, 8))
+        
+        ttk.Label(title_row, text=self.i18n.t("labels.rating_params"), font=("Arial", 15, "bold")).pack(side=tk.LEFT)
+        
+        # V3.4: 飞行检测开关（默认开启，暂不连接后端逻辑）
+        self.flight_var = tk.BooleanVar(value=True)
+        flight_check = ttk.Checkbutton(
+            title_row,
+            text="识别飞鸟",
+            variable=self.flight_var,
+            style="Flight.TCheckbutton"  # 使用自定义样式
+        )
+        flight_check.pack(side=tk.RIGHT, padx=(0, 30))  # 右边距对齐500/5.0
 
         # V3.1: 隐藏置信度和归一化选择
         self.ai_var = tk.IntVar(value=50)
@@ -378,22 +417,22 @@ class SuperPickyApp:
         # 鸟锐度阈值
         sharp_frame = ttk.Frame(settings_frame)
         sharp_frame.pack(fill=tk.X, pady=5)
-        ttk.Label(sharp_frame, text=self.i18n.t("labels.sharpness"), width=14, font=("Arial", 11)).pack(side=tk.LEFT)
+        ttk.Label(sharp_frame, text=self.i18n.t("labels.sharpness"), width=14, font=("Arial", 15)).pack(side=tk.LEFT)
         self.sharp_var = tk.IntVar(value=500)
         self.sharp_slider = ttk.Scale(sharp_frame, from_=100, to=1000, variable=self.sharp_var, orient=tk.HORIZONTAL)
         self.sharp_slider.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
-        self.sharp_label = ttk.Label(sharp_frame, text="500", width=6, font=("Arial", 11))
+        self.sharp_label = ttk.Label(sharp_frame, text="500", width=6, font=("Arial", 15))
         self.sharp_label.pack(side=tk.LEFT)
         self.sharp_slider.configure(command=lambda v: self._update_sharp_label(v))
 
         # 摄影美学阈值（NIMA）- V3.1: 范围4.5-5.5，默认4.8
         nima_frame = ttk.Frame(settings_frame)
         nima_frame.pack(fill=tk.X, pady=5)
-        ttk.Label(nima_frame, text=self.i18n.t("labels.nima"), width=14, font=("Arial", 11)).pack(side=tk.LEFT)
+        ttk.Label(nima_frame, text=self.i18n.t("labels.nima"), width=14, font=("Arial", 15)).pack(side=tk.LEFT)
         self.nima_var = tk.DoubleVar(value=5.0)
         self.nima_slider = ttk.Scale(nima_frame, from_=4.5, to=5.5, variable=self.nima_var, orient=tk.HORIZONTAL)
         self.nima_slider.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
-        self.nima_label = ttk.Label(nima_frame, text="5.0", width=6, font=("Arial", 11))
+        self.nima_label = ttk.Label(nima_frame, text="5.0", width=6, font=("Arial", 15))
         self.nima_label.pack(side=tk.LEFT)
         self.nima_slider.configure(command=lambda v: self.nima_label.configure(text=f"{float(v):.1f}"))
 
