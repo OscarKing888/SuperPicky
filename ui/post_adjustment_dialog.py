@@ -58,7 +58,7 @@ class PostAdjustmentDialog(QDialog):
         self.min_sharpness = int(self.config.min_sharpness)
         self.min_nima = int(self.config.min_nima * 10)
         self.sharpness_threshold = current_sharpness
-        self.nima_threshold = int(current_nima * 10)
+        self.nima_threshold = int(current_nima * 10)  # 默认 5.5 -> 55
         self.picked_percentage = int(self.config.picked_top_percentage)
 
         # 数据
@@ -167,10 +167,6 @@ class PostAdjustmentDialog(QDialog):
 
         # 阈值调整
         self._create_threshold_section(layout)
-        layout.addSpacing(16)
-
-        # 高级设置（折叠）
-        self._create_advanced_section(layout)
         layout.addSpacing(24)
 
         # 底部按钮
@@ -287,19 +283,19 @@ class PostAdjustmentDialog(QDialog):
         params_layout.setContentsMargins(20, 16, 20, 16)
         params_layout.setSpacing(16)
 
-        # 锐度阈值
+        # 锐度阈值 (200-600)
         self.sharp_slider, self.sharp_label = self._create_slider(
             params_layout,
             self.i18n.t("post_adjustment.sharpness"),
-            min_val=300, max_val=1000, default=self.sharpness_threshold,
+            min_val=200, max_val=600, default=self.sharpness_threshold,
             step=50
         )
 
-        # 美学阈值
+        # 美学阈值 (4.0-7.0)
         self.nima_slider, self.nima_label = self._create_slider(
             params_layout,
             self.i18n.t("post_adjustment.aesthetics"),
-            min_val=45, max_val=55, default=self.nima_threshold,
+            min_val=40, max_val=70, default=self.nima_threshold,
             step=1,
             format_func=lambda v: f"{v/10:.1f}"
         )
@@ -361,73 +357,6 @@ class PostAdjustmentDialog(QDialog):
 
         layout.addLayout(container)
         return slider, value_label
-
-    def _create_advanced_section(self, layout):
-        """创建高级设置区域（折叠）"""
-        # 折叠开关
-        self.advanced_check = QCheckBox(self.i18n.t("post_adjustment.advanced_0star"))
-        self.advanced_check.stateChanged.connect(self._toggle_advanced)
-        layout.addWidget(self.advanced_check)
-
-        layout.addSpacing(12)
-
-        # 高级设置内容
-        self.advanced_frame = QFrame()
-        self.advanced_frame.setStyleSheet(f"""
-            QFrame {{
-                background-color: {COLORS['bg_elevated']};
-                border-radius: 10px;
-            }}
-        """)
-
-        advanced_layout = QVBoxLayout(self.advanced_frame)
-        advanced_layout.setContentsMargins(20, 16, 20, 16)
-        advanced_layout.setSpacing(16)
-
-        # 最低置信度
-        self.conf_slider, self.conf_label = self._create_slider(
-            advanced_layout,
-            self.i18n.t("post_adjustment.min_confidence"),
-            min_val=30, max_val=80, default=self.min_confidence,
-            step=5,
-            format_func=lambda v: f"{v/100:.2f}"
-        )
-
-        # 最低锐度
-        self.min_sharp_slider, self.min_sharp_label = self._create_slider(
-            advanced_layout,
-            self.i18n.t("post_adjustment.min_sharpness"),
-            min_val=100, max_val=500, default=self.min_sharpness,
-            step=50
-        )
-
-        # 最低美学
-        self.min_nima_slider, self.min_nima_label = self._create_slider(
-            advanced_layout,
-            self.i18n.t("post_adjustment.min_nima"),
-            min_val=30, max_val=50, default=self.min_nima,
-            step=1,
-            format_func=lambda v: f"{v/10:.1f}"
-        )
-
-        self.advanced_frame.hide()
-        layout.addWidget(self.advanced_frame)
-
-    @Slot(int)
-    def _toggle_advanced(self, state):
-        """切换高级设置显示"""
-        from PySide6.QtWidgets import QApplication
-
-        if state == Qt.Checked:
-            self.advanced_frame.show()
-            QApplication.processEvents()
-            self.adjustSize()
-            new_height = max(self.height(), 780)
-            self.resize(self.width(), new_height)
-        else:
-            self.advanced_frame.hide()
-            QApplication.processEvents()
-            self.adjustSize()
 
     def _create_button_section(self, layout):
         """创建按钮区域"""
@@ -531,9 +460,10 @@ class PostAdjustmentDialog(QDialog):
         nima_threshold = self.nima_slider.value() / 10.0
         picked_percentage = self.picked_slider.value()
 
-        min_confidence = self.conf_slider.value() / 100.0
-        min_sharpness = self.min_sharp_slider.value()
-        min_nima = self.min_nima_slider.value() / 10.0
+        # 使用配置文件中的固定默认值（不再由 UI 滑块控制）
+        min_confidence = self.config.min_confidence
+        min_sharpness = self.config.min_sharpness
+        min_nima = self.config.min_nima
 
         self.updated_photos = self.engine.recalculate_ratings(
             self.original_photos,

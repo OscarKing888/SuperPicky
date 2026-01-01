@@ -1,4 +1,13 @@
 # SuperPicky 依赖包
+# Python 版本要求: 3.12+
+#
+# 使用虚拟环境:
+#   创建: python3.12 -m venv .venv
+#   激活: source .venv/bin/activate
+#   安装依赖: pip install -r requirements.txt
+#
+# 或直接使用虚拟环境路径:
+#   .venv/bin/python superpicky_cli.py
 
 # 核心依赖
 ultralytics>=8.0.0

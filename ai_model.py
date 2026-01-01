@@ -136,7 +136,7 @@ def detect_and_draw_birds(image_path, model, output_path, dir, ui_settings, i18n
                 "rating": -1
             }
             write_to_csv(data, dir, False)
-            return found_bird, bird_result, 0.0, 0.0, None, None, None  # V3.2: 移除brisque
+            return found_bird, bird_result, 0.0, 0.0, None, None, None, None  # V3.7: 8 values including mask
 
     yolo_time = (time.time() - step_start) * 1000
     # V3.3: 简化日志，移除步骤详情
@@ -188,7 +188,7 @@ def detect_and_draw_birds(image_path, model, output_path, dir, ui_settings, i18n
             "rating": -1
         }
         write_to_csv(data, dir, False)
-        return found_bird, bird_result, 0.0, 0.0, None, None, None
+        return found_bird, bird_result, 0.0, 0.0, None, None, None, None  # V3.7: 8 values including mask
     # V3.2: 移除 NIMA 计算（现在由 photo_processor 在裁剪区域上计算）
     # nima_score 设为 None，photo_processor 会重新计算
     nima_score = None
@@ -284,11 +284,38 @@ def detect_and_draw_birds(image_path, model, output_path, dir, ui_settings, i18n
     total_time = (time.time() - total_start) * 1000
     # log_message(f"  ⏱️  ========== 总耗时: {total_time:.1f}ms ==========", dir)
 
-    # 返回 found_bird, bird_result, AI置信度, 归一化锐度, NIMA分数, bbox, 图像尺寸
+    # 返回 found_bird, bird_result, AI置信度, 归一化锐度, NIMA分数, bbox, 图像尺寸, 分割掩码
     bird_confidence = float(confidences[bird_idx]) if bird_idx != -1 else 0.0
     bird_sharpness = sharpness if bird_idx != -1 else 0.0
     # bbox 格式: (x, y, w, h) - 在缩放后的图像上
     # img_dims 格式: (width, height) - 缩放后图像的尺寸，用于计算缩放比例
     bird_bbox = (x, y, w, h) if found_bird else None
     img_dims = (width, height) if found_bird else None
-    return found_bird, bird_result, bird_confidence, bird_sharpness, nima_score, bird_bbox, img_dims
+    
+    # 获取对应鸟的掩码
+    bird_mask = None
+    if found_bird and masks is not None:
+        # masks shape: (N, H, W) where N is number of detections
+        # YOLO masks are usually same size as input image (or smaller and upscaled)
+        # Ultralytics results.masks.data is usually (N, H, W) 
+        # But we need to be careful about resizing if it's smaller
+        # results.masks.data contains masks for all detections
+        # We need the one corresponding to bird_idx
+        try:
+            # Mask is already resized to image size by ultralytics by default in modern versions
+            # But let's verify if we need to resize
+            # results[0].masks.data is a torch tensor on GPU/CPU
+            raw_mask = results[0].masks.data[bird_idx].cpu().numpy()
+            
+            # Ensure mask is same size as processed image (width, height)
+            if raw_mask.shape != (height, width):
+                raw_mask = cv2.resize(raw_mask, (width, height), interpolation=cv2.INTER_NEAREST)
+            
+            # Convert to binary uint8 mask (0 or 255)
+            # YOLO masks are float [0,1], threshold at 0.5
+            bird_mask = (raw_mask > 0.5).astype(np.uint8) * 255
+        except Exception as e:
+            # Mask processing failed, ignore
+            pass
+
+    return found_bird, bird_result, bird_confidence, bird_sharpness, nima_score, bird_bbox, img_dims, bird_mask

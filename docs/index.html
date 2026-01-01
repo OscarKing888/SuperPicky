@@ -8,9 +8,15 @@
     <meta name="description" content="AI智能鸟类摄影选片工具 - 自动识别、评分、分类。AI-powered bird photo selector.">
     <link rel="stylesheet" href="css/style.css">
     <link rel="icon" href="img/icon.png" type="image/png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 </head>
 
 <body>
+    <!-- Subtle grain overlay -->
+    <div class="grain"></div>
+
     <!-- Header -->
     <header>
         <div class="header-inner">
@@ -19,7 +25,7 @@
                 <span>SuperPicky</span>
             </a>
             <div class="lang-switch">
-                <button class="lang-btn active" onclick="setLang('cn')">中文</button>
+                <button class="lang-btn active" onclick="setLang('cn')">中</button>
                 <button class="lang-btn" onclick="setLang('en')">EN</button>
             </div>
         </div>
@@ -28,68 +34,39 @@
     <!-- Hero Section -->
     <section class="hero">
         <div class="container">
+            <div class="hero-badge">
+                <span class="lang-cn">AI 鸟类摄影选片</span>
+                <span class="lang-en">AI Bird Photo Selector</span>
+            </div>
             <h1>
-                <span class="lang-cn">慧眼选鸟 SuperPicky</span>
+                <span class="lang-cn">慧眼选鸟</span>
                 <span class="lang-en">SuperPicky</span>
             </h1>
             <p class="tagline">
                 <span class="lang-cn">拍片一时爽，选片照样爽</span>
                 <span class="lang-en">Shoot freely, pick smartly</span>
             </p>
-            <p class="description">
-                <span class="lang-cn">AI 智能鸟类摄影选片工具 - 自动识别、评分、分类</span>
-                <span class="lang-en">AI-powered bird photo selector - Auto detect, rate, and organize</span>
-            </p>
 
-            <!-- Comparison Image -->
-            <div class="comparison">
-                <img src="img/comparison.jpg" alt="AI Detection Comparison">
+            <div class="hero-cta">
+                <a href="https://github.com/jamesphotography/SuperPicky/releases/latest" class="btn btn-primary">
+                    <span class="lang-cn">下载 macOS 版</span>
+                    <span class="lang-en">Download for macOS</span>
+                    <span class="btn-version">v3.7.0</span>
+                </a>
+                <a href="#features" class="btn btn-ghost">
+                    <span class="lang-cn">了解更多</span>
+                    <span class="lang-en">Learn More</span>
+                </a>
             </div>
         </div>
     </section>
 
-    <!-- Download Section -->
-    <section class="download-section" id="download">
+    <!-- Showcase Section -->
+    <section class="showcase">
         <div class="container">
-            <h2 class="section-title">
-                <span class="lang-cn">下载</span>
-                <span class="lang-en">Download</span>
-            </h2>
-            <div class="download-grid">
-                <!-- macOS -->
-                <div class="download-card">
-                    <h3>macOS</h3>
-                    <p class="version">v3.5.1</p>
-                    <p class="status">
-                        <span class="lang-cn">Apple Silicon (M1/M2/M3/M4)</span>
-                        <span class="lang-en">Apple Silicon (M1/M2/M3/M4)</span>
-                    </p>
-                    <div class="download-links">
-                        <a href="https://github.com/jamesphotography/SuperPicky/releases/latest"
-                            class="btn btn-primary">GitHub</a>
-                        <a href="https://drive.google.com/file/d/1rn_VctgLMW8SOAAfm3I1tGX7W_RCcBgm/view?usp=sharing"
-                            class="btn btn-secondary" target="_blank">Google Drive</a>
-                        <a href="#" class="btn btn-secondary">
-                            <span class="lang-cn">百度网盘</span>
-                            <span class="lang-en">Baidu Cloud</span>
-                        </a>
-                    </div>
-                </div>
-                <!-- Windows -->
-                <div class="download-card">
-                    <h3>Windows</h3>
-                    <p class="version">
-                        <span class="lang-cn">即将推出</span>
-                        <span class="lang-en">Coming Soon</span>
-                    </p>
-                    <p class="status">Windows 10/11</p>
-                    <div class="download-links">
-                        <button class="btn btn-disabled" disabled>
-                            <span class="lang-cn">敬请期待</span>
-                            <span class="lang-en">Stay tuned</span>
-                        </button>
-                    </div>
-                </div>
+            <div class="showcase-frame">
+                <img src="img/comparison.jpg" alt="AI Detection">
+                <div class="showcase-glow"></div>
             </div>
         </div>
     </section>
@@ -97,435 +74,268 @@
     <!-- Features Section -->
     <section class="features" id="features">
         <div class="container">
-            <h2 class="section-title">
-                <span class="lang-cn">功能亮点</span>
-                <span class="lang-en">Features</span>
-            </h2>
+            <div class="section-header">
+                <span class="section-label">
+                    <span class="lang-cn">核心功能</span>
+                    <span class="lang-en">Features</span>
+                </span>
+            </div>
             <div class="features-grid">
                 <div class="feature-card">
-                    <div class="feature-icon">🤖</div>
+                    <div class="feature-number">01</div>
                     <h3>
-                        <span class="lang-cn">AI 多模型协作</span>
-                        <span class="lang-en">AI Multi-Model</span>
+                        <span class="lang-cn">多模型协作</span>
+                        <span class="lang-en">Multi-Model AI</span>
                     </h3>
                     <p>
-                        <span class="lang-cn">YOLO检测 + PyIQA美学 + SuperEyes鸟眼 + SuperFlier飞鸟</span>
-                        <span class="lang-en">YOLO + PyIQA + SuperEyes + SuperFlier</span>
+                        <span class="lang-cn">YOLO11 检测 + SuperEyes 鸟眼 + SuperFlier 飞鸟姿态</span>
+                        <span class="lang-en">YOLO11 + SuperEyes + SuperFlier pose detection</span>
                     </p>
                 </div>
                 <div class="feature-card">
-                    <div class="feature-icon">⭐</div>
+                    <div class="feature-number">02</div>
                     <h3>
                         <span class="lang-cn">智能评分</span>
                         <span class="lang-en">Smart Rating</span>
                     </h3>
                     <p>
-                        <span class="lang-cn">锐度 + 美学 + 关键点可见性 → 1-3星评级</span>
-                        <span class="lang-en">Sharpness + Aesthetics + Keypoints → 1-3 Stars</span>
+                        <span class="lang-cn">头部锐度 + TOPIQ 美学 → 1-3 星 + 精选旗标</span>
+                        <span class="lang-en">Sharpness + TOPIQ Aesthetics → 1-3 Stars + Pick</span>
                     </p>
                 </div>
                 <div class="feature-card">
-                    <div class="feature-icon">📂</div>
+                    <div class="feature-number">03</div>
                     <h3>
                         <span class="lang-cn">自动分类</span>
                         <span class="lang-en">Auto Organize</span>
                     </h3>
                     <p>
-                        <span class="lang-cn">按星级自动整理到对应文件夹</span>
-                        <span class="lang-en">Auto sort into rating folders</span>
+                        <span class="lang-cn">按星级整理 + 飞鸟绿标 + 可重置恢复</span>
+                        <span class="lang-en">Rating folders + Flying label + Resettable</span>
                     </p>
                 </div>
                 <div class="feature-card">
-                    <div class="feature-icon">🔄</div>
+                    <div class="feature-number">04</div>
                     <h3>
                         <span class="lang-cn">Lightroom 兼容</span>
                         <span class="lang-en">Lightroom Ready</span>
                     </h3>
                     <p>
-                        <span class="lang-cn">评分、Pick旗标、颜色标签直接写入 EXIF</span>
-                        <span class="lang-en">Rating, Pick flags, Labels written to EXIF</span>
+                        <span class="lang-cn">评分、旗标、锐度/美学值写入 EXIF 可排序</span>
+                        <span class="lang-en">Rating, Pick, Sharpness/Aesthetics → EXIF sortable</span>
                     </p>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- Rating Section -->
+    <!-- Rating System Section -->
     <section class="rating-section" id="rating">
         <div class="container">
-            <h2 class="section-title">
-                <span class="lang-cn">评分规则</span>
-                <span class="lang-en">Rating System</span>
-            </h2>
-            <div class="rating-list">
-                <div class="rating-item">
-                    <div class="rating-stars">⭐⭐⭐
-                        <span class="lang-cn">优选</span>
-                        <span class="lang-en">Excellent</span>
+            <div class="section-header">
+                <span class="section-label">
+                    <span class="lang-cn">评分规则</span>
+                    <span class="lang-en">Rating System</span>
+                </span>
+            </div>
+            <div class="rating-grid">
+                <div class="rating-row">
+                    <div class="rating-stars">★★★</div>
+                    <div class="rating-info">
+                        <span class="rating-name">
+                            <span class="lang-cn">优选</span>
+                            <span class="lang-en">Excellent</span>
+                        </span>
+                        <span class="rating-desc">
+                            <span class="lang-cn">锐度 + 美学双达标</span>
+                            <span class="lang-en">Both sharpness & aesthetics pass</span>
+                        </span>
                     </div>
-                    <div class="rating-desc">
-                        <span class="lang-cn">锐度 + 美学双达标</span>
-                        <span class="lang-en">Both sharpness and aesthetics meet threshold</span>
-                        <span class="rating-badge badge-pick">Pick</span>
-                        <span class="rating-badge badge-green">
+                    <div class="rating-badges">
+                        <span class="badge badge-pick">Pick</span>
+                        <span class="badge badge-fly">
                             <span class="lang-cn">飞鸟</span>
                             <span class="lang-en">Flying</span>
                         </span>
                     </div>
                 </div>
-                <div class="rating-item">
-                    <div class="rating-stars">⭐⭐
-                        <span class="lang-cn">良好</span>
-                        <span class="lang-en">Good</span>
-                    </div>
-                    <div class="rating-desc">
-                        <span class="lang-cn">锐度或美学达标其一</span>
-                        <span class="lang-en">Either sharpness or aesthetics meets threshold</span>
-                    </div>
-                </div>
-                <div class="rating-item">
-                    <div class="rating-stars">⭐
-                        <span class="lang-cn">普通</span>
-                        <span class="lang-en">Normal</span>
-                    </div>
-                    <div class="rating-desc">
-                        <span class="lang-cn">有鸟但未达标</span>
-                        <span class="lang-en">Bird detected but below threshold</span>
+                <div class="rating-row">
+                    <div class="rating-stars dim">★★</div>
+                    <div class="rating-info">
+                        <span class="rating-name">
+                            <span class="lang-cn">良好</span>
+                            <span class="lang-en">Good</span>
+                        </span>
+                        <span class="rating-desc">
+                            <span class="lang-cn">锐度或美学达标其一</span>
+                            <span class="lang-en">Either sharpness or aesthetics pass</span>
+                        </span>
                     </div>
                 </div>
-                <div class="rating-item">
-                    <div class="rating-stars">0
-                        <span class="lang-cn">星放弃</span>
-                        <span class="lang-en">Star Reject</span>
-                    </div>
-                    <div class="rating-desc">
-                        <span class="lang-cn">技术质量差 / 无鸟</span>
-                        <span class="lang-en">Poor quality / No bird</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- Installation Tutorial Section -->
-    <section class="tutorial" id="install">
-        <div class="container">
-            <h2 class="section-title">
-                <span class="lang-cn">安装教程</span>
-                <span class="lang-en">Installation</span>
-            </h2>
-            <div class="tutorial-steps">
-                <div class="tutorial-step">
-                    <div class="step-header">
-                        <div class="step-number">1</div>
-                        <h4>
-                            <span class="lang-cn">打开 DMG 文件</span>
-                            <span class="lang-en">Open DMG File</span>
-                        </h4>
-                    </div>
-                    <div class="step-image">
-                        <img src="img/Howto/第一步：打开 DMG.jpg" alt="Open DMG">
+                <div class="rating-row">
+                    <div class="rating-stars dim">★</div>
+                    <div class="rating-info">
+                        <span class="rating-name">
+                            <span class="lang-cn">普通</span>
+                            <span class="lang-en">Normal</span>
+                        </span>
+                        <span class="rating-desc">
+                            <span class="lang-cn">有鸟但未达标</span>
+                            <span class="lang-en">Bird detected but below threshold</span>
+                        </span>
                     </div>
                 </div>
-                <div class="tutorial-step">
-                    <div class="step-header">
-                        <div class="step-number">2</div>
-                        <h4>
-                            <span class="lang-cn">拖动到应用程序</span>
-                            <span class="lang-en">Drag to Applications</span>
-                        </h4>
-                    </div>
-                    <div class="step-image">
-                        <img src="img/Howto/第二步：移动到应用程序内.jpg" alt="Move to Applications">
+                <div class="rating-row">
+                    <div class="rating-stars muted">0</div>
+                    <div class="rating-info">
+                        <span class="rating-name">
+                            <span class="lang-cn">放弃</span>
+                            <span class="lang-en">Reject</span>
+                        </span>
+                        <span class="rating-desc">
+                            <span class="lang-cn">无鸟 / 质量差</span>
+                            <span class="lang-en">No bird / Poor quality</span>
+                        </span>
                     </div>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- Usage Tutorial Section -->
-    <section class="tutorial" id="tutorial">
+    <!-- Download Section -->
+    <section class="download-section" id="download">
         <div class="container">
-            <h2 class="section-title">
-                <span class="lang-cn">使用教程</span>
-                <span class="lang-en">How to Use</span>
-            </h2>
-            <div class="tutorial-steps">
-                <div class="tutorial-step">
-                    <div class="step-header">
-                        <div class="step-number">1</div>
-                        <h4>
-                            <span class="lang-cn">启动应用</span>
-                            <span class="lang-en">Launch App</span>
-                        </h4>
+            <div class="download-card">
+                <div class="download-info">
+                    <div class="download-icon">
+                        <img src="img/icon.png" alt="SuperPicky">
                     </div>
-                    <div class="step-image">
-                        <img src="img/Howto/第三步：启动慧眼选鸟 .jpg" alt="Launch SuperPicky">
+                    <div class="download-meta">
+                        <h3>SuperPicky</h3>
+                        <p class="download-version">v3.7.0 · macOS · Apple Silicon</p>
                     </div>
                 </div>
-                <div class="tutorial-step">
-                    <div class="step-header">
-                        <div class="step-number">2</div>
-                        <h4>
-                            <span class="lang-cn">选择照片目录</span>
-                            <span class="lang-en">Select Photo Folder</span>
-                        </h4>
-                    </div>
-                    <div class="step-image">
-                        <img src="img/Howto/第四步：点击浏览选择目录.jpg" alt="Select Directory">
-                    </div>
-                </div>
-                <div class="tutorial-step">
-                    <div class="step-header">
-                        <div class="step-number">3</div>
-                        <h4>
-                            <span class="lang-cn">点击开始处理</span>
-                            <span class="lang-en">Click Start</span>
-                        </h4>
-                    </div>
-                    <div class="step-image">
-                        <img src="img/Howto/第五步：点击开始处理.jpg" alt="Start Processing">
-                    </div>
-                </div>
-                <div class="tutorial-step">
-                    <div class="step-header">
-                        <div class="step-number">4</div>
-                        <h4>
-                            <span class="lang-cn">确认开始选鸟</span>
-                            <span class="lang-en">Confirm Start</span>
-                        </h4>
-                    </div>
-                    <div class="step-image">
-                        <img src="img/Howto/第六步：点击 Yes 开始选鸟.jpg" alt="Confirm">
-                    </div>
-                </div>
-                <div class="tutorial-step">
-                    <div class="step-header">
-                        <div class="step-number">5</div>
-                        <h4>
-                            <span class="lang-cn">处理进度监控</span>
-                            <span class="lang-en">Monitor Progress</span>
-                        </h4>
-                    </div>
-                    <div class="step-image">
-                        <img src="img/Howto/第七步：选鸟监控窗口.jpg" alt="Progress Monitor">
-                    </div>
+                <div class="download-links">
+                    <a href="https://github.com/jamesphotography/SuperPicky/releases/latest" class="btn btn-primary">
+                        GitHub
+                    </a>
+                    <a href="https://drive.google.com/file/d/1rn_VctgLMW8SOAAfm3I1tGX7W_RCcBgm/view?usp=sharing" class="btn btn-secondary" target="_blank">
+                        Google Drive
+                    </a>
                 </div>
             </div>
-        </div>
-    </section>
-
-    <!-- Lightroom Integration Section -->
-    <section class="tutorial lightroom-section" id="lightroom">
-        <div class="container">
-            <h2 class="section-title">
-                <span class="lang-cn">Lightroom 整合</span>
-                <span class="lang-en">Lightroom Integration</span>
-            </h2>
-            <div class="tutorial-steps">
-                <div class="tutorial-step">
-                    <div class="step-header">
-                        <div class="step-number">1</div>
-                        <h4>
-                            <span class="lang-cn">导入处理结果</span>
-                            <span class="lang-en">Import Results</span>
-                        </h4>
-                    </div>
-                    <div class="step-image">
-                        <img src="img/Howto/第八步：导入选鸟结果进 Lightroom.jpg" alt="Import to Lightroom">
-                    </div>
-                </div>
-                <div class="tutorial-step">
-                    <div class="step-header">
-                        <div class="step-number">2</div>
-                        <h4>
-                            <span class="lang-cn">读取元数据</span>
-                            <span class="lang-en">Read Metadata</span>
-                        </h4>
-                    </div>
-                    <div class="step-image">
-                        <img src="img/Howto/第九步：全选后从文件中读取元数据.jpg" alt="Read Metadata">
-                    </div>
-                </div>
-                <div class="tutorial-step">
-                    <div class="step-header">
-                        <div class="step-number">3</div>
-                        <h4>
-                            <span class="lang-cn">筛选绿标飞版</span>
-                            <span class="lang-en">Filter Flying Birds</span>
-                        </h4>
-                    </div>
-                    <div class="step-image">
-                        <img src="img/Howto/第十步：筛选绿标飞版.jpg" alt="Filter Green Label">
-                    </div>
-                </div>
-                <div class="tutorial-step">
-                    <div class="step-header">
-                        <div class="step-number">4</div>
-                        <h4>
-                            <span class="lang-cn">三星精选筛选</span>
-                            <span class="lang-en">3-Star Pick Filter</span>
-                        </h4>
-                    </div>
-                    <div class="step-image">
-                        <img src="img/Howto/第十一步：三星+精选旗标.jpg" alt="3-Star Pick">
-                    </div>
-                </div>
-                <div class="tutorial-step">
-                    <div class="step-header">
-                        <div class="step-number">5</div>
-                        <h4>
-                            <span class="lang-cn">按美学排序</span>
-                            <span class="lang-en">Sort by Aesthetics</span>
-                        </h4>
-                    </div>
-                    <div class="step-image">
-                        <img src="img/Howto/第十二步：按照摄影美学排序（按省市）.jpg" alt="Sort by Aesthetics">
-                    </div>
-                </div>
-                <div class="tutorial-step">
-                    <div class="step-header">
-                        <div class="step-number">6</div>
-                        <h4>
-                            <span class="lang-cn">按锐度排序</span>
-                            <span class="lang-en">Sort by Sharpness</span>
-                        </h4>
-                    </div>
-                    <div class="step-image">
-                        <img src="img/Howto/第十三步：按照头部锐度排序，按照城市排序.jpg" alt="Sort by Sharpness">
-                    </div>
-                </div>
+            <div class="requirements">
+                <span class="lang-cn">系统要求：macOS 10.15+ · Apple Silicon (M1/M2/M3/M4) · 1.5GB 空间</span>
+                <span class="lang-en">Requirements: macOS 10.15+ · Apple Silicon (M1/M2/M3/M4) · 1.5GB space</span>
             </div>
-        </div>
-    </section>
-
-    <!-- Advanced Features Section -->
-    <section class="tutorial advanced-section" id="advanced">
-        <div class="container">
-            <h2 class="section-title">
-                <span class="lang-cn">高级功能</span>
-                <span class="lang-en">Advanced Features</span>
-            </h2>
-            <div class="tutorial-steps two-column">
-                <div class="tutorial-step">
-                    <div class="step-header">
-                        <h4>
-                            <span class="lang-cn">重新评星</span>
-                            <span class="lang-en">Re-Rating</span>
-                        </h4>
-                    </div>
-                    <p class="step-desc">
-                        <span class="lang-cn">调整参数后重新评分，不满意可随时重新处理</span>
-                        <span class="lang-en">Adjust parameters and re-rate photos anytime</span>
-                    </p>
-                    <div class="step-image">
-                        <img src="img/Howto/重新评星调整参数.jpg" alt="Re-Rating">
-                    </div>
-                </div>
-                <div class="tutorial-step">
-                    <div class="step-header">
-                        <h4>
-                            <span class="lang-cn">重置目录</span>
-                            <span class="lang-en">Reset Directory</span>
-                        </h4>
-                    </div>
-                    <p class="step-desc">
-                        <span class="lang-cn">一键恢复目录原状，所有文件返回原位置</span>
-                        <span class="lang-en">One-click restore: files return to original location</span>
-                    </p>
-                    <div class="step-image">
-                        <img src="img/Howto/重置目录，恢复原样.jpg" alt="Reset Directory">
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- Requirements Section -->
-    <section class="requirements" id="requirements">
-        <div class="container">
-            <h2 class="section-title">
-                <span class="lang-cn">系统要求</span>
-                <span class="lang-en">System Requirements</span>
-            </h2>
-            <ul class="requirements-list">
-                <li>macOS 10.15+ (Catalina)</li>
-                <li>Apple Silicon (M1/M2/M3/M4)</li>
-                <li>~1.5GB
-                    <span class="lang-cn">硬盘空间</span>
-                    <span class="lang-en">disk space</span>
-                </li>
-            </ul>
         </div>
     </section>
 
     <!-- Team Section -->
-    <section class="team" id="team">
+    <section class="team-section" id="team">
         <div class="container">
-            <h2 class="section-title">
-                <span class="lang-cn">开发团队</span>
-                <span class="lang-en">Team</span>
-            </h2>
+            <div class="section-header">
+                <span class="section-label">
+                    <span class="lang-cn">开发团队</span>
+                    <span class="lang-en">Team</span>
+                </span>
+            </div>
             <div class="team-grid">
-                <div class="team-card">
-                    <h4>
-                        <span class="lang-cn">詹姆斯·于震</span>
-                        <span class="lang-en">James Yu</span>
-                    </h4>
-                    <p class="role">
+                <a href="https://github.com/jamesphotography" class="team-card" target="_blank">
+                    <div class="team-role">
                         <span class="lang-cn">开发者</span>
                         <span class="lang-en">Developer</span>
-                    </p>
-                    <p class="desc">
+                    </div>
+                    <div class="team-name">
+                        <span class="lang-cn">詹姆斯·于震</span>
+                        <span class="lang-en">James Yu</span>
+                    </div>
+                    <div class="team-desc">
                         <span class="lang-cn">澳籍华裔职业摄影师</span>
                         <span class="lang-en">Professional Photographer</span>
-                    </p>
-                </div>
-                <div class="team-card">
-                    <h4>
-                        <span class="lang-cn">于若君</span>
-                        <span class="lang-en">Jordan Yu</span>
-                    </h4>
-                    <p class="role">
+                    </div>
+                </a>
+                <a href="https://github.com/jordan-yrj" class="team-card" target="_blank">
+                    <div class="team-role">
                         <span class="lang-cn">模型训练</span>
                         <span class="lang-en">Model Training</span>
-                    </p>
-                    <p class="desc">
-                        <span class="lang-cn">SuperEyes 鸟眼识别 & SuperFlier 飞鸟检测</span>
-                        <span class="lang-en">SuperEyes & SuperFlier Models</span>
-                    </p>
-                </div>
+                    </div>
+                    <div class="team-name">
+                        <span class="lang-cn">于若君</span>
+                        <span class="lang-en">Jordan Yu</span>
+                    </div>
+                    <div class="team-desc">
+                        <span class="lang-cn">SuperEyes · SuperFlier</span>
+                        <span class="lang-en">SuperEyes · SuperFlier</span>
+                    </div>
+                </a>
+                <a href="https://github.com/thp2024" class="team-card" target="_blank">
+                    <div class="team-role">
+                        <span class="lang-cn">Windows 版本</span>
+                        <span class="lang-en">Windows Build</span>
+                    </div>
+                    <div class="team-name">
+                        <span class="lang-cn">小平</span>
+                        <span class="lang-en">Xiaoping</span>
+                    </div>
+                    <div class="team-desc">
+                        <span class="lang-cn">Windows 移植与适配</span>
+                        <span class="lang-en">Windows Porting</span>
+                    </div>
+                </a>
             </div>
         </div>
     </section>
 
-    <!-- Other Tools Section -->
-    <section class="other-tools" id="tools">
+    <!-- More Tools Section -->
+    <section class="tools-section" id="tools">
         <div class="container">
-            <h2 class="section-title">
-                <span class="lang-cn">更多工具</span>
-                <span class="lang-en">More Tools</span>
-            </h2>
+            <div class="section-header">
+                <span class="section-label">
+                    <span class="lang-cn">更多免费工具</span>
+                    <span class="lang-en">More Free Tools</span>
+                </span>
+            </div>
             <div class="tools-grid">
-                <a href="#" class="tool-item">
-                    <span class="lang-cn">彗星星轨</span>
-                    <span class="lang-en">Star Trail</span>
+                <a href="https://apps.apple.com/au/app/%E6%85%A7%E7%9C%BC%E8%A7%82%E9%B8%9F/id6756405107" class="tool-item" target="_blank">
+                    <span class="tool-name">
+                        <span class="lang-cn">慧眼观鸟</span>
+                        <span class="lang-en">BirdID</span>
+                    </span>
+                    <span class="tool-desc">
+                        <span class="lang-cn">AI 鸟种识别 (iOS)</span>
+                        <span class="lang-en">AI Species ID (iOS)</span>
+                    </span>
                 </a>
-                <a href="#" class="tool-item">
-                    <span class="lang-cn">慧眼去星</span>
-                    <span class="lang-en">Star Remover</span>
+                <a href="https://superstaroff.jamesphotography.com.au/" class="tool-item" target="_blank">
+                    <span class="tool-name">
+                        <span class="lang-cn">慧眼去星</span>
+                        <span class="lang-en">StarRemover</span>
+                    </span>
+                    <span class="tool-desc">
+                        <span class="lang-cn">AI 银河去星 (Photoshop)</span>
+                        <span class="lang-en">AI Milky Way (Photoshop)</span>
+                    </span>
                 </a>
-                <a href="#" class="tool-item">
-                    <span class="lang-cn">图忆</span>
-                    <span class="lang-en">TUI Portfolio</span>
+                <a href="https://superstartrail.jamesphotography.com.au/" class="tool-item" target="_blank">
+                    <span class="tool-name">
+                        <span class="lang-cn">彗星星轨</span>
+                        <span class="lang-en">StarTrail</span>
+                    </span>
+                    <span class="tool-desc">
+                        <span class="lang-cn">星轨合成 (Mac/Win)</span>
+                        <span class="lang-en">Star Trail (Mac/Win)</span>
+                    </span>
                 </a>
-                <a href="#" class="tool-item">
-                    <span class="lang-cn">镜书</span>
-                    <span class="lang-en">JingShu</span>
-                </a>
-                <a href="#" class="tool-item">
-                    <span class="lang-cn">慧眼观鸟</span>
-                    <span class="lang-en">Bird ID</span>
+                <a href="https://tuiportfolio.com/" class="tool-item" target="_blank">
+                    <span class="tool-name">
+                        <span class="lang-cn">图忆</span>
+                        <span class="lang-en">TUI Portfolio</span>
+                    </span>
+                    <span class="tool-desc">
+                        <span class="lang-cn">鸟类作品集 (iOS)</span>
+                        <span class="lang-en">Bird Portfolio (iOS)</span>
+                    </span>
                 </a>
             </div>
         </div>
@@ -534,18 +344,30 @@
     <!-- Footer -->
     <footer>
         <div class="container">
-            <div class="footer-links">
-                <a href="https://github.com/jamesphotography/SuperPicky">GitHub</a>
-                <a href="mailto:james@jamesphotography.com.au">
-                    <span class="lang-cn">联系我们</span>
-                    <span class="lang-en">Contact</span>
-                </a>
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <img src="img/icon.png" alt="SuperPicky">
+                    <div class="footer-brand-text">
+                        <span>SuperPicky</span>
+                        <span class="footer-author">by James Yu (詹姆斯·于震)</span>
+                    </div>
+                </div>
+                <div class="footer-links">
+                    <a href="https://github.com/jamesphotography/SuperPicky">GitHub</a>
+                    <a href="https://www.youtube.com/@JamesZhenYu">YouTube</a>
+                    <a href="mailto:james@jamesphotography.com.au">
+                        <span class="lang-cn">联系</span>
+                        <span class="lang-en">Contact</span>
+                    </a>
+                </div>
             </div>
-            <p class="credits">
-                <span class="lang-cn">模型致谢：YOLO (Ultralytics), PyIQA (NIMA)</span>
-                <span class="lang-en">Credits: YOLO (Ultralytics), PyIQA (NIMA)</span>
-            </p>
-            <p class="copyright">© 2024-2025 James Yu. All rights reserved.</p>
+            <div class="footer-bottom">
+                <p class="credits">
+                    <span class="lang-cn">模型致谢：YOLO11 (Ultralytics) · TOPIQ (Chaofeng Chen et al.)</span>
+                    <span class="lang-en">Credits: YOLO11 (Ultralytics) · TOPIQ (Chaofeng Chen et al.)</span>
+                </p>
+                <p class="copyright">© 2024-2025 James Yu · jamesphotography.com.au</p>
+            </div>
         </div>
     </footer>
 
@@ -565,7 +387,8 @@
         document.documentElement.setAttribute('data-lang', savedLang);
         document.addEventListener('DOMContentLoaded', () => {
             document.querySelectorAll('.lang-btn').forEach(btn => {
-                if (btn.textContent.toLowerCase().includes(savedLang === 'cn' ? '中' : 'en')) {
+                const isCN = btn.textContent.includes('中');
+                if ((savedLang === 'cn' && isCN) || (savedLang === 'en' && !isCN)) {
                     btn.classList.add('active');
                 } else {
                     btn.classList.remove('active');

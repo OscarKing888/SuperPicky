@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 SuperPicky - PySide6 版本入口点
-Version: 3.6.0 - PySide6 Migration
+Version: 3.7.0 - TOPIQ Aesthetic Model
 """
 
 import sys

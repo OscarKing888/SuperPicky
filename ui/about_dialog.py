@@ -99,7 +99,7 @@ class AboutDialog(QDialog):
         subtitle.setStyleSheet(f"color: {COLORS['text_tertiary']}; font-size: 13px;")
         brand_layout.addWidget(subtitle)
 
-        version = QLabel("v3.6.0")
+        version = QLabel("v3.7.0")
         version.setStyleSheet(f"""
             color: {COLORS['accent']};
             font-size: 12px;
@@ -164,8 +164,11 @@ Bird Eye Detection: Jordan Yu
 Bird Flight Pose: Jordan Yu
 
 Open Source Models
-YOLO11 - Bird Detection
-PyIQA-NIMA - Aesthetic Scoring
+YOLO11 - Bird Detection (AGPL-3.0)
+TOPIQ - Aesthetic Scoring
+  by Chaofeng Chen et al. (IEEE TIP 2024)
+  github.com/chaofengc/IQA-PyTorch
+  License: CC BY-NC-SA 4.0
 
 Free Tools by James
 • SuperPicky - AI Bird Photo Selector

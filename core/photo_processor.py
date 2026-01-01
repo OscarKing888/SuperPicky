@@ -38,8 +38,8 @@ from constants import RATING_FOLDER_NAMES, RAW_EXTENSIONS, JPG_EXTENSIONS
 class ProcessingSettings:
     """处理参数配置"""
     ai_confidence: int = 50
-    sharpness_threshold: int = 200   # 头部区域锐度达标阈值
-    nima_threshold: float = 4.8
+    sharpness_threshold: int = 400   # 头部区域锐度达标阈值 (200-600)
+    nima_threshold: float = 5.5  # TOPIQ 美学达标阈值 (4.0-7.0)
     save_crop: bool = False
     normalization_mode: str = 'log_compression'  # 默认使用log_compression，与GUI一致
     detect_flight: bool = True  # V3.4: 飞版检测开关
@@ -346,8 +346,8 @@ class PhotoProcessor:
                 self._log(f"  ❌ 处理异常: {e}", "error")
                 continue
             
-            # 解构 AI 结果 (包含bbox和图像尺寸用于缩放) - V3.2移除BRISQUE
-            detected, _, confidence, sharpness, _, bird_bbox, img_dims = result
+            # 解构 AI 结果 (包含bbox, 图像尺寸, 分割掩码) - V3.2移除BRISQUE
+            detected, _, confidence, sharpness, _, bird_bbox, img_dims, bird_mask = result
             
             # Phase 2: 关键点检测（在裁剪区域上执行，更准确）
             both_eyes_hidden = False
@@ -361,6 +361,7 @@ class PhotoProcessor:
             # V3.2优化: 只读取原图一次，在关键点检测和NIMA计算中复用
             orig_img = None  # 原图缓存
             bird_crop_bgr = None  # 裁剪区域缓存（BGR）
+            bird_crop_mask = None # 裁剪区域掩码缓存
             
             if use_keypoints and detected and bird_bbox is not None and img_dims is not None:
                 try:
@@ -390,10 +391,27 @@ class PhotoProcessor:
                         
                         # 裁剪鸟的区域（保存BGR版本供NIMA使用）
                         bird_crop_bgr = orig_img[y_orig:y_orig+h_orig_box, x_orig:x_orig+w_orig_box]
+                        
+                        # 同样裁剪 mask (如果存在)
+                        if bird_mask is not None:
+                            # 缩放 mask 到原图尺寸 (Mask是整图的)
+                            # bird_mask 是 (h_resized, w_resized)，需要放大到 (h_orig, w_orig)
+                            if bird_mask.shape[:2] != (h_orig, w_orig):
+                                # 使用最近邻插值保持二值特性
+                                bird_mask_orig = cv2.resize(bird_mask, (w_orig, h_orig), interpolation=cv2.INTER_NEAREST)
+                            else:
+                                bird_mask_orig = bird_mask
+                                
+                            bird_crop_mask = bird_mask_orig[y_orig:y_orig+h_orig_box, x_orig:x_orig+w_orig_box]
+                        
                         if bird_crop_bgr.size > 0:
                             crop_rgb = cv2.cvtColor(bird_crop_bgr, cv2.COLOR_BGR2RGB)
-                            # 在裁剪区域上进行关键点检测
-                            kp_result = keypoint_detector.detect(crop_rgb, box=(x_orig, y_orig, w_orig_box, h_orig_box))
+                            # 在裁剪区域上进行关键点检测，传入分割掩码
+                            kp_result = keypoint_detector.detect(
+                                crop_rgb, 
+                                box=(x_orig, y_orig, w_orig_box, h_orig_box),
+                                seg_mask=bird_crop_mask  # 传入分割掩码
+                            )
                             if kp_result is not None:
                                 both_eyes_hidden = kp_result.both_eyes_hidden
                                 has_visible_eye = kp_result.visible_eye is not None
@@ -403,7 +421,10 @@ class PhotoProcessor:
                                 beak_vis = kp_result.beak_vis
                                 head_sharpness = kp_result.head_sharpness
                 except Exception as e:
-                    pass  # V3.3: 简化日志，静默关键点检测失败
+                    self._log(f"  ⚠️ 关键点检测异常: {e}", "warning")
+                    # import traceback
+                    # self._log(traceback.format_exc(), "error")
+                    pass
             
             # Phase 3: 根据眼睛可见性决定是否计算NIMA
             # V3.2优化: 复用已裁剪的鸟区域，避免重复读取原图
@@ -413,30 +434,21 @@ class PhotoProcessor:
                 try:
                     from iqa_scorer import get_iqa_scorer
                     import time as time_module
-                    import cv2
-                    import tempfile
                     
                     step_start = time_module.time()
                     scorer = get_iqa_scorer(device='mps')
                     
-                    # 优化: 直接使用已裁剪的区域（避免重复读取原图）
-                    if bird_crop_bgr is not None and bird_crop_bgr.size > 0:
-                        # 保存到临时文件供 NIMA 评估
-                        crop_temp_path = tempfile.mktemp(suffix='.jpg')
-                        cv2.imwrite(crop_temp_path, bird_crop_bgr)
-                        nima = scorer.calculate_nima(crop_temp_path)
-                        # 清理临时文件
-                        if os.path.exists(crop_temp_path):
-                            os.remove(crop_temp_path)
-                    else:
-                        # 回退：没有裁剪区域时用全图
-                        nima = scorer.calculate_nima(filepath)
+                    # V3.7: 使用全图而非裁剪图进行美学评分
+                    # 全图评分 + 头部锐度阈值 是更好的组合：
+                    # - 全图评分评估整体画面构图和美感
+                    # - 头部锐度阈值确保鸟本身足够清晰
+                    nima = scorer.calculate_nima(filepath)
                     
                     nima_time = (time_module.time() - step_start) * 1000
                     # V3.3: 简化日志，移除 NIMA 详情
                     # if nima is not None:
-                    #     self._log(f"🎨 NIMA 美学评分: {nima:.2f} / 10 (裁剪区域)")
-                    #     self._log(f"  ⏱️  [补充] NIMA评分: {nima_time:.1f}ms")
+                    #     self._log(f\"🎨 NIMA 美学评分: {nima:.2f} / 10 (全图)\")
+                    #     self._log(f\"  ⏱️  [补充] NIMA评分: {nima_time:.1f}ms\")
                 except Exception as e:
                     pass  # V3.3: 简化日志，静默 NIMA 计算失败
             # V3.3: 移除跳过 NIMA 日志
@@ -456,12 +468,22 @@ class PhotoProcessor:
                 except Exception as e:
                     self._log(f"  ⚠️ 飞版检测异常: {e}", "warning")
             
-            # 使用 RatingEngine 计算评分
+            # V3.8: 飞版加成（仅当 confidence >= 0.5 且 is_flying 时）
+            # 锐度+100，美学+0.5，加成后的值用于评分
+            rating_sharpness = head_sharpness
+            rating_nima = nima
+            if is_flying and confidence >= 0.5:
+                rating_sharpness = head_sharpness + 100
+                if nima is not None:
+                    rating_nima = nima + 0.5
+                # self._log(f"  🦅 飞版加成: 锐度 {head_sharpness:.0f} → {rating_sharpness:.0f}, 美学 {nima:.2f} → {rating_nima:.2f}")
+            
+            # 使用 RatingEngine 计算评分（使用加成后的值）
             rating_result = self.rating_engine.calculate(
                 detected=detected,
                 confidence=confidence,
-                sharpness=head_sharpness,  # 使用头部锐度
-                nima=nima,
+                sharpness=rating_sharpness,  # 使用加成后的锐度
+                nima=rating_nima,  # 使用加成后的美学
                 both_eyes_hidden=both_eyes_hidden
             )
             rating_value = rating_result.rating
@@ -503,36 +525,36 @@ class PhotoProcessor:
             
             # V3.4: 以下操作对 RAW 和纯 JPEG 都执行
             if target_file_path and os.path.exists(target_file_path):
-                # 更新 CSV 中的关键点数据
+                # 更新 CSV 中的关键点数据（V3.8: 使用加成后的值）
                 self._update_csv_keypoint_data(
                     file_prefix, 
-                    head_sharpness, 
+                    rating_sharpness,  # 使用加成后的锐度
                     has_visible_eye, 
                     has_visible_beak,
                     left_eye_vis,
                     right_eye_vis,
                     beak_vis,
-                    nima,
+                    rating_nima,  # 使用加成后的美学
                     rating_value,
                     is_flying,
                     flight_confidence
                 )
                 
-                # 收集3星照片
-                if rating_value == 3 and nima is not None:
+                # 收集3星照片（V3.8: 使用加成后的值）
+                if rating_value == 3 and rating_nima is not None:
                     self.star_3_photos.append({
                         'file': target_file_path,
-                        'nima': nima,
-                        'sharpness': head_sharpness
+                        'nima': rating_nima,  # 加成后的美学
+                        'sharpness': rating_sharpness  # 加成后的锐度
                     })
                 
                 # 记录评分（用于文件移动）
                 self.file_ratings[file_prefix] = rating_value
                 
-                # 记录2星原因（用于分目录）
+                # 记录2星原因（用于分目录）（V3.8: 使用加成后的值）
                 if rating_value == 2:
-                    sharpness_ok = head_sharpness >= self.settings.sharpness_threshold
-                    nima_ok = nima is not None and nima >= self.settings.nima_threshold
+                    sharpness_ok = rating_sharpness >= self.settings.sharpness_threshold
+                    nima_ok = rating_nima is not None and rating_nima >= self.settings.nima_threshold
                     if sharpness_ok and not nima_ok:
                         self.star2_reasons[file_prefix] = 'sharpness'
                     elif nima_ok and not sharpness_ok:

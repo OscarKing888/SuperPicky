@@ -306,7 +306,7 @@ class SuperPickyMainWindow(QMainWindow):
         header_layout.addStretch()
 
         # 右侧: 版本号
-        version_label = QLabel("v3.6.0")
+        version_label = QLabel("v3.7.0")
         version_label.setStyleSheet(VERSION_STYLE)
         header_layout.addWidget(version_label)
 
@@ -393,13 +393,13 @@ class SuperPickyMainWindow(QMainWindow):
         sharp_layout.addWidget(sharp_label)
 
         self.sharp_slider = QSlider(Qt.Horizontal)
-        self.sharp_slider.setRange(100, 1000)
-        self.sharp_slider.setValue(500)
+        self.sharp_slider.setRange(200, 600)  # 新范围 200-600
+        self.sharp_slider.setValue(400)  # 新默认值
         self.sharp_slider.setSingleStep(50)
         self.sharp_slider.valueChanged.connect(self._on_sharp_changed)
         sharp_layout.addWidget(self.sharp_slider)
 
-        self.sharp_value = QLabel("500")
+        self.sharp_value = QLabel("400")  # 新默认值
         self.sharp_value.setStyleSheet(VALUE_STYLE)
         self.sharp_value.setFixedWidth(50)
         self.sharp_value.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -416,12 +416,12 @@ class SuperPickyMainWindow(QMainWindow):
         nima_layout.addWidget(nima_label)
 
         self.nima_slider = QSlider(Qt.Horizontal)
-        self.nima_slider.setRange(45, 55)
-        self.nima_slider.setValue(50)
+        self.nima_slider.setRange(40, 70)  # 新范围 4.0-7.0
+        self.nima_slider.setValue(55)  # 新默认值 5.5
         self.nima_slider.valueChanged.connect(self._on_nima_changed)
         nima_layout.addWidget(self.nima_slider)
 
-        self.nima_value = QLabel("5.0")
+        self.nima_value = QLabel("5.5")  # 新默认值
         self.nima_value.setStyleSheet(VALUE_STYLE)
         self.nima_value.setFixedWidth(50)
         self.nima_value.setAlignment(Qt.AlignRight | Qt.AlignVCenter)

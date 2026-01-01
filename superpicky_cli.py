@@ -39,7 +39,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 def print_banner():
     """打印 CLI 横幅"""
     print("\n" + "━" * 60)
-    print("  🐦 SuperPicky CLI v3.6.0 - 慧眼选鸟 (命令行版)")
+    print("  🐦 SuperPicky CLI v3.7.0 - 慧眼选鸟 (命令行版)")
     print("━" * 60)
 
 
@@ -50,7 +50,7 @@ def cmd_process(args):
     print_banner()
     print(f"\n📁 目标目录: {args.directory}")
     print(f"⚙️  锐度阈值: {args.sharpness}")
-    print(f"⚙️  美学阈值: {args.nima}")
+    print(f"  🎨 美学阈值: {args.nima_threshold} (默认: 5.5, TOPIQ)")
     print(f"⚙️  识别飞鸟: {'是' if args.flight else '否'}")
     print(f"⚙️  整理文件: {'是' if args.organize else '否'}")
     print(f"⚙️  清理临时: {'是' if args.cleanup else '否'}")
@@ -60,7 +60,7 @@ def cmd_process(args):
     ui_settings = [
         args.confidence,      # ai_confidence
         args.sharpness,       # sharpness_threshold
-        args.nima,            # nima_threshold
+        args.nima_threshold,  # nima_threshold
         False,                # save_crop
         'log_compression'     # norm_mode
     ]
@@ -129,7 +129,7 @@ def cmd_restar(args):
     print_banner()
     print(f"\n🔄 重新评星: {args.directory}")
     print(f"⚙️  新锐度阈值: {args.sharpness}")
-    print(f"⚙️  新美学阈值: {args.nima}")
+    print(f"⚙️  新美学阈值: {args.nima_threshold}")
     
     # 检查 report.csv 是否存在（可能在根目录或 .superpicky 子目录）
     report_path = os.path.join(args.directory, 'report.csv')
@@ -162,7 +162,7 @@ def cmd_restar(args):
         min_sharpness=min_sharpness,
         min_nima=min_nima,
         sharpness_threshold=args.sharpness,
-        nima_threshold=args.nima
+        nima_threshold=args.nima_threshold
     )
     
     # 统计变化
@@ -353,10 +353,10 @@ Examples:
     # ===== process 命令 =====
     p_process = subparsers.add_parser('process', help='处理照片目录')
     p_process.add_argument('directory', help='照片目录路径')
-    p_process.add_argument('-s', '--sharpness', type=int, default=500,
-                          help='锐度阈值 (默认: 500)')
-    p_process.add_argument('-n', '--nima', type=float, default=5.0,
-                          help='NIMA美学阈值 (默认: 5.0)')
+    p_process.add_argument('-s', '--sharpness', type=int, default=400,
+                          help='锐度阈值 (默认: 400, 范围: 200-600)')
+    p_process.add_argument('-n', '--nima-threshold', type=float, default=5.5,
+                          help='美学阈值 (TOPIQ, 默认: 5.5, 范围: 4.0-7.0)')
     p_process.add_argument('-c', '--confidence', type=int, default=50,
                           help='AI置信度阈值 (默认: 50)')
     p_process.add_argument('--flight', action='store_true', default=True,
@@ -380,10 +380,10 @@ Examples:
     # ===== restar 命令 =====
     p_restar = subparsers.add_parser('restar', help='重新评星')
     p_restar.add_argument('directory', help='照片目录路径')
-    p_restar.add_argument('-s', '--sharpness', type=int, default=500,
-                         help='新锐度阈值 (默认: 500)')
-    p_restar.add_argument('-n', '--nima', type=float, default=5.0,
-                         help='新NIMA美学阈值 (默认: 5.0)')
+    p_restar.add_argument('-s', '--sharpness', type=int, default=400,
+                         help='新锐度阈值 (默认: 400, 范围: 200-600)')
+    p_restar.add_argument('-n', '--nima-threshold', type=float, default=5.5,
+                         help='TOPIQ 美学评分阈值 (默认: 5.5, 范围: 4.0-7.0)')
     p_restar.add_argument('-c', '--confidence', type=int, default=50,
                          help='AI置信度阈值 (默认: 50)')
     p_restar.add_argument('--no-organize', action='store_false', dest='organize',

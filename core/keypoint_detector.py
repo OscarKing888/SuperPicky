@@ -264,7 +264,12 @@ class KeypointDetector:
         return self._calculate_sharpness(bird_crop, head_mask)
     
     def _calculate_sharpness(self, image: np.ndarray, mask: np.ndarray) -> float:
-        """计算掩码区域的锐度（Laplacian方差）"""
+        """
+        计算掩码区域的锐度（Tenengrad + 对数归一化）
+        
+        V3.7 改动: 使用 Tenengrad (Sobel梯度) 替代 Laplacian以减少噪点干扰
+        并使用对数归一化将结果映射到 0-1000 范围
+        """
         if mask.sum() == 0:
             return 0.0
         
@@ -274,18 +279,33 @@ class KeypointDetector:
         else:
             gray = image
         
-        # 应用掩码
-        masked_gray = cv2.bitwise_and(gray, gray, mask=mask)
+        # Tenengrad 算子 (Sobel梯度平方和)
+        gx = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3)
+        gy = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3)
+        gradient_magnitude = gx ** 2 + gy ** 2
         
-        # 计算Laplacian
-        laplacian = cv2.Laplacian(masked_gray, cv2.CV_64F)
-        
-        # 只取掩码内的方差
+        # 只取掩码区域的平均值
         mask_pixels = mask > 0
         if mask_pixels.sum() == 0:
             return 0.0
+            
+        raw_sharpness = float(gradient_magnitude[mask_pixels].mean())
         
-        return float(laplacian[mask_pixels].var())
+        # 对数归一化到 0-1000
+        # 范围基于测试数据 [1460, 154016] 
+        # 低于 1460 设为 0，高于 154016 设为 1000
+        MIN_VAL = 1460.0
+        MAX_VAL = 154016.0
+        
+        if raw_sharpness <= MIN_VAL:
+            return 0.0
+        if raw_sharpness >= MAX_VAL:
+            return 1000.0
+            
+        log_val = math.log(raw_sharpness) - math.log(MIN_VAL)
+        log_max = math.log(MAX_VAL) - math.log(MIN_VAL)
+        
+        return (log_val / log_max) * 1000.0
     
     @staticmethod
     def _distance(p1: Tuple[float, float], p2: Tuple[float, float]) -> float:

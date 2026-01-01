@@ -62,11 +62,11 @@ class RatingEngine:
         self,
         # 最低标准阈值（低于此为 0 星）
         min_confidence: float = 0.50,
-        min_sharpness: float = 250,    # 头部区域锐度最低阈值
-        min_nima: float = 4.2,
-        # 2星达标阈值
-        sharpness_threshold: float = 500,  # 头部区域锐度达标阈值（2星和3星共用）
-        nima_threshold: float = 5.0,
+        min_sharpness: float = 100,    # 头部区域锐度最低阈值
+        min_nima: float = 4.0,
+        # 2/3星达标阈值
+        sharpness_threshold: float = 400,  # 头部区域锐度达标阈值（2星和3星共用）
+        nima_threshold: float = 5.5,  # TOPIQ 美学达标阈值
     ):
         """
         初始化评分引擎
@@ -76,7 +76,7 @@ class RatingEngine:
             min_sharpness: 锐度最低阈值
             min_nima: NIMA 美学最低阈值 (0-10)
             sharpness_threshold: 锐度达标阈值（2星和3星共用）
-            nima_threshold: NIMA 达标阈值 (2/3星)
+            nima_threshold: TOPIQ 美学达标阈值 (2/3星)，范围 4.0-6.0
         """
         # 最低标准
         self.min_confidence = min_confidence
@@ -208,6 +208,6 @@ def create_rating_engine_from_config(config) -> RatingEngine:
         min_sharpness=config.min_sharpness,
         min_nima=config.min_nima,
         # 达标阈值（由 UI 滑块覆盖）
-        sharpness_threshold=500,  # 默认值，会被 update_thresholds 覆盖
-        nima_threshold=5.0,       # 默认值，会被 update_thresholds 覆盖
+        sharpness_threshold=400,  # 锐度达标阈值 (200-600)
+        nima_threshold=5.5,       # TOPIQ 美学达标阈值 (4.0-7.0)
     )

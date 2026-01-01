@@ -154,7 +154,10 @@
       "WebFetch(domain:mmpose.readthedocs.io)",
       "Bash(pip uninstall:*)",
       "Bash(mim install:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Skill(frontend-design)",
+      "Bash(grep:*)",
+      "Bash(git -C /Users/jameszhenyu/PycharmProjects/SuperPicky_SandBox log --oneline)"
     ],
     "deny": [],
     "ask": []
