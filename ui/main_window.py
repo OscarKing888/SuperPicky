@@ -433,11 +433,11 @@ class SuperPickyMainWindow(QMainWindow):
 
         self.nima_slider = QSlider(Qt.Horizontal)
         self.nima_slider.setRange(40, 70)  # 新范围 4.0-7.0
-        self.nima_slider.setValue(52)  # 默认值 5.2
+        self.nima_slider.setValue(50)  # 默认值 5.0
         self.nima_slider.valueChanged.connect(self._on_nima_changed)
         nima_layout.addWidget(self.nima_slider)
 
-        self.nima_value = QLabel("5.2")  # 默认值
+        self.nima_value = QLabel("5.0")  # 默认值
         self.nima_value.setStyleSheet(VALUE_STYLE)
         self.nima_value.setFixedWidth(50)
         self.nima_value.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -735,8 +735,7 @@ class SuperPickyMainWindow(QMainWindow):
 
         self._update_status(self.i18n.t("labels.complete"), COLORS['success'])
 
-        # 显示报告
-        self.log_text.clear()
+        # 显示报告（不清空之前的日志）
         report = self._format_statistics_report(stats)
         self._log(report)
 

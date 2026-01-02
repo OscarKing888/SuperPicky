@@ -19,7 +19,7 @@ class AdvancedConfig:
         # 评分阈值（影响0星判定）
         "min_confidence": 0.5,      # AI置信度最低阈值 (0.3-0.7) - 低于此值判定为0星
         "min_sharpness": 100,       # 锐度最低阈值 - 低于此值判定为0星（头部区域锐度）
-        "min_nima": 4.0,            # NIMA美学最低阈值 (3.0-5.0) - 低于此值判定为0星
+        "min_nima": 3.5,            # NIMA美学最低阈值 (3.0-5.0) - 低于此值判定为0星
         # V3.2: 移除 max_brisque（不再使用 BRISQUE 评估）
 
         # 精选设置

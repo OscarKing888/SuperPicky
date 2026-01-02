@@ -50,7 +50,7 @@ def cmd_process(args):
     print_banner()
     print(f"\n📁 目标目录: {args.directory}")
     print(f"⚙️  锐度阈值: {args.sharpness}")
-    print(f"  🎨 美学阈值: {args.nima_threshold} (默认: 5.2, TOPIQ)")
+    print(f"  🎨 美学阈值: {args.nima_threshold} (默认: 5.0, TOPIQ)")
     print(f"⚙️  识别飞鸟: {'是' if args.flight else '否'}")
     print(f"⚙️  整理文件: {'是' if args.organize else '否'}")
     print(f"⚙️  清理临时: {'是' if args.cleanup else '否'}")
@@ -355,8 +355,8 @@ Examples:
     p_process.add_argument('directory', help='照片目录路径')
     p_process.add_argument('-s', '--sharpness', type=int, default=400,
                           help='锐度阈值 (默认: 400, 范围: 200-600)')
-    p_process.add_argument('-n', '--nima-threshold', type=float, default=5.2,
-                          help='美学阈值 (TOPIQ, 默认: 5.2, 范围: 4.0-7.0)')
+    p_process.add_argument('-n', '--nima-threshold', type=float, default=5.0,
+                          help='美学阈值 (TOPIQ, 默认: 5.0, 范围: 4.0-7.0)')
     p_process.add_argument('-c', '--confidence', type=int, default=50,
                           help='AI置信度阈值 (默认: 50)')
     p_process.add_argument('--flight', action='store_true', default=True,
@@ -382,8 +382,8 @@ Examples:
     p_restar.add_argument('directory', help='照片目录路径')
     p_restar.add_argument('-s', '--sharpness', type=int, default=400,
                          help='新锐度阈值 (默认: 400, 范围: 200-600)')
-    p_restar.add_argument('-n', '--nima-threshold', type=float, default=5.2,
-                         help='TOPIQ 美学评分阈值 (默认: 5.2, 范围: 4.0-7.0)')
+    p_restar.add_argument('-n', '--nima-threshold', type=float, default=5.0,
+                         help='TOPIQ 美学评分阈值 (默认: 5.0, 范围: 4.0-7.0)')
     p_restar.add_argument('-c', '--confidence', type=int, default=50,
                          help='AI置信度阈值 (默认: 50)')
     p_restar.add_argument('--no-organize', action='store_false', dest='organize',

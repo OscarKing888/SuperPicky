@@ -69,7 +69,7 @@ class RatingEngine:
         min_nima: float = 4.0,
         # 2/3星达标阈值
         sharpness_threshold: float = 400,  # 头部区域锐度达标阈值（2星和3星共用）
-        nima_threshold: float = 5.2,  # TOPIQ 美学达标阈值
+        nima_threshold: float = 5.0,  # TOPIQ 美学达标阈值
     ):
         """
         初始化评分引擎
@@ -267,5 +267,5 @@ def create_rating_engine_from_config(config) -> RatingEngine:
         min_nima=config.min_nima,
         # 达标阈值（由 UI 滑块覆盖）
         sharpness_threshold=400,  # 锐度达标阈值 (200-600)
-        nima_threshold=5.2,       # TOPIQ 美学达标阈值 (4.0-7.0)
+        nima_threshold=5.0,       # TOPIQ 美学达标阈值 (4.0-7.0)
     )

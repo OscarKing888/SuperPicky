@@ -36,7 +36,7 @@ class PostAdjustmentDialog(QDialog):
     main_window_log = Signal(str)
     apply_complete = Signal(str)
 
-    def __init__(self, parent, directory: str, current_sharpness: int = 500,
+    def __init__(self, parent, directory: str, current_sharpness: int = 400,
                  current_nima: float = 5.0, on_complete_callback=None, log_callback=None):
         super().__init__(parent)
 
