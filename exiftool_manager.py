@@ -172,11 +172,12 @@ class ExifToolManager:
         Args:
             files_metadata: 文件元数据列表
                 [
-                    {'file': 'path1.NEF', 'rating': 3, 'pick': 1, 'sharpness': 95.3, 'nima_score': 7.5, 'label': 'Green'},
-                    {'file': 'path2.NEF', 'rating': 2, 'pick': 0, 'sharpness': 78.5, 'nima_score': 6.8},
+                    {'file': 'path1.NEF', 'rating': 3, 'pick': 1, 'sharpness': 95.3, 'nima_score': 7.5, 'label': 'Green', 'focus_status': '精准'},
+                    {'file': 'path2.NEF', 'rating': 2, 'pick': 0, 'sharpness': 78.5, 'nima_score': 6.8, 'focus_status': '偏移'},
                     {'file': 'path3.NEF', 'rating': -1, 'pick': -1, 'sharpness': 45.2, 'nima_score': 5.2},
                 ]
                 # V3.4: 添加 label 参数（颜色标签，如 'Green' 用于飞鸟）
+                # V3.9: 添加 focus_status 参数（对焦状态）
 
         Returns:
             统计结果 {'success': 成功数, 'failed': 失败数}
@@ -194,6 +195,7 @@ class ExifToolManager:
             sharpness = item.get('sharpness', None)
             nima_score = item.get('nima_score', None)
             label = item.get('label', None)  # V3.4: 颜色标签
+            focus_status = item.get('focus_status', None)  # V3.9: 对焦状态
 
             if not os.path.exists(file_path):
                 print(f"⏭️  跳过不存在的文件: {file_path}")
@@ -220,6 +222,10 @@ class ExifToolManager:
             # V3.4: 颜色标签（如 'Green' 用于飞鸟）
             if label is not None:
                 cmd.append(f'-XMP:Label={label}')
+            
+            # V3.9: 对焦状态 → IPTC:Country-PrimaryLocationName（国家）
+            if focus_status is not None:
+                cmd.append(f'-IPTC:Country-PrimaryLocationName={focus_status}')
 
             cmd.append(file_path)
             cmd.append('-overwrite_original')  # 放在每个文件之后

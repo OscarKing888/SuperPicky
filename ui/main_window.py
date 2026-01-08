@@ -337,6 +337,7 @@ class SuperPickyMainWindow(QMainWindow):
         self.dir_input = QLineEdit()
         self.dir_input.setPlaceholderText(self.i18n.t("labels.dir_placeholder"))
         self.dir_input.returnPressed.connect(self._on_path_entered)
+        self.dir_input.editingFinished.connect(self._on_path_entered)  # V3.9: 失焦时也验证
         dir_layout.addWidget(self.dir_input, 1)
 
         browse_btn = QPushButton(self.i18n.t("labels.browse"))

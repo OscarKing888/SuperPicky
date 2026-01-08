@@ -627,7 +627,8 @@ class PhotoProcessor:
                         'pick': pick,
                         'sharpness': head_sharpness,
                         'nima_score': topiq,  # V3.8: 实际是 TOPIQ 分数
-                        'label': 'Green' if is_flying else None  # V3.4: 飞鸟标绿色
+                        'label': 'Green' if is_flying else None,  # V3.4: 飞鸟标绿色
+                        'focus_status': focus_status  # V3.9: 对焦状态写入 Country 字段
                     }]
                     exiftool_mgr.batch_set_metadata(single_batch)
             else:
