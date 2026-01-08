@@ -302,9 +302,9 @@ class KeypointDetector:
         raw_sharpness = float(gradient_magnitude[mask_pixels].mean())
         
         # 对数归一化到 0-1000
-        # 范围基于测试数据 [1460, 154016] 
-        # 低于 1460 设为 0，高于 154016 设为 1000
-        MIN_VAL = 1460.0
+        # V4.0 修复: 降低 MIN_VAL，之前 1460 太高导致锐利照片也返回 0
+        # 测试显示: 锐利照片梯度平均值约 800-2000
+        MIN_VAL = 100.0   # 降低阈值，保留更多低锐度信息
         MAX_VAL = 154016.0
         
         if raw_sharpness <= MIN_VAL:
