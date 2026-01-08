@@ -186,8 +186,8 @@ class ExifToolManager:
 
         # ExifTool批量模式：使用 -execute 分隔符为每个文件单独设置参数
         # 格式: exiftool -TAG1=value1 file1 -overwrite_original -execute -TAG2=value2 file2 -overwrite_original -execute ...
-        # V3.9: 添加 -charset iptc=utf8 支持中文编码（如对焦状态"精准"/"脱焦"等）
-        cmd = [self.exiftool_path, '-charset', 'iptc=utf8']
+        # V3.9.1: 改用 XMP 字段，XMP 原生支持 UTF-8 中文
+        cmd = [self.exiftool_path]
 
         for item in files_metadata:
             file_path = item['file']
@@ -209,24 +209,27 @@ class ExifToolManager:
                 f'-XMP:Pick={pick}',
             ])
 
-            # 如果提供了锐度值，写入IPTC:City字段（补零到6位，确保文本排序正确）
+            # V3.9.1: 改用 XMP 字段代替 IPTC，解决 Canon CR3 等格式不支持 IPTC 问题
+            # XMP 字段在 Lightroom 中同样可以按 City/State/Country 排序
+            
+            # 锐度值 → XMP:City（补零到6位，确保文本排序正确）
             # 格式：000.00 到 999.99，例如：004.68, 100.50
             if sharpness is not None:
                 sharpness_str = f'{sharpness:06.2f}'  # 6位总宽度，2位小数，前面补零
-                cmd.append(f'-IPTC:City={sharpness_str}')
+                cmd.append(f'-XMP:City={sharpness_str}')
 
-            # V3.1: NIMA美学评分 → IPTC:Province-State（省/州）
+            # NIMA/TOPIQ美学评分 → XMP:State（省/州）
             if nima_score is not None:
                 nima_str = f'{nima_score:05.2f}'
-                cmd.append(f'-IPTC:Province-State={nima_str}')
+                cmd.append(f'-XMP:State={nima_str}')
 
             # V3.4: 颜色标签（如 'Green' 用于飞鸟）
             if label is not None:
                 cmd.append(f'-XMP:Label={label}')
             
-            # V3.9: 对焦状态 → IPTC:Country-PrimaryLocationName（国家）
+            # V3.9: 对焦状态 → XMP:Country（国家）
             if focus_status is not None:
-                cmd.append(f'-IPTC:Country-PrimaryLocationName={focus_status}')
+                cmd.append(f'-XMP:Country={focus_status}')
 
             cmd.append(file_path)
             cmd.append('-overwrite_original')  # 放在每个文件之后
