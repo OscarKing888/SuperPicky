@@ -254,6 +254,184 @@ class BurstDetector:
             group.best_index = best_idx
         
         return groups
+    
+    def enrich_from_csv(self, photos: List[PhotoTimestamp], csv_path: str) -> List[PhotoTimestamp]:
+        """
+        从 CSV 报告中读取锐度和美学分数
+        
+        Args:
+            photos: PhotoTimestamp 列表
+            csv_path: CSV 报告路径
+            
+        Returns:
+            更新后的 PhotoTimestamp 列表
+        """
+        import csv
+        
+        if not os.path.exists(csv_path):
+            print(f"⚠️ CSV 报告不存在: {csv_path}")
+            return photos
+        
+        # 读取 CSV 数据
+        csv_data = {}
+        try:
+            with open(csv_path, 'r', encoding='utf-8-sig') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    filename = row.get('filename', '')
+                    try:
+                        sharpness = float(row.get('head_sharp', 0) or 0)
+                    except (ValueError, TypeError):
+                        sharpness = 0.0
+                    try:
+                        topiq = float(row.get('nima_score', 0) or 0)
+                    except (ValueError, TypeError):
+                        topiq = 0.0
+                    csv_data[filename] = {'sharpness': sharpness, 'topiq': topiq}
+        except Exception as e:
+            print(f"⚠️ 读取 CSV 失败: {e}")
+            return photos
+        
+        # 更新照片数据
+        for photo in photos:
+            basename = os.path.splitext(os.path.basename(photo.filepath))[0]
+            if basename in csv_data:
+                photo.sharpness = csv_data[basename]['sharpness']
+                photo.topiq = csv_data[basename]['topiq']
+        
+        return photos
+    
+    def process_burst_groups(
+        self,
+        groups: List[BurstGroup],
+        output_dir: str,
+        exiftool_mgr=None
+    ) -> Dict[str, int]:
+        """
+        处理连拍组：创建子目录、移动文件、设置标签
+        
+        Args:
+            groups: BurstGroup 列表
+            output_dir: 输出目录（如 "3星_优选"）
+            exiftool_mgr: ExifToolManager 实例（可选）
+            
+        Returns:
+            统计结果 {'groups_processed': n, 'photos_moved': n, 'best_marked': n}
+        """
+        import shutil
+        
+        stats = {'groups_processed': 0, 'photos_moved': 0, 'best_marked': 0}
+        
+        for group in groups:
+            if not group.photos or group.count < self.MIN_BURST_COUNT:
+                continue
+            
+            # 创建子目录
+            burst_dir = os.path.join(output_dir, f"burst_{group.group_id:03d}")
+            os.makedirs(burst_dir, exist_ok=True)
+            
+            best_photo = group.best_photo
+            
+            for i, photo in enumerate(group.photos):
+                if i == group.best_index:
+                    # 最佳照片：保留原位，设紫色标签
+                    if exiftool_mgr:
+                        try:
+                            exiftool_mgr.batch_set_metadata([{
+                                'file': photo.filepath,
+                                'label': 'Purple'
+                            }])
+                            stats['best_marked'] += 1
+                        except Exception as e:
+                            print(f"⚠️ 设置紫色标签失败: {e}")
+                else:
+                    # 非最佳：移入子目录
+                    try:
+                        dest = os.path.join(burst_dir, os.path.basename(photo.filepath))
+                        if os.path.exists(photo.filepath):
+                            shutil.move(photo.filepath, dest)
+                            stats['photos_moved'] += 1
+                    except Exception as e:
+                        print(f"⚠️ 移动文件失败: {e}")
+            
+            stats['groups_processed'] += 1
+        
+        return stats
+    
+    def run_full_detection(
+        self,
+        directory: str,
+        rating_dirs: List[str] = None
+    ) -> Dict[str, any]:
+        """
+        运行完整的连拍检测流程
+        
+        Args:
+            directory: 主目录路径
+            rating_dirs: 评分子目录列表（默认 ['3星_优选', '2星_良好']）
+            
+        Returns:
+            完整结果
+        """
+        if rating_dirs is None:
+            rating_dirs = ['3星_优选', '2星_良好']
+        
+        results = {
+            'total_photos': 0,
+            'photos_with_subsec': 0,
+            'groups_detected': 0,
+            'groups_by_dir': {}
+        }
+        
+        # 遍历评分目录
+        for rating_dir in rating_dirs:
+            subdir = os.path.join(directory, rating_dir)
+            if not os.path.exists(subdir):
+                continue
+            
+            # 获取文件列表
+            extensions = {'.nef', '.rw2', '.arw', '.cr2', '.cr3', '.orf', '.dng'}
+            filepaths = []
+            for entry in os.scandir(subdir):
+                if entry.is_file():
+                    ext = os.path.splitext(entry.name)[1].lower()
+                    if ext in extensions:
+                        filepaths.append(entry.path)
+            
+            if not filepaths:
+                continue
+            
+            results['total_photos'] += len(filepaths)
+            
+            # 读取时间戳
+            photos = self.read_timestamps(filepaths)
+            results['photos_with_subsec'] += sum(1 for p in photos if p.has_subsec)
+            
+            # 从 CSV 读取锐度和美学
+            csv_path = os.path.join(directory, '.superpicky', 'report.csv')
+            photos = self.enrich_from_csv(photos, csv_path)
+            
+            # 检测连拍组
+            groups = self.detect_groups(photos)
+            
+            # 选择最佳
+            groups = self.select_best_in_groups(groups)
+            
+            results['groups_detected'] += len(groups)
+            results['groups_by_dir'][rating_dir] = {
+                'photos': len(filepaths),
+                'groups': len(groups),
+                'group_details': [
+                    {
+                        'id': g.group_id,
+                        'count': g.count,
+                        'best': os.path.basename(g.best_photo.filepath) if g.best_photo else None
+                    }
+                    for g in groups
+                ]
+            }
+        
+        return results
 
 
 # 测试函数
