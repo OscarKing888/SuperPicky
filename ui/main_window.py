@@ -456,7 +456,7 @@ class SuperPickyMainWindow(QMainWindow):
         self.sharp_slider = QSlider(Qt.Horizontal)
         self.sharp_slider.setRange(200, 600)  # 新范围 200-600
         self.sharp_slider.setValue(400)  # 新默认值
-        self.sharp_slider.setSingleStep(50)
+        self.sharp_slider.setSingleStep(10)  # V4.0: 更精细的调节
         self.sharp_slider.valueChanged.connect(self._on_sharp_changed)
         sharp_layout.addWidget(self.sharp_slider)
 
