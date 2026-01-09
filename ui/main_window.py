@@ -159,7 +159,10 @@ class WorkerThread(threading.Thread):
             detect_flight=self.ui_settings[5] if len(self.ui_settings) > 5 else True,
             detect_exposure=self.ui_settings[6] if len(self.ui_settings) > 6 else False,  # V3.8: 默认关闭
             device=self.ui_settings[7] if len(self.ui_settings) > 7 else 'auto',  # 设备选择
-            stop_event=self._stop_event  # 停止事件
+            stop_event=self._stop_event,  # 停止事件
+            keep_temp_jpg=self.ui_settings[8] if len(self.ui_settings) > 8 else False,  # 保留临时JPG
+            cpu_threads=self.ui_settings[9] if len(self.ui_settings) > 9 else 0,  # CPU线程数（0=自动）
+            gpu_concurrent=self.ui_settings[10] if len(self.ui_settings) > 10 else 1  # GPU并发数
         )
 
         def log_callback(msg, level="info"):
@@ -442,23 +445,6 @@ class SuperPickyMainWindow(QMainWindow):
         
         header_layout.addLayout(exposure_layout)
         
-        # 设备选择
-        device_layout = QHBoxLayout()
-        device_layout.setSpacing(10)
-        
-        device_label = QLabel("计算设备:")
-        device_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
-        device_layout.addWidget(device_label)
-        
-        from PySide6.QtWidgets import QComboBox
-        self.device_combo = QComboBox()
-        self.device_combo.addItems(["自动", "GPU (CUDA)", "CPU"])
-        self.device_combo.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px; padding: 2px 8px;")
-        self.device_combo.setCurrentIndex(0)  # 默认自动
-        device_layout.addWidget(self.device_combo)
-        
-        header_layout.addLayout(device_layout)
-        
         params_layout.addLayout(header_layout)
 
         # 隐藏变量
@@ -516,6 +502,101 @@ class SuperPickyMainWindow(QMainWindow):
         sliders_layout.addLayout(nima_layout)
 
         params_layout.addLayout(sliders_layout)
+        
+        # 高级选项组（计算设备、并行处理、文件保留等）
+        advanced_options_layout = QVBoxLayout()
+        advanced_options_layout.setSpacing(12)
+        
+        # 分隔线
+        separator = QFrame()
+        separator.setFrameShape(QFrame.HLine)
+        separator.setFrameShadow(QFrame.Sunken)
+        separator.setStyleSheet(f"color: {COLORS['border']};")
+        advanced_options_layout.addWidget(separator)
+        
+        # 设备选择
+        device_layout = QHBoxLayout()
+        device_layout.setSpacing(10)
+        
+        device_label = QLabel("计算设备:")
+        device_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
+        device_layout.addWidget(device_label)
+        
+        from PySide6.QtWidgets import QComboBox
+        self.device_combo = QComboBox()
+        self.device_combo.addItems(["自动", "GPU (CUDA)", "CPU"])
+        self.device_combo.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px; padding: 2px 8px;")
+        self.device_combo.setCurrentIndex(0)  # 默认自动
+        device_layout.addWidget(self.device_combo)
+        
+        device_layout.addStretch()
+        advanced_options_layout.addLayout(device_layout)
+        
+        # CPU线程数控制
+        import multiprocessing
+        cpu_cores = multiprocessing.cpu_count()
+        
+        cpu_threads_layout = QHBoxLayout()
+        cpu_threads_layout.setSpacing(10)
+        
+        cpu_threads_label = QLabel("CPU线程数:")
+        cpu_threads_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
+        cpu_threads_layout.addWidget(cpu_threads_label)
+        
+        from PySide6.QtWidgets import QSpinBox
+        self.cpu_threads_spin = QSpinBox()
+        self.cpu_threads_spin.setRange(1, cpu_cores * 2)  # 允许超线程
+        self.cpu_threads_spin.setValue(cpu_cores)  # 默认CPU核心数
+        self.cpu_threads_spin.setSpecialValueText("自动")  # 0显示为"自动"
+        self.cpu_threads_spin.setMinimum(0)  # 0表示自动
+        self.cpu_threads_spin.setValue(0)  # 默认自动
+        self.cpu_threads_spin.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px; padding: 2px 8px;")
+        cpu_threads_layout.addWidget(self.cpu_threads_spin)
+        
+        cpu_threads_hint = QLabel(f"(默认: {cpu_cores}线程)")
+        cpu_threads_hint.setStyleSheet(f"color: {COLORS['text_tertiary']}; font-size: 11px;")
+        cpu_threads_layout.addWidget(cpu_threads_hint)
+        
+        cpu_threads_layout.addStretch()
+        advanced_options_layout.addLayout(cpu_threads_layout)
+        
+        # GPU并发数控制
+        gpu_concurrent_layout = QHBoxLayout()
+        gpu_concurrent_layout.setSpacing(10)
+        
+        gpu_concurrent_label = QLabel("GPU并发数:")
+        gpu_concurrent_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
+        gpu_concurrent_layout.addWidget(gpu_concurrent_label)
+        
+        self.gpu_concurrent_spin = QSpinBox()
+        self.gpu_concurrent_spin.setRange(1, 8)  # 最多8个并发任务
+        self.gpu_concurrent_spin.setValue(1)  # 默认串行
+        self.gpu_concurrent_spin.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px; padding: 2px 8px;")
+        gpu_concurrent_layout.addWidget(self.gpu_concurrent_spin)
+        
+        gpu_concurrent_hint = QLabel("(注意显存限制)")
+        gpu_concurrent_hint.setStyleSheet(f"color: {COLORS['text_tertiary']}; font-size: 11px;")
+        gpu_concurrent_layout.addWidget(gpu_concurrent_hint)
+        
+        gpu_concurrent_layout.addStretch()
+        advanced_options_layout.addLayout(gpu_concurrent_layout)
+        
+        # 保留临时JPG选项
+        keep_jpg_layout = QHBoxLayout()
+        keep_jpg_layout.setSpacing(10)
+        
+        keep_jpg_label = QLabel("保留临时转换的JPG:")
+        keep_jpg_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
+        keep_jpg_layout.addWidget(keep_jpg_label)
+        
+        self.keep_temp_jpg_check = QCheckBox()
+        self.keep_temp_jpg_check.setChecked(False)  # 默认不保留
+        keep_jpg_layout.addWidget(self.keep_temp_jpg_check)
+        
+        keep_jpg_layout.addStretch()
+        advanced_options_layout.addLayout(keep_jpg_layout)
+        
+        params_layout.addLayout(advanced_options_layout)
         parent_layout.addWidget(params_frame)
 
     def _create_log_section(self, parent_layout):
@@ -779,6 +860,14 @@ class SuperPickyMainWindow(QMainWindow):
         device_map = {"自动": "auto", "GPU (CUDA)": "cuda", "CPU": "cpu"}
         selected_device = device_map.get(self.device_combo.currentText(), "auto")
         
+        # 获取CPU线程数和GPU并发数
+        cpu_threads = self.cpu_threads_spin.value()
+        if cpu_threads == 0:
+            import multiprocessing
+            cpu_threads = multiprocessing.cpu_count()  # 0表示自动，使用CPU核心数
+        
+        gpu_concurrent = self.gpu_concurrent_spin.value()
+        
         ui_settings = [
             self.ai_confidence,
             self.sharp_slider.value(),
@@ -787,7 +876,10 @@ class SuperPickyMainWindow(QMainWindow):
             self.norm_mode,
             self.flight_check.isChecked(),
             self.exposure_check.isChecked(),  # V3.8: 曝光检测开关
-            selected_device  # 设备选择
+            selected_device,  # 设备选择
+            self.keep_temp_jpg_check.isChecked(),  # 保留临时JPG
+            cpu_threads,  # CPU线程数
+            gpu_concurrent  # GPU并发数
         ]
 
         # 创建信号

@@ -127,42 +127,46 @@ def detect_and_draw_birds(image_path, model, output_path, dir, ui_settings, i18n
         log_message(f"ERROR: in detect_and_draw_birds, {image_path} not found", dir)
         return None
 
-    # 对于 HEIF/HEIC/HIF 文件，需要先转换为临时 JPG 文件
-    # 因为某些 AI 模型可能无法直接处理这些格式
+    # 对于 HEIF/HEIC/HIF 文件，检查是否已有预转换的临时 JPG 文件
+    # 如果 PhotoProcessor 已经并行转换，直接使用；否则实时转换
     temp_jpg_path = None
     file_ext = os.path.splitext(image_path)[1].lower()
     is_heif_format = file_ext in ['.heif', '.heic', '.hif']
     
     if is_heif_format:
-        try:
-            # 创建临时 JPG 文件
-            import tempfile
-            temp_dir = os.path.join(dir, '.superpicky', 'temp_jpg')
-            os.makedirs(temp_dir, exist_ok=True)
-            
-            file_basename = os.path.splitext(os.path.basename(image_path))[0]
-            temp_jpg_path = os.path.join(temp_dir, f"{file_basename}_temp.jpg")
-            
-            # 使用 PIL + pillow-heif 读取并转换为 JPG
-            try:
-                from pillow_heif import register_heif_opener
-                register_heif_opener()
-            except ImportError:
-                pass
-            
-            from PIL import Image
-            pil_image = Image.open(image_path).convert('RGB')
-            pil_image.save(temp_jpg_path, 'JPEG', quality=95)
-            
-            # 使用临时 JPG 文件进行后续处理（仅用于 AI 推理）
-            # 注意：原始文件路径（image_path 的原始值）不会被修改，
-            # 调用者传入的文件路径保持不变，EXIF 会写入原始文件
+        # 检查是否已有预转换的临时 JPG（由 PhotoProcessor 并行转换）
+        temp_dir = os.path.join(dir, '.superpicky', 'temp_jpg')
+        file_basename = os.path.splitext(os.path.basename(image_path))[0]
+        temp_jpg_path = os.path.join(temp_dir, f"{file_basename}_temp.jpg")
+        
+        if os.path.exists(temp_jpg_path):
+            # 使用已转换的临时 JPG
             original_image_path = image_path  # 保存原始路径
-            image_path = temp_jpg_path  # 临时使用 JPG 进行 AI 推理
-            log_message(f"🔄 已转换 {file_ext.upper()} 为临时 JPG（仅用于 AI 推理，EXIF 将写入原始文件）", dir)
-        except Exception as e:
-            log_message(f"⚠️  HEIF 转换失败，尝试直接处理: {e}", dir)
-            # 如果转换失败，继续尝试直接处理
+            image_path = temp_jpg_path  # 使用预转换的 JPG
+            # 不输出日志，因为已经在并行转换阶段输出过了
+        else:
+            # 如果没有预转换，实时转换（向后兼容）
+            try:
+                os.makedirs(temp_dir, exist_ok=True)
+                
+                # 使用 PIL + pillow-heif 读取并转换为 JPG
+                try:
+                    from pillow_heif import register_heif_opener
+                    register_heif_opener()
+                except ImportError:
+                    pass
+                
+                from PIL import Image
+                pil_image = Image.open(image_path).convert('RGB')
+                pil_image.save(temp_jpg_path, 'JPEG', quality=95)
+                
+                # 使用临时 JPG 文件进行后续处理（仅用于 AI 推理）
+                original_image_path = image_path  # 保存原始路径
+                image_path = temp_jpg_path  # 临时使用 JPG 进行 AI 推理
+                log_message(f"🔄 已转换 {file_ext.upper()} 为临时 JPG（仅用于 AI 推理，EXIF 将写入原始文件）", dir)
+            except Exception as e:
+                log_message(f"⚠️  HEIF 转换失败，尝试直接处理: {e}", dir)
+                # 如果转换失败，继续尝试直接处理
     
     # 使用配置检查文件类型（现在应该是 JPG 或已转换的临时文件）
     if not config.is_jpg_file(image_path) and not is_heif_format:

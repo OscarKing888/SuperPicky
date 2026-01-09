@@ -50,6 +50,9 @@ class ProcessingSettings:
     exposure_threshold: float = 0.10  # V3.8: 曝光阈值 (0.05-0.20)
     device: str = 'auto'  # 计算设备选择: 'auto', 'cuda', 'cpu', 'mps'
     stop_event: Optional[any] = None  # 停止事件（用于取消处理）
+    keep_temp_jpg: bool = False  # 是否保留临时转换的JPG文件
+    cpu_threads: int = 0  # CPU推理线程数（0=自动，使用CPU逻辑核心数）
+    gpu_concurrent: int = 1  # GPU推理并发数（1=串行，>1=并发队列，需考虑显存）
 
 
 @dataclass
@@ -147,6 +150,12 @@ class PhotoProcessor:
         self.file_ratings = {}
         self.star2_reasons = {}  # 记录2星原因: 'sharpness' 或 'nima'
         self.star_3_photos = []
+        self.heif_temp_map = {}  # HEIF 文件到临时 JPG 的映射
+        self.picked_files = set()  # 精选文件集合（用于判断是否精选）
+        
+        # 线程安全锁（用于并行处理）
+        import threading
+        self._stats_lock = threading.Lock()
     
     def _log(self, msg: str, level: str = "info"):
         """内部日志方法"""
@@ -183,6 +192,11 @@ class PhotoProcessor:
         raw_files_to_convert = self._identify_raws_to_convert(raw_dict, jpg_dict, files_tbr)
         if raw_files_to_convert:
             self._convert_raws(raw_files_to_convert, files_tbr)
+        
+        # 阶段2.5: HEIF/HIF 并行转换（提前转换，最大化CPU利用）
+        heif_files_to_convert = self._identify_heif_to_convert(files_tbr)
+        if heif_files_to_convert:
+            self._convert_heif_files(heif_files_to_convert)
         
         # 阶段3: AI检测与评分
         self._process_images(files_tbr, raw_dict)
@@ -305,6 +319,84 @@ class PhotoProcessor:
         avg_time = raw_time / len(raw_files_to_convert) if len(raw_files_to_convert) > 0 else 0
         self._log(f"⏱️  RAW转换耗时: {raw_time:.1f}秒 (平均 {avg_time:.1f}秒/张)\n")
     
+    def _identify_heif_to_convert(self, files_tbr):
+        """识别需要转换的 HEIF/HIF 文件"""
+        heif_files = []
+        heif_extensions = ['.heif', '.heic', '.hif']
+        
+        for filename in files_tbr:
+            file_ext = os.path.splitext(filename)[1].lower()
+            if file_ext in heif_extensions:
+                filepath = os.path.join(self.dir_path, filename)
+                heif_files.append((filename, filepath))
+        
+        return heif_files
+    
+    def _convert_heif_files(self, heif_files_to_convert):
+        """并行转换 HEIF/HIF 文件为临时 JPG"""
+        if not heif_files_to_convert:
+            return
+        
+        heif_start = time.time()
+        import multiprocessing
+        max_workers = min(8, multiprocessing.cpu_count())  # HEIF转换可以更多线程
+        
+        self._log(f"🔄 开始并行转换 {len(heif_files_to_convert)} 个 HEIF/HIF 文件({max_workers}线程)...")
+        
+        # 创建临时目录
+        temp_dir = os.path.join(self.dir_path, '.superpicky', 'temp_jpg')
+        os.makedirs(temp_dir, exist_ok=True)
+        
+        def convert_single_heif(args):
+            filename, heif_path = args
+            try:
+                # 注册 pillow-heif
+                try:
+                    from pillow_heif import register_heif_opener
+                    register_heif_opener()
+                except ImportError:
+                    pass
+                
+                from PIL import Image
+                
+                # 读取并转换
+                pil_image = Image.open(heif_path).convert('RGB')
+                
+                # 生成临时 JPG 路径
+                file_basename = os.path.splitext(filename)[0]
+                temp_jpg_path = os.path.join(temp_dir, f"{file_basename}_temp.jpg")
+                
+                # 保存为 JPG
+                pil_image.save(temp_jpg_path, 'JPEG', quality=95)
+                
+                return (filename, True, temp_jpg_path, None)
+            except Exception as e:
+                return (filename, False, None, str(e))
+        
+        # 存储转换映射：原始文件名 -> 临时JPG路径
+        self.heif_temp_map = {}
+        
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_heif = {
+                executor.submit(convert_single_heif, args): args 
+                for args in heif_files_to_convert
+            }
+            converted_count = 0
+            
+            for future in as_completed(future_to_heif):
+                filename, success, temp_jpg_path, error = future.result()
+                if success:
+                    self.heif_temp_map[filename] = temp_jpg_path
+                    converted_count += 1
+                    if converted_count % 10 == 0 or converted_count == len(heif_files_to_convert):
+                        self._log(f"  ✅ 已转换 {converted_count}/{len(heif_files_to_convert)} 张")
+                else:
+                    self._log(f"  ❌ 转换失败: {filename} ({error})", "error")
+        
+        heif_time = time.time() - heif_start
+        avg_time = heif_time / len(heif_files_to_convert) if len(heif_files_to_convert) > 0 else 0
+        self._log(f"⏱️  HEIF转换耗时: {heif_time:.1f}秒 (平均 {avg_time:.1f}秒/张)\n")
+    
     def _process_images(self, files_tbr, raw_dict):
         """处理所有图片 - AI检测、关键点检测与评分"""
         # 检查是否已取消
@@ -362,6 +454,58 @@ class PhotoProcessor:
         ]
         
         ai_total_start = time.time()
+        
+        # 确定实际使用的设备
+        actual_device = get_best_device(device) if hasattr(self, 'get_best_device') else device
+        try:
+            from utils import get_best_device
+            actual_device = get_best_device(device)
+        except:
+            actual_device = device
+        
+        # 判断是否使用并行处理
+        use_parallel = False
+        is_cpu = actual_device == 'cpu'
+        is_gpu = actual_device in ['cuda', 'mps']
+        
+        # CPU: 使用线程池并行
+        if is_cpu:
+            import multiprocessing
+            cpu_threads = self.settings.cpu_threads if hasattr(self.settings, 'cpu_threads') else 0
+            if cpu_threads == 0:
+                cpu_threads = multiprocessing.cpu_count()
+            use_parallel = cpu_threads > 1
+            if use_parallel:
+                self._log(f"🔄 使用 CPU 线程池并行处理（{cpu_threads} 线程）")
+        
+        # GPU: 使用队列控制并发（避免显存溢出）
+        elif is_gpu:
+            gpu_concurrent = self.settings.gpu_concurrent if hasattr(self.settings, 'gpu_concurrent') else 1
+            use_parallel = gpu_concurrent > 1
+            if use_parallel:
+                self._log(f"🔄 使用 GPU 队列并发处理（并发数: {gpu_concurrent}）")
+        
+        if use_parallel:
+            # 并行处理模式
+            self._process_images_parallel(files_tbr, raw_dict, model, ui_settings, 
+                                         use_keypoints, keypoint_detector, use_flight, 
+                                         flight_detector, exiftool_mgr, actual_device, 
+                                         is_cpu, is_gpu)
+        else:
+            # 串行处理模式（原有逻辑）
+            self._process_images_sequential(files_tbr, raw_dict, model, ui_settings, 
+                                          use_keypoints, keypoint_detector, use_flight, 
+                                          flight_detector, exiftool_mgr)
+        
+        ai_total_time = time.time() - ai_total_start
+        avg_ai_time = ai_total_time / len(files_tbr) if len(files_tbr) > 0 else 0
+        self._log(f"\n⏱️  AI检测总耗时: {ai_total_time:.1f}秒 (平均 {avg_ai_time:.1f}秒/张)")
+    
+    def _process_images_sequential(self, files_tbr, raw_dict, model, ui_settings,
+                                   use_keypoints, keypoint_detector, use_flight,
+                                   flight_detector, exiftool_mgr):
+        """串行处理图片（原有逻辑）"""
+        total_files = len(files_tbr)
         
         for i, filename in enumerate(files_tbr, 1):
             # 检查是否已取消
@@ -826,10 +970,432 @@ class PhotoProcessor:
                         self.star2_reasons[file_prefix] = 'nima'  # 保留原字段名兼容
                     else:
                         self.star2_reasons[file_prefix] = 'both'
+    
+    def _process_images_parallel(self, files_tbr, raw_dict, model, ui_settings,
+                                 use_keypoints, keypoint_detector, use_flight,
+                                 flight_detector, exiftool_mgr, actual_device,
+                                 is_cpu, is_gpu):
+        """并行处理图片（CPU线程池或GPU队列）"""
+        total_files = len(files_tbr)
         
-        ai_total_time = time.time() - ai_total_start
-        avg_ai_time = ai_total_time / total_files if total_files > 0 else 0
-        self._log(f"\n⏱️  AI检测总耗时: {ai_total_time:.1f}秒 (平均 {avg_ai_time:.1f}秒/张)")
+        if is_cpu:
+            # CPU: 使用线程池并行
+            import multiprocessing
+            cpu_threads = self.settings.cpu_threads if hasattr(self.settings, 'cpu_threads') else 0
+            if cpu_threads == 0:
+                cpu_threads = multiprocessing.cpu_count()
+            
+            # 准备任务列表
+            tasks = [(i, filename) for i, filename in enumerate(files_tbr, 1)]
+            
+            # 使用线程池处理
+            with ThreadPoolExecutor(max_workers=cpu_threads) as executor:
+                futures = {
+                    executor.submit(
+                        self._process_single_image,
+                        i, filename, total_files, raw_dict, model, ui_settings,
+                        use_keypoints, keypoint_detector, use_flight,
+                        flight_detector, exiftool_mgr
+                    ): (i, filename)
+                    for i, filename in tasks
+                }
+                
+                completed = 0
+                for future in as_completed(futures):
+                    if self.stop_event and self.stop_event.is_set():
+                        break
+                    try:
+                        future.result()  # 获取结果（可能抛出异常）
+                        completed += 1
+                        if completed % 5 == 0 or completed == total_files:
+                            progress = int((completed / total_files) * 100)
+                            self._progress(progress)
+                    except Exception as e:
+                        i, filename = futures[future]
+                        self._log(f"  ❌ 处理失败 {filename}: {e}", "error")
+        
+        elif is_gpu:
+            # GPU: 使用队列控制并发（避免显存溢出）
+            gpu_concurrent = self.settings.gpu_concurrent if hasattr(self.settings, 'gpu_concurrent') else 1
+            import queue
+            import threading
+            
+            task_queue = queue.Queue()
+            for i, filename in enumerate(files_tbr, 1):
+                task_queue.put((i, filename))
+            
+            # 使用信号量控制并发数
+            semaphore = threading.Semaphore(gpu_concurrent)
+            results_lock = threading.Lock()
+            completed_count = [0]  # 使用列表以便在线程间共享
+            
+            def worker():
+                while True:
+                    if self.stop_event and self.stop_event.is_set():
+                        break
+                    try:
+                        i, filename = task_queue.get_nowait()
+                    except queue.Empty:
+                        break
+                    
+                    with semaphore:  # 控制并发数
+                        try:
+                            self._process_single_image(
+                                i, filename, total_files, raw_dict, model, ui_settings,
+                                use_keypoints, keypoint_detector, use_flight,
+                                flight_detector, exiftool_mgr
+                            )
+                            with results_lock:
+                                completed_count[0] += 1
+                                if completed_count[0] % 5 == 0 or completed_count[0] == total_files:
+                                    progress = int((completed_count[0] / total_files) * 100)
+                                    self._progress(progress)
+                        except Exception as e:
+                            self._log(f"  ❌ 处理失败 {filename}: {e}", "error")
+                    task_queue.task_done()
+            
+            # 启动工作线程（每个并发任务一个线程）
+            threads = []
+            for _ in range(gpu_concurrent):
+                t = threading.Thread(target=worker)
+                t.start()
+                threads.append(t)
+            
+            # 等待所有任务完成
+            task_queue.join()
+            for t in threads:
+                t.join()
+    
+    def _process_single_image(self, i, filename, total_files, raw_dict, model, ui_settings,
+                             use_keypoints, keypoint_detector, use_flight,
+                             flight_detector, exiftool_mgr):
+        """处理单张图片（用于并行处理）"""
+        # 检查是否已取消
+        if self.stop_event and self.stop_event.is_set():
+            return
+        
+        # 记录每张照片的开始时间
+        photo_start_time = time.time()
+        
+        filepath = os.path.join(self.dir_path, filename)
+        file_prefix, _ = os.path.splitext(filename)
+        
+        # 优化流程：YOLO → 关键点检测(在crop上) → 条件NIMA
+        # Phase 1: 先做YOLO检测（跳过NIMA），获取鸟的位置和bbox
+        try:
+            result = detect_and_draw_birds(
+                filepath, model, None, self.dir_path, ui_settings, None, skip_nima=True
+            )
+            if result is None:
+                return
+        except Exception as e:
+            return
+        
+        # 解构 AI 结果
+        detected, _, confidence, sharpness, _, bird_bbox, img_dims, bird_mask = result
+        
+        # Phase 2: 关键点检测（在裁剪区域上执行，更准确）
+        all_keypoints_hidden = False
+        best_eye_visibility = 0.0
+        head_sharpness = 0.0
+        has_visible_eye = False
+        has_visible_beak = False
+        left_eye_vis = 0.0
+        right_eye_vis = 0.0
+        beak_vis = 0.0
+        head_center_orig = None
+        head_radius_val = None
+        orig_img = None
+        bird_crop_bgr = None
+        bird_crop_mask = None
+        bird_mask_orig = None
+        
+        if use_keypoints and detected and bird_bbox is not None and img_dims is not None:
+            try:
+                import cv2
+                from utils import read_image
+                orig_img = read_image(filepath)
+                if orig_img is not None:
+                    h_orig, w_orig = orig_img.shape[:2]
+                    w_resized, h_resized = img_dims
+                    scale_x = w_orig / w_resized
+                    scale_y = h_orig / h_resized
+                    x, y, w, h = bird_bbox
+                    x_orig = max(0, min(int(x * scale_x), w_orig - 1))
+                    y_orig = max(0, min(int(y * scale_y), h_orig - 1))
+                    w_orig_box = min(int(w * scale_x), w_orig - x_orig)
+                    h_orig_box = min(int(h * scale_y), h_orig - y_orig)
+                    bird_crop_bgr = orig_img[y_orig:y_orig+h_orig_box, x_orig:x_orig+w_orig_box]
+                    
+                    if bird_mask is not None:
+                        if bird_mask.shape[:2] != (h_orig, w_orig):
+                            bird_mask_orig = cv2.resize(bird_mask, (w_orig, h_orig), interpolation=cv2.INTER_NEAREST)
+                        else:
+                            bird_mask_orig = bird_mask
+                        bird_crop_mask = bird_mask_orig[y_orig:y_orig+h_orig_box, x_orig:x_orig+w_orig_box]
+                    
+                    if bird_crop_bgr.size > 0:
+                        crop_rgb = cv2.cvtColor(bird_crop_bgr, cv2.COLOR_BGR2RGB)
+                        kp_result = keypoint_detector.detect(
+                            crop_rgb, 
+                            box=(x_orig, y_orig, w_orig_box, h_orig_box),
+                            seg_mask=bird_crop_mask
+                        )
+                        if kp_result is not None:
+                            all_keypoints_hidden = kp_result.all_keypoints_hidden
+                            best_eye_visibility = kp_result.best_eye_visibility
+                            has_visible_eye = kp_result.visible_eye is not None
+                            has_visible_beak = kp_result.beak_vis >= 0.3
+                            left_eye_vis = kp_result.left_eye_vis
+                            right_eye_vis = kp_result.right_eye_vis
+                            beak_vis = kp_result.beak_vis
+                            head_sharpness = kp_result.head_sharpness
+                            
+                            ch, cw = bird_crop_bgr.shape[:2]
+                            if left_eye_vis >= right_eye_vis and left_eye_vis >= 0.3:
+                                eye_px = (int(kp_result.left_eye[0] * cw), int(kp_result.left_eye[1] * ch))
+                            elif right_eye_vis >= 0.3:
+                                eye_px = (int(kp_result.right_eye[0] * cw), int(kp_result.right_eye[1] * ch))
+                            else:
+                                eye_px = None
+                            
+                            if eye_px is not None:
+                                head_center_orig = (eye_px[0] + x_orig, eye_px[1] + y_orig)
+                                beak_px = (int(kp_result.beak[0] * cw), int(kp_result.beak[1] * ch))
+                                if beak_vis >= 0.3:
+                                    import math
+                                    dist = math.sqrt((eye_px[0] - beak_px[0])**2 + (eye_px[1] - beak_px[1])**2)
+                                    head_radius_val = int(dist * 1.2)
+                                else:
+                                    head_radius_val = int(max(cw, ch) * 0.15)
+                                head_radius_val = max(20, min(head_radius_val, min(cw, ch) // 2))
+            except Exception:
+                pass
+        
+        # Phase 3: TOPIQ计算
+        topiq = None
+        if detected and not all_keypoints_hidden and best_eye_visibility >= 0.3:
+            try:
+                from iqa_scorer import get_iqa_scorer
+                from utils import get_best_device
+                device = get_best_device(self.settings.device if hasattr(self.settings, 'device') else 'auto')
+                scorer = get_iqa_scorer(device=device)
+                topiq = scorer.calculate_nima(filepath)
+            except Exception:
+                pass
+        
+        # Phase 4: 飞版检测
+        is_flying = False
+        flight_confidence = 0.0
+        if use_flight and detected and bird_crop_bgr is not None and bird_crop_bgr.size > 0:
+            try:
+                flight_result = flight_detector.detect(bird_crop_bgr)
+                is_flying = flight_result.is_flying
+                flight_confidence = flight_result.confidence
+            except Exception:
+                pass
+        
+        # Phase 5: 曝光检测
+        is_overexposed = False
+        is_underexposed = False
+        if self.settings.detect_exposure and detected and bird_crop_bgr is not None and bird_crop_bgr.size > 0:
+            try:
+                exposure_detector = get_exposure_detector()
+                exposure_result = exposure_detector.detect(
+                    bird_crop_bgr, 
+                    threshold=self.settings.exposure_threshold
+                )
+                is_overexposed = exposure_result.is_overexposed
+                is_underexposed = exposure_result.is_underexposed
+            except Exception:
+                pass
+        
+        # 飞版加成
+        rating_sharpness = head_sharpness
+        rating_topiq = topiq
+        if is_flying and confidence >= 0.5:
+            rating_sharpness = head_sharpness + 100
+            if topiq is not None:
+                rating_topiq = topiq + 0.5
+        
+        # 初步评分
+        preliminary_result = self.rating_engine.calculate(
+            detected=detected,
+            confidence=confidence,
+            sharpness=head_sharpness,
+            topiq=topiq,
+            all_keypoints_hidden=all_keypoints_hidden,
+            best_eye_visibility=best_eye_visibility,
+            is_overexposed=is_overexposed,
+            is_underexposed=is_underexposed,
+            focus_sharpness_weight=1.0,
+            focus_topiq_weight=1.0,
+            is_flying=False,
+        )
+        
+        # 对焦点验证（仅对1星以上）
+        focus_sharpness_weight = 1.0
+        focus_topiq_weight = 1.0
+        focus_x, focus_y = None, None
+        
+        if preliminary_result.rating >= 1:
+            if detected and bird_bbox is not None and img_dims is not None:
+                if file_prefix in raw_dict:
+                    raw_ext = raw_dict[file_prefix]
+                    raw_path = os.path.join(self.dir_path, file_prefix + raw_ext)
+                    if raw_ext.lower() in ['.nef', '.nrw', '.arw', '.cr3', '.cr2', '.orf', '.raf', '.rw2']:
+                        try:
+                            focus_detector = get_focus_detector()
+                            focus_result = focus_detector.detect(raw_path)
+                            if focus_result is not None:
+                                orig_dims = (w_orig, h_orig) if 'w_orig' in locals() and 'h_orig' in locals() else img_dims
+                                focus_sharpness_weight, focus_topiq_weight = verify_focus_in_bbox(
+                                    focus_result, 
+                                    bird_bbox, 
+                                    orig_dims,
+                                    seg_mask=bird_mask_orig,
+                                    head_center=head_center_orig,
+                                    head_radius=head_radius_val,
+                                )
+                                focus_x, focus_y = focus_result.x, focus_result.y
+                        except Exception:
+                            pass
+        
+        # 最终评分
+        rating_result = self.rating_engine.calculate(
+            detected=detected,
+            confidence=confidence,
+            sharpness=head_sharpness,
+            topiq=topiq,
+            all_keypoints_hidden=all_keypoints_hidden,
+            best_eye_visibility=best_eye_visibility,
+            is_overexposed=is_overexposed,
+            is_underexposed=is_underexposed,
+            focus_sharpness_weight=focus_sharpness_weight,
+            focus_topiq_weight=focus_topiq_weight,
+            is_flying=is_flying,
+        )
+        
+        rating_value = rating_result.rating
+        pick = rating_result.pick
+        reason = rating_result.reason
+        
+        # 对焦状态
+        focus_status = None
+        focus_status_en = None
+        if detected:
+            if focus_sharpness_weight > 1.0:
+                focus_status = "精准"
+                focus_status_en = "BEST"
+            elif focus_sharpness_weight >= 1.0:
+                focus_status = "鸟身"
+                focus_status_en = "GOOD"
+            elif focus_sharpness_weight >= 0.7:
+                focus_status = "偏移"
+                focus_status_en = "BAD"
+            elif focus_sharpness_weight < 0.7:
+                focus_status = "脱焦"
+                focus_status_en = "WORST"
+        
+        # 计算耗时
+        photo_time_ms = (time.time() - photo_start_time) * 1000
+        has_exposure_issue = is_overexposed or is_underexposed
+        
+        # 线程安全地更新统计（需要初始化锁）
+        if not hasattr(self, '_stats_lock'):
+            import threading
+            self._stats_lock = threading.Lock()
+        
+        with self._stats_lock:
+            self._log_photo_result_simple(i, total_files, filename, rating_value, reason, photo_time_ms, is_flying, has_exposure_issue, focus_status)
+            self._update_stats(rating_value, is_flying, has_exposure_issue)
+            self.stats['photo_times'].append((filename, photo_time_ms, detected))
+            if detected:
+                self.stats['with_bird_times'].append(photo_time_ms)
+            else:
+                self.stats['no_bird_times'].append(photo_time_ms)
+        
+        # 确定目标文件
+        target_file_path = None
+        if file_prefix in raw_dict:
+            raw_ext = raw_dict[file_prefix]
+            target_file_path = os.path.join(self.dir_path, file_prefix + raw_ext)
+            if os.path.exists(target_file_path):
+                label = None
+                if is_flying:
+                    label = 'Green'
+                elif focus_sharpness_weight > 1.0:
+                    label = 'Red'
+                
+                caption_parts = [
+                    f"[SuperPicky V4.0 评分报告]",
+                    f"最终评分: {rating_value}星 | {reason}",
+                    "",
+                    "[原始检测数据]",
+                    f"AI置信度: {confidence:.0%}",
+                    f"头部锐度: {head_sharpness:.2f}" if head_sharpness else "头部锐度: 无法计算",
+                    f"TOPIQ美学: {topiq:.2f}" if topiq else "TOPIQ美学: 未计算",
+                    f"眼睛可见度: {best_eye_visibility:.0%}",
+                    "",
+                    "[修正因子]",
+                    f"对焦锐度权重: {focus_sharpness_weight:.2f}",
+                    f"对焦美学权重: {focus_topiq_weight:.2f}",
+                    f"是否飞鸟: {'是 (锐度×1.2, 美学×1.1)' if is_flying else '否'}",
+                ]
+                caption = " | ".join(caption_parts)
+                
+                single_batch = [{
+                    'file': target_file_path,
+                    'rating': rating_value if rating_value >= 0 else 0,
+                    'pick': pick,
+                    'sharpness': head_sharpness,
+                    'nima_score': topiq,
+                    'label': label,
+                    'focus_status': focus_status,
+                    'caption': caption,
+                }]
+                exiftool_mgr.batch_set_metadata(single_batch)
+        else:
+            target_file_path = filepath
+        
+        # 更新CSV和记录评分（线程安全）
+        if target_file_path and os.path.exists(target_file_path):
+            with self._stats_lock:
+                self._update_csv_keypoint_data(
+                    file_prefix, 
+                    rating_sharpness,
+                    has_visible_eye, 
+                    has_visible_beak,
+                    left_eye_vis,
+                    right_eye_vis,
+                    beak_vis,
+                    rating_topiq,
+                    rating_value,
+                    is_flying,
+                    flight_confidence,
+                    focus_status,
+                    focus_x,
+                    focus_y
+                )
+                
+                if rating_value == 3 and rating_topiq is not None:
+                    self.star_3_photos.append({
+                        'file': target_file_path,
+                        'nima': rating_topiq,
+                        'sharpness': rating_sharpness
+                    })
+                
+                self.file_ratings[file_prefix] = rating_value
+                
+                if rating_value == 2:
+                    sharpness_ok = rating_sharpness >= self.settings.sharpness_threshold
+                    topiq_ok = rating_topiq is not None and rating_topiq >= self.settings.nima_threshold
+                    if sharpness_ok and not topiq_ok:
+                        self.star2_reasons[file_prefix] = 'sharpness'
+                    elif topiq_ok and not sharpness_ok:
+                        self.star2_reasons[file_prefix] = 'nima'
+                    else:
+                        self.star2_reasons[file_prefix] = 'both'
     
     # 注意: _calculate_rating 方法已移至 core/rating_engine.py
     # 现在使用 self.rating_engine.calculate() 替代
@@ -1098,9 +1664,12 @@ class PhotoProcessor:
                 self._log(f"  ⚠️  {picked_stats['failed']} 张精选旗标写入失败", "warning")
             
             self.stats['picked'] = len(picked_files) - picked_stats.get('failed', 0)
+            # 保存精选文件集合，供后续使用
+            self.picked_files = picked_files
         else:
             self._log(f"  ℹ️  双排名交集为空，未设置精选旗标")
             self.stats['picked'] = 0
+            self.picked_files = set()
     
     def _move_files_to_rating_folders(self, raw_dict):
         """移动文件到分类文件夹（V3.4: 支持纯 JPEG）"""
@@ -1183,21 +1752,120 @@ class PhotoProcessor:
             self._log(f"  ⚠️  保存manifest失败: {e}", "warning")
     
     def _cleanup_temp_files(self, files_tbr, raw_dict):
-        """清理临时JPG文件"""
-        self._log("\n🧹 清理临时文件...")
-        deleted_count = 0
-        for filename in files_tbr:
-            file_prefix, file_ext = os.path.splitext(filename)
-            if file_prefix in raw_dict and file_ext.lower() in ['.jpg', '.jpeg']:
-                jpg_path = os.path.join(self.dir_path, filename)
-                try:
-                    if os.path.exists(jpg_path):
-                        os.remove(jpg_path)
-                        deleted_count += 1
-                except Exception as e:
-                    self._log(f"  ⚠️  删除失败 {filename}: {e}", "warning")
-        
-        if deleted_count > 0:
-            self._log(f"  ✅ 已删除 {deleted_count} 个临时JPG文件")
+        """清理临时JPG文件或保留并写入EXIF"""
+        if self.settings.keep_temp_jpg:
+            self._log("\n💾 保留临时转换的JPG文件...")
+            self._process_keep_temp_jpg(files_tbr)
         else:
-            self._log(f"  ℹ️  无临时文件需清理")
+            self._log("\n🧹 清理临时文件...")
+            deleted_count = 0
+            
+            # 删除 RAW 转换的临时 JPG
+            for filename in files_tbr:
+                file_prefix, file_ext = os.path.splitext(filename)
+                if file_prefix in raw_dict and file_ext.lower() in ['.jpg', '.jpeg']:
+                    jpg_path = os.path.join(self.dir_path, filename)
+                    try:
+                        if os.path.exists(jpg_path):
+                            os.remove(jpg_path)
+                            deleted_count += 1
+                    except Exception as e:
+                        self._log(f"  ⚠️  删除失败 {filename}: {e}", "warning")
+            
+            # 删除 HEIF 转换的临时 JPG
+            temp_dir = os.path.join(self.dir_path, '.superpicky', 'temp_jpg')
+            if os.path.exists(temp_dir):
+                for temp_jpg_path in self.heif_temp_map.values():
+                    try:
+                        if os.path.exists(temp_jpg_path):
+                            os.remove(temp_jpg_path)
+                            deleted_count += 1
+                    except Exception as e:
+                        self._log(f"  ⚠️  删除失败 {os.path.basename(temp_jpg_path)}: {e}", "warning")
+            
+            if deleted_count > 0:
+                self._log(f"  ✅ 已删除 {deleted_count} 个临时JPG文件")
+            else:
+                self._log(f"  ℹ️  无临时文件需清理")
+    
+    def _process_keep_temp_jpg(self, files_tbr):
+        """处理保留的临时JPG文件：写入EXIF并移动到对应星级目录"""
+        from exiftool_manager import get_exiftool_manager
+        exiftool_mgr = get_exiftool_manager()
+        
+        processed_count = 0
+        
+        # 处理 HEIF 转换的临时 JPG
+        for original_filename, temp_jpg_path in self.heif_temp_map.items():
+            if not os.path.exists(temp_jpg_path):
+                continue
+            
+            # 获取原始文件的评分
+            file_prefix = os.path.splitext(original_filename)[0]
+            rating = self.file_ratings.get(file_prefix, -1)
+            
+            if rating < 0:
+                # 无评分，删除临时文件
+                try:
+                    os.remove(temp_jpg_path)
+                except:
+                    pass
+                continue
+            
+            # 获取原始文件的 EXIF 数据（如果有写入）
+            # 这里我们需要从原始文件读取评分信息，写入到 JPG
+            try:
+                # 构建 JPG 文件名（去掉 _temp 后缀）
+                jpg_filename = file_prefix + ".jpg"
+                final_jpg_path = os.path.join(self.dir_path, jpg_filename)
+                
+                # 如果已存在同名文件，使用带时间戳的名称
+                if os.path.exists(final_jpg_path):
+                    import datetime
+                    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                    jpg_filename = f"{file_prefix}_{timestamp}.jpg"
+                    final_jpg_path = os.path.join(self.dir_path, jpg_filename)
+                
+                # 移动临时文件到最终位置
+                import shutil
+                shutil.move(temp_jpg_path, final_jpg_path)
+                
+                # 检查是否是精选照片
+                # 通过检查原始文件路径是否在 picked_files 中
+                original_file_path = os.path.join(self.dir_path, original_filename)
+                is_picked = original_file_path in self.picked_files
+                
+                # 写入 EXIF 元数据
+                batch_data = [{
+                    'file': final_jpg_path,
+                    'rating': rating if rating >= 0 else 0,
+                    'pick': 1 if is_picked else 0,
+                    'sharpness': None,  # JPG 文件可能没有锐度数据
+                    'nima_score': None,
+                    'label': None,
+                    'focus_status': None,
+                    'caption': f"[SuperPicky] 从 {os.path.splitext(original_filename)[1]} 转换"
+                }]
+                
+                exiftool_mgr.batch_set_metadata(batch_data)
+                
+                # 移动到对应星级目录
+                folder = RATING_FOLDER_NAMES.get(rating, "0星_放弃")
+                folder_path = os.path.join(self.dir_path, folder)
+                os.makedirs(folder_path, exist_ok=True)
+                
+                dst_path = os.path.join(folder_path, jpg_filename)
+                if not os.path.exists(dst_path):
+                    shutil.move(final_jpg_path, dst_path)
+                    processed_count += 1
+                else:
+                    # 目标已存在，删除源文件
+                    os.remove(final_jpg_path)
+                
+            except Exception as e:
+                self._log(f"  ⚠️  处理临时JPG失败 {original_filename}: {e}", "warning")
+        
+        if processed_count > 0:
+            self._log(f"  ✅ 已保留并处理 {processed_count} 个临时JPG文件")
+        else:
+            self._log(f"  ℹ️  无临时JPG文件需保留")
