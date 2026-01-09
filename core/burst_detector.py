@@ -54,9 +54,9 @@ class BurstGroup:
 class BurstDetector:
     """连拍检测器"""
     
-    # 检测参数
-    TIME_THRESHOLD_MS = 250  # V4.0: 放宽到 250ms，用 pHash 过滤误判
-    MIN_BURST_COUNT = 4      # V4.0: 最少 4 张才算连拍（更保守）
+    # 默认检测参数（可被 advanced_config 覆盖）
+    TIME_THRESHOLD_MS = 250  # V3.9: 默认 250ms
+    MIN_BURST_COUNT = 4      # V3.9: 默认 4 张
     MIN_RATING = 2           # 只处理 >= 2 星的照片
     
     # pHash 参数
@@ -73,6 +73,15 @@ class BurstDetector:
         """
         self.exiftool_path = exiftool_path or self._find_exiftool()
         self.USE_PHASH = use_phash
+        
+        # V3.9: 从配置加载参数
+        try:
+            from advanced_config import get_advanced_config
+            config = get_advanced_config()
+            self.TIME_THRESHOLD_MS = config.burst_time_threshold
+            self.MIN_BURST_COUNT = config.burst_min_count
+        except Exception:
+            pass  # 使用默认值
     
     def _find_exiftool(self) -> str:
         """查找 ExifTool 路径"""
