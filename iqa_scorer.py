@@ -25,12 +25,13 @@ from topiq_model import CFANet, load_topiq_weights, get_topiq_weight_path
 class IQAScorer:
     """IQA 评分器 - 使用 TOPIQ 美学评分"""
 
-    def __init__(self, device='mps'):
+    def __init__(self, device='auto'):
         """
         初始化 IQA 评分器
 
         Args:
-            device: 计算设备 ('mps', 'cuda', 'cpu')
+            device: 计算设备 ('auto', 'mps', 'cuda', 'cpu')
+                   'auto' 会自动选择最佳可用设备
         """
         self.device = self._get_device(device)
         print(f"🎨 IQA 评分器初始化中... (设备: {self.device})")
@@ -40,29 +41,59 @@ class IQAScorer:
 
         print("✅ IQA 评分器已就绪 (TOPIQ模型将在首次使用时加载)")
 
-    def _get_device(self, preferred_device='mps'):
+    def _get_device(self, preferred_device='auto'):
         """
         获取最佳计算设备
 
         Args:
-            preferred_device: 首选设备
+            preferred_device: 首选设备 ('auto', 'mps', 'cuda', 'cpu')
 
         Returns:
             可用的设备
         """
-        # 检查 MPS (Apple GPU)
+        # 使用 utils 中的 get_best_device 函数（如果可用）
+        try:
+            from utils import get_best_device
+            device_str = get_best_device(preferred_device)
+            return torch.device(device_str)
+        except ImportError:
+            # 如果 utils 不可用，使用本地逻辑
+            pass
+        
+        # 本地设备选择逻辑（降级方案）
+        # 自动选择最佳设备（优先级：MPS > CUDA > CPU）
+        if preferred_device == 'auto':
+            # 1. 优先尝试 MPS (Apple GPU)
+            try:
+                if torch.backends.mps.is_available():
+                    return torch.device('mps')
+            except:
+                pass
+            
+            # 2. 尝试 CUDA (NVIDIA GPU)
+            if torch.cuda.is_available():
+                return torch.device('cuda')
+            
+            # 3. 默认使用 CPU
+            return torch.device('cpu')
+        
+        # 如果指定了具体设备，检查是否可用
         if preferred_device == 'mps':
             try:
                 if torch.backends.mps.is_available():
                     return torch.device('mps')
             except:
                 pass
-
-        # 检查 CUDA (NVIDIA GPU)
-        if preferred_device == 'cuda' or torch.cuda.is_available():
-            return torch.device('cuda')
-
-        # 默认使用 CPU
+            # MPS 不可用，降级到自动选择
+            return self._get_device('auto')
+        
+        if preferred_device == 'cuda':
+            if torch.cuda.is_available():
+                return torch.device('cuda')
+            # CUDA 不可用，降级到 CPU
+            return torch.device('cpu')
+        
+        # CPU 或其他
         return torch.device('cpu')
 
     def _load_topiq(self):
@@ -189,12 +220,13 @@ class IQAScorer:
 _iqa_scorer_instance = None
 
 
-def get_iqa_scorer(device='mps') -> IQAScorer:
+def get_iqa_scorer(device='auto') -> IQAScorer:
     """
     获取 IQA 评分器单例
 
     Args:
-        device: 计算设备
+        device: 计算设备 ('auto', 'mps', 'cuda', 'cpu')
+               'auto' 会自动选择最佳可用设备
 
     Returns:
         IQAScorer 实例

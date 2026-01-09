@@ -48,6 +48,8 @@ class ProcessingSettings:
     detect_flight: bool = True  # V3.4: 飞版检测开关
     detect_exposure: bool = False  # V3.8: 曝光检测开关（默认关闭）
     exposure_threshold: float = 0.10  # V3.8: 曝光阈值 (0.05-0.20)
+    device: str = 'auto'  # 计算设备选择: 'auto', 'cuda', 'cpu', 'mps'
+    stop_event: Optional[any] = None  # 停止事件（用于取消处理）
 
 
 @dataclass
@@ -126,8 +128,20 @@ class PhotoProcessor:
             'start_time': 0,
             'end_time': 0,
             'total_time': 0,
-            'avg_time': 0
+            'avg_time': 0,
+            # 新增统计字段
+            'photo_times': [],  # 每张图片的处理时间列表 [(filename, time_ms, detected)]
+            'with_bird_times': [],  # 带鸟图片的处理时间
+            'no_bird_times': [],  # 不带鸟图片的处理时间
+            'longest_photo': None,  # (filename, time_ms)
+            'shortest_photo': None,  # (filename, time_ms)
+            'avg_with_bird_time': 0.0,  # 带鸟图片平均处理时间
+            'avg_no_bird_time': 0.0,  # 不带鸟图片平均处理时间
+            'cancelled': False  # 是否被取消
         }
+        
+        # 停止事件（用于取消处理）
+        self.stop_event = settings.stop_event
         
         # 内部状态
         self.file_ratings = {}
@@ -192,6 +206,20 @@ class PhotoProcessor:
             self.stats['total_time'] / self.stats['total']
             if self.stats['total'] > 0 else 0
         )
+        
+        # 计算详细统计信息
+        if self.stats['photo_times']:
+            # 最长/最短处理时间
+            longest = max(self.stats['photo_times'], key=lambda x: x[1])
+            shortest = min(self.stats['photo_times'], key=lambda x: x[1])
+            self.stats['longest_photo'] = (longest[0], longest[1])
+            self.stats['shortest_photo'] = (shortest[0], shortest[1])
+            
+            # 带鸟/不带鸟平均时间
+            if self.stats['with_bird_times']:
+                self.stats['avg_with_bird_time'] = sum(self.stats['with_bird_times']) / len(self.stats['with_bird_times'])
+            if self.stats['no_bird_times']:
+                self.stats['avg_no_bird_time'] = sum(self.stats['no_bird_times']) / len(self.stats['no_bird_times'])
         
         return ProcessingResult(
             stats=self.stats.copy(),
@@ -279,10 +307,18 @@ class PhotoProcessor:
     
     def _process_images(self, files_tbr, raw_dict):
         """处理所有图片 - AI检测、关键点检测与评分"""
-        # 加载模型
+        # 检查是否已取消
+        if self.stop_event and self.stop_event.is_set():
+            self.stats['cancelled'] = True
+            self._log("⚠️  处理已取消", "warning")
+            return
+        
+        # 加载模型（使用指定设备）
         model_start = time.time()
         self._log("🤖 加载AI模型...")
-        model = load_yolo_model()
+        device = self.settings.device if hasattr(self.settings, 'device') else 'auto'
+        self._log(f"🖥️  使用设备: {device}")
+        model = load_yolo_model(device=device)
         model_time = (time.time() - model_start) * 1000
         self._log(f"⏱️  模型加载耗时: {model_time:.0f}ms")
         
@@ -328,6 +364,12 @@ class PhotoProcessor:
         ai_total_start = time.time()
         
         for i, filename in enumerate(files_tbr, 1):
+            # 检查是否已取消
+            if self.stop_event and self.stop_event.is_set():
+                self.stats['cancelled'] = True
+                self._log(f"\n⚠️  处理已取消（已处理 {i-1}/{total_files} 张）", "warning")
+                break
+            
             # 记录每张照片的开始时间
             photo_start_time = time.time()
             
@@ -477,8 +519,8 @@ class PhotoProcessor:
                     import time as time_module
                     
                     step_start = time_module.time()
-                    # 自动选择最佳设备（MPS/CUDA/CPU）
-                    device = get_best_device('auto')
+                    # 使用设置中指定的设备
+                    device = get_best_device(self.settings.device if hasattr(self.settings, 'device') else 'auto')
                     scorer = get_iqa_scorer(device=device)
                     
                     # V3.7: 使用全图而非裁剪图进行TOPIQ美学评分
@@ -654,6 +696,13 @@ class PhotoProcessor:
             
             # 记录统计
             self._update_stats(rating_value, is_flying, has_exposure_issue)
+            
+            # 记录处理时间统计
+            self.stats['photo_times'].append((filename, photo_time_ms, detected))
+            if detected:
+                self.stats['with_bird_times'].append(photo_time_ms)
+            else:
+                self.stats['no_bird_times'].append(photo_time_ms)
             
             # V3.4: 确定要处理的目标文件（RAW 优先，没有则用 JPEG/HEIF）
             # 注意：对于 HEIF/HEIC/HIF 文件，虽然 AI 推理时使用了临时 JPG，

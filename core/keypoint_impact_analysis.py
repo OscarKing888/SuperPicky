@@ -220,7 +220,19 @@ def main():
     print("🔍 关键点模型影响分析")
     print("="*70)
     
-    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+    # 使用 utils 中的 get_best_device 自动选择最佳设备
+    try:
+        from utils import get_best_device
+        device_str = get_best_device('auto')
+        device = torch.device(device_str)
+    except ImportError:
+        # 如果 utils 不可用，使用本地逻辑
+        if torch.backends.mps.is_available():
+            device = torch.device("mps")
+        elif torch.cuda.is_available():
+            device = torch.device("cuda")
+        else:
+            device = torch.device("cpu")
     print(f"🖥️  设备: {device}")
     
     # 加载模型

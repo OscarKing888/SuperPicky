@@ -12,14 +12,34 @@ from typing import Optional, List, Dict
 from pathlib import Path
 from constants import RATING_FOLDER_NAMES
 
+# Windows 控制台编码设置
+if sys.platform == 'win32':
+    try:
+        import io
+        # 设置标准输出和错误输出为 UTF-8
+        if hasattr(sys.stdout, 'buffer'):
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+        if hasattr(sys.stderr, 'buffer'):
+            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+    except Exception:
+        pass  # 如果设置失败，继续使用默认编码
+
 
 class ExifToolManager:
     """ExifTool管理器 - 使用本地打包的exiftool"""
 
     def __init__(self):
         """初始化ExifTool管理器"""
+        # 检测操作系统
+        self.is_windows = sys.platform == 'win32'
+        
         # 获取exiftool路径（支持PyInstaller打包）
         self.exiftool_path = self._get_exiftool_path()
+        # 检测是否为 Perl 脚本
+        self.is_perl_script = self._is_perl_script(self.exiftool_path)
+        # Perl 解释器路径（如果需要）
+        self.perl_path = None
+        
         # 环境变量（用于 exiftool_bundle，将在验证时设置）
         self._exiftool_env = os.environ.copy()
 
@@ -29,6 +49,17 @@ class ExifToolManager:
 
         print(f"✅ ExifTool已加载: {self.exiftool_path}")
 
+    def _is_perl_script(self, file_path: str) -> bool:
+        """检测文件是否为 Perl 脚本"""
+        if not os.path.exists(file_path):
+            return False
+        try:
+            with open(file_path, 'rb') as f:
+                first_line = f.readline(100).decode('utf-8', errors='ignore')
+                return first_line.startswith('#!') and 'perl' in first_line.lower()
+        except Exception:
+            return False
+    
     def _get_exiftool_path(self) -> str:
         """获取exiftool可执行文件路径"""
         if hasattr(sys, '_MEIPASS'):
@@ -36,6 +67,13 @@ class ExifToolManager:
             base_path = sys._MEIPASS
             print(f"🔍 PyInstaller环境检测到")
             print(f"   base_path (sys._MEIPASS): {base_path}")
+
+            # Windows 上优先查找 .exe 文件
+            if self.is_windows:
+                exe_path = os.path.join(base_path, 'exiftool_bundle', 'exiftool.exe')
+                if os.path.exists(exe_path):
+                    print(f"   ✅ 找到 Windows 版本: {exe_path}")
+                    return exe_path
 
             # 直接使用 exiftool_bundle/exiftool 路径（唯一打包位置）
             exiftool_path = os.path.join(base_path, 'exiftool_bundle', 'exiftool')
@@ -46,29 +84,47 @@ class ExifToolManager:
             print(f"   存在: {os.path.exists(abs_path)}")
             print(f"   可执行: {os.access(abs_path, os.X_OK) if os.path.exists(abs_path) else False}")
 
-            if os.path.exists(abs_path) and os.access(abs_path, os.X_OK):
+            if os.path.exists(abs_path):
                 print(f"   ✅ 找到 exiftool")
                 return abs_path
             else:
-                print(f"   ⚠️  未找到可执行的 exiftool")
+                print(f"   ⚠️  未找到 exiftool")
                 return abs_path
         else:
             # 开发环境路径 - 按优先级查找
             project_root = os.path.dirname(os.path.abspath(__file__))
             
-            # 优先级1: exiftool_bundle/exiftool (完整 bundle 版本，包含 lib 目录)
+            # Windows 上优先查找 .exe 文件
+            if self.is_windows:
+                # 优先级1: exiftool_bundle/exiftool.exe
+                bundle_exe = os.path.join(project_root, 'exiftool_bundle', 'exiftool.exe')
+                bundle_exe_abs = os.path.abspath(bundle_exe)
+                if os.path.exists(bundle_exe_abs):
+                    print(f"🔍 使用 Windows 版本: {bundle_exe_abs}")
+                    return bundle_exe_abs
+                else:
+                    print(f"   ⚠️  Windows exe 不存在: {bundle_exe_abs}")
+                
+                # 优先级2: 根目录的 exiftool.exe
+                root_exe = os.path.join(project_root, 'exiftool.exe')
+                root_exe_abs = os.path.abspath(root_exe)
+                if os.path.exists(root_exe_abs):
+                    print(f"🔍 使用根目录 Windows 版本: {root_exe_abs}")
+                    return root_exe_abs
+            
+            # 优先级3: exiftool_bundle/exiftool (完整 bundle 版本，包含 lib 目录)
             bundle_path = os.path.join(project_root, 'exiftool_bundle', 'exiftool')
-            if os.path.exists(bundle_path) and os.access(bundle_path, os.X_OK):
+            if os.path.exists(bundle_path):
                 print(f"🔍 使用 exiftool_bundle 版本: {bundle_path}")
                 return bundle_path
             
-            # 优先级2: 项目根目录的 exiftool
+            # 优先级4: 项目根目录的 exiftool
             root_path = os.path.join(project_root, 'exiftool')
-            if os.path.exists(root_path) and os.access(root_path, os.X_OK):
+            if os.path.exists(root_path):
                 print(f"🔍 使用根目录版本: {root_path}")
                 return root_path
             
-            # 优先级3: 尝试系统路径中的 exiftool
+            # 优先级5: 尝试系统路径中的 exiftool
             import shutil
             system_exiftool = shutil.which('exiftool')
             if system_exiftool:
@@ -79,46 +135,114 @@ class ExifToolManager:
             print(f"⚠️  未找到 exiftool，将尝试: {bundle_path}")
             return bundle_path
 
+    def _build_exiftool_cmd(self, args: List[str]) -> List[str]:
+        """构建 ExifTool 命令（处理 Perl 脚本的情况）"""
+        if self.is_perl_script and self.is_windows:
+            # Windows 上运行 Perl 脚本需要通过 perl 解释器
+            if self.perl_path:
+                return [self.perl_path, self.exiftool_path] + args
+            else:
+                # 尝试查找系统 Perl
+                import shutil
+                perl = shutil.which('perl')
+                if perl:
+                    self.perl_path = perl
+                    return [perl, self.exiftool_path] + args
+                else:
+                    raise RuntimeError(
+                        "在 Windows 上检测到 Perl 脚本，但系统未安装 Perl。\n"
+                        "请下载 Windows 版本的 ExifTool (exiftool.exe):\n"
+                        "https://exiftool.org/exiftool-12.xx.zip\n"
+                        "或安装 Perl: https://strawberryperl.com/"
+                    )
+        else:
+            # 直接执行（.exe 文件或 Unix 系统上的 Perl 脚本）
+            return [self.exiftool_path] + args
+
     def _verify_exiftool(self) -> bool:
         """验证exiftool是否可用"""
         print(f"\n🧪 验证 ExifTool 是否可执行...")
         print(f"   路径: {self.exiftool_path}")
         print(f"   存在: {os.path.exists(self.exiftool_path)}")
+        print(f"   是 Perl 脚本: {self.is_perl_script}")
         if os.path.exists(self.exiftool_path):
             print(f"   可执行: {os.access(self.exiftool_path, os.X_OK)}")
-        print(f"   测试命令: {self.exiftool_path} -ver")
 
         # 首先检查文件是否存在
         if not os.path.exists(self.exiftool_path):
             print(f"   ❌ ExifTool 文件不存在")
             return False
         
-        # 检查是否可执行
-        if not os.access(self.exiftool_path, os.X_OK):
-            print(f"   ⚠️  ExifTool 文件不可执行，尝试添加执行权限...")
-            try:
-                os.chmod(self.exiftool_path, 0o755)
-                print(f"   ✅ 已添加执行权限")
-            except Exception as e:
-                print(f"   ❌ 无法添加执行权限: {e}")
+        # Windows 上如果是 Perl 脚本，需要检查 Perl
+        if self.is_perl_script and self.is_windows:
+            import shutil
+            perl = shutil.which('perl')
+            if not perl:
+                print(f"   ❌ 在 Windows 上检测到 Perl 脚本，但系统未安装 Perl")
+                print(f"   💡 解决方案:")
+                print(f"      1. 下载 Windows 版本的 ExifTool (exiftool.exe)")
+                print(f"         从 https://exiftool.org/exiftool-12.xx.zip 下载")
+                print(f"         解压后将 exiftool.exe 放到 exiftool_bundle 目录")
+                print(f"      2. 或安装 Perl: https://strawberryperl.com/")
                 return False
+            else:
+                self.perl_path = perl
+                print(f"   ✅ 找到 Perl 解释器: {perl}")
+        
+        # 非 Windows 系统或 .exe 文件，检查执行权限
+        if not self.is_windows or not self.is_perl_script:
+            if not os.access(self.exiftool_path, os.X_OK):
+                print(f"   ⚠️  ExifTool 文件不可执行，尝试添加执行权限...")
+                try:
+                    os.chmod(self.exiftool_path, 0o755)
+                    print(f"   ✅ 已添加执行权限")
+                except Exception as e:
+                    print(f"   ❌ 无法添加执行权限: {e}")
+                    # Windows 上 .exe 文件可能不需要执行权限，继续尝试
 
         try:
             # 对于 exiftool_bundle 中的 exiftool，需要设置 PERL5LIB 环境变量
             env = os.environ.copy()
-            if 'exiftool_bundle' in self.exiftool_path:
+            if 'exiftool_bundle' in self.exiftool_path and os.path.exists(self.exiftool_path):
                 bundle_dir = os.path.dirname(self.exiftool_path)
+                
+                # Windows exe 文件可能需要 DLL 文件
+                if self.is_windows and self.exiftool_path.endswith('.exe'):
+                    # 查找 exiftool_files 目录（包含 perl5*.dll）
+                    exiftool_files_dir = os.path.join(bundle_dir, 'exiftool_files')
+                    if os.path.exists(exiftool_files_dir):
+                        # 将 DLL 目录添加到 PATH
+                        path_sep = ';' if self.is_windows else ':'
+                        current_path = env.get('PATH', '')
+                        env['PATH'] = f"{exiftool_files_dir}{path_sep}{current_path}"
+                        print(f"   设置 PATH (DLL 目录): {exiftool_files_dir}")
+                    
+                    # 也检查 exe 文件同目录下的 DLL
+                    exe_dir = bundle_dir
+                    dll_files = [f for f in os.listdir(exe_dir) if f.startswith('perl5') and f.endswith('.dll')]
+                    if dll_files:
+                        current_path = env.get('PATH', '')
+                        env['PATH'] = f"{exe_dir}{path_sep}{current_path}"
+                        print(f"   设置 PATH (exe 目录): {exe_dir}")
+                
+                # 设置 PERL5LIB（用于 Perl 脚本版本）
                 lib_dir = os.path.join(bundle_dir, 'lib')
                 if os.path.exists(lib_dir):
+                    # Windows 使用分号，Unix 使用冒号
+                    separator = ';' if self.is_windows else ':'
                     perl_lib = env.get('PERL5LIB', '')
                     if perl_lib:
-                        env['PERL5LIB'] = f"{lib_dir}:{perl_lib}"
+                        env['PERL5LIB'] = f"{lib_dir}{separator}{perl_lib}"
                     else:
                         env['PERL5LIB'] = lib_dir
                     print(f"   设置 PERL5LIB: {env['PERL5LIB']}")
             
+            # 构建命令
+            cmd = self._build_exiftool_cmd(['-ver'])
+            print(f"   测试命令: {' '.join(cmd)}")
+            
             result = subprocess.run(
-                [self.exiftool_path, '-ver'],
+                cmd,
                 capture_output=True,
                 text=True,
                 timeout=5,
@@ -135,9 +259,61 @@ class ExifToolManager:
                 self._exiftool_env = env
                 return True
             else:
+                # 如果是 Windows exe 文件失败，检查错误原因
+                if self.is_windows and self.exiftool_path.endswith('.exe') and not self.is_perl_script:
+                    error_msg = result.stderr.strip() if result.stderr else ""
+                    
+                    # 检查是否是 DLL 缺失错误
+                    if 'perl5' in error_msg.lower() and 'dll' in error_msg.lower():
+                        print(f"   ❌ ExifTool exe 文件需要 Perl DLL 文件")
+                        print(f"   💡 解决方案:")
+                        print(f"      1. 下载完整版本的 ExifTool（包含 DLL）")
+                        print(f"         运行: download_exiftool.bat")
+                        print(f"         或从 https://exiftool.org/ 下载完整 ZIP 文件")
+                        print(f"      2. 解压后将 exiftool_files 目录复制到 exiftool_bundle 目录")
+                        print(f"      3. 或安装 Perl 并使用 Perl 脚本版本")
+                        
+                        # 尝试回退到 Perl 脚本版本（如果系统有 Perl）
+                        perl_script_path = self.exiftool_path.replace('.exe', '')
+                        if os.path.exists(perl_script_path) and self._is_perl_script(perl_script_path):
+                            import shutil
+                            perl = shutil.which('perl')
+                            if perl:
+                                print(f"   ⚠️  尝试使用 Perl 脚本版本...")
+                                self.exiftool_path = perl_script_path
+                                self.is_perl_script = True
+                                self.perl_path = perl
+                                # 重新验证
+                                return self._verify_exiftool()
+                            else:
+                                print(f"   ❌ 系统未安装 Perl，无法使用 Perl 脚本版本")
+                        
+                        return False
+                    else:
+                        # 其他错误，尝试回退到 Perl 脚本版本
+                        print(f"   ⚠️  Windows exe 版本失败，尝试使用 Perl 脚本版本...")
+                        perl_script_path = self.exiftool_path.replace('.exe', '')
+                        if os.path.exists(perl_script_path) and self._is_perl_script(perl_script_path):
+                            import shutil
+                            perl = shutil.which('perl')
+                            if perl:
+                                print(f"   ✅ 找到 Perl，切换到 Perl 脚本版本")
+                                self.exiftool_path = perl_script_path
+                                self.is_perl_script = True
+                                self.perl_path = perl
+                                # 重新验证
+                                return self._verify_exiftool()
+                            else:
+                                print(f"   ❌ 未找到 Perl 解释器")
+                
                 print(f"   ❌ ExifTool 返回非零退出码")
+                if result.stderr:
+                    print(f"   错误信息: {result.stderr.strip()}")
                 return False
 
+        except RuntimeError as e:
+            print(f"   ❌ {e}")
+            return False
         except subprocess.TimeoutExpired:
             print(f"   ❌ ExifTool 执行超时（5秒）")
             return False
@@ -174,11 +350,10 @@ class ExifToolManager:
             return False
 
         # 构建exiftool命令
-        cmd = [
-            self.exiftool_path,
+        cmd = self._build_exiftool_cmd([
             f'-Rating={rating}',
             f'-XMP:Pick={pick}',
-        ]
+        ])
 
         # 如果提供了锐度值，写入IPTC:City字段（补零到6位，确保文本排序正确）
         # 格式：000.00 到 999.99，例如：004.68, 100.50
@@ -248,7 +423,7 @@ class ExifToolManager:
         # ExifTool批量模式：使用 -execute 分隔符为每个文件单独设置参数
         # 格式: exiftool -TAG1=value1 file1 -overwrite_original -execute -TAG2=value2 file2 -overwrite_original -execute ...
         # V3.9.1: 改用 XMP 字段，XMP 原生支持 UTF-8 中文
-        cmd = [self.exiftool_path]
+        cmd = self._build_exiftool_cmd([])
 
         for item in files_metadata:
             file_path = item['file']
@@ -359,12 +534,11 @@ class ExifToolManager:
             
             try:
                 # 使用 exiftool 从 RAW 文件提取 XMP 到侧车文件
-                cmd = [
-                    self.exiftool_path,
+                cmd = self._build_exiftool_cmd([
                     '-o', xmp_path,
                     '-TagsFromFile', file_path,
                     '-XMP:all<XMP:all'
-                ]
+                ])
                 result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
                 # 不需要打印成功消息，避免刷屏
             except Exception:
@@ -383,8 +557,7 @@ class ExifToolManager:
         if not os.path.exists(file_path):
             return None
 
-        cmd = [
-            self.exiftool_path,
+        cmd = self._build_exiftool_cmd([
             '-Rating',
             '-XMP:Pick',
             '-XMP:Label',
@@ -393,7 +566,7 @@ class ExifToolManager:
             '-IPTC:Province-State',
             '-json',
             file_path
-        ]
+        ])
 
         try:
             result = subprocess.run(
@@ -429,8 +602,7 @@ class ExifToolManager:
             return False
 
         # 删除Rating、Pick、City、Country和Province-State字段
-        cmd = [
-            self.exiftool_path,
+        cmd = self._build_exiftool_cmd([
             '-Rating=',
             '-XMP:Pick=',
             '-XMP:Label=',
@@ -439,7 +611,7 @@ class ExifToolManager:
             '-IPTC:Province-State=',
             '-overwrite_original',
             file_path
-        ]
+        ])
 
         try:
             result = subprocess.run(
@@ -508,8 +680,7 @@ class ExifToolManager:
 
             # 构建ExifTool命令（移除-if条件，强制重置）
             # V4.0: 添加 XMP 字段清除（City/State/Country/Description）
-            cmd = [
-                self.exiftool_path,
+            cmd = self._build_exiftool_cmd([
                 '-Rating=',
                 '-XMP:Pick=',
                 '-XMP:Label=',
@@ -521,7 +692,7 @@ class ExifToolManager:
                 '-IPTC:Country-PrimaryLocationName=',
                 '-IPTC:Province-State=',
                 '-overwrite_original'
-            ] + valid_files
+            ] + valid_files)
 
             try:
                 result = subprocess.run(

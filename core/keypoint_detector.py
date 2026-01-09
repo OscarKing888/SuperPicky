@@ -92,7 +92,19 @@ class KeypointDetector:
             model_path: 模型文件路径，默认使用自动检测的路径
         """
         self.model_path = model_path or self._get_default_model_path()
-        self.device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+        # 使用 utils 中的 get_best_device 自动选择最佳设备
+        try:
+            from utils import get_best_device
+            device_str = get_best_device('auto')
+            self.device = torch.device(device_str)
+        except ImportError:
+            # 如果 utils 不可用，使用本地逻辑
+            if torch.backends.mps.is_available():
+                self.device = torch.device("mps")
+            elif torch.cuda.is_available():
+                self.device = torch.device("cuda")
+            else:
+                self.device = torch.device("cpu")
         self.model = None
         self.transform = transforms.Compose([
             transforms.Resize((self.IMG_SIZE, self.IMG_SIZE)),

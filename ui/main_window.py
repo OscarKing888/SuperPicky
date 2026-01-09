@@ -157,7 +157,9 @@ class WorkerThread(threading.Thread):
             save_crop=self.ui_settings[3] if len(self.ui_settings) > 3 else False,
             normalization_mode=self.ui_settings[4] if len(self.ui_settings) > 4 else 'log_compression',
             detect_flight=self.ui_settings[5] if len(self.ui_settings) > 5 else True,
-            detect_exposure=self.ui_settings[6] if len(self.ui_settings) > 6 else False  # V3.8: 默认关闭
+            detect_exposure=self.ui_settings[6] if len(self.ui_settings) > 6 else False,  # V3.8: 默认关闭
+            device=self.ui_settings[7] if len(self.ui_settings) > 7 else 'auto',  # 设备选择
+            stop_event=self._stop_event  # 停止事件
         )
 
         def log_callback(msg, level="info"):
@@ -176,6 +178,11 @@ class WorkerThread(threading.Thread):
             settings=settings,
             callbacks=callbacks
         )
+        
+        # 检查是否已取消
+        if self._stop_event.is_set():
+            self.signals.log.emit("⚠️  处理已取消", "warning")
+            return
 
         result = processor.process(
             organize_files=True,
@@ -435,6 +442,23 @@ class SuperPickyMainWindow(QMainWindow):
         
         header_layout.addLayout(exposure_layout)
         
+        # 设备选择
+        device_layout = QHBoxLayout()
+        device_layout.setSpacing(10)
+        
+        device_label = QLabel("计算设备:")
+        device_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
+        device_layout.addWidget(device_label)
+        
+        from PySide6.QtWidgets import QComboBox
+        self.device_combo = QComboBox()
+        self.device_combo.addItems(["自动", "GPU (CUDA)", "CPU"])
+        self.device_combo.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px; padding: 2px 8px;")
+        self.device_combo.setCurrentIndex(0)  # 默认自动
+        device_layout.addWidget(self.device_combo)
+        
+        header_layout.addLayout(device_layout)
+        
         params_layout.addLayout(header_layout)
 
         # 隐藏变量
@@ -584,12 +608,21 @@ class SuperPickyMainWindow(QMainWindow):
         self.post_da_btn.clicked.connect(self._open_post_adjustment)
         btn_layout.addWidget(self.post_da_btn)
 
-        # 开始按钮 (主按钮)
+        # 开始/取消按钮 (主按钮)
         self.start_btn = QPushButton(self.i18n.t("labels.start_processing"))
         self.start_btn.setMinimumWidth(140)
         self.start_btn.setMinimumHeight(40)
         self.start_btn.clicked.connect(self._start_processing)
         btn_layout.addWidget(self.start_btn)
+        
+        # 取消按钮（处理时显示）
+        self.cancel_btn = QPushButton("取消")
+        self.cancel_btn.setObjectName("secondary")
+        self.cancel_btn.setMinimumWidth(100)
+        self.cancel_btn.setMinimumHeight(40)
+        self.cancel_btn.setVisible(False)
+        self.cancel_btn.clicked.connect(self._cancel_processing)
+        btn_layout.addWidget(self.cancel_btn)
 
         parent_layout.addLayout(btn_layout)
 
@@ -742,6 +775,10 @@ class SuperPickyMainWindow(QMainWindow):
         self._log(self.i18n.t("logs.processing_start"))
 
         # 准备 UI 设置
+        # 设备选择映射
+        device_map = {"自动": "auto", "GPU (CUDA)": "cuda", "CPU": "cpu"}
+        selected_device = device_map.get(self.device_combo.currentText(), "auto")
+        
         ui_settings = [
             self.ai_confidence,
             self.sharp_slider.value(),
@@ -749,7 +786,8 @@ class SuperPickyMainWindow(QMainWindow):
             False,
             self.norm_mode,
             self.flight_check.isChecked(),
-            self.exposure_check.isChecked()  # V3.8: 曝光检测开关
+            self.exposure_check.isChecked(),  # V3.8: 曝光检测开关
+            selected_device  # 设备选择
         ]
 
         # 创建信号
@@ -759,9 +797,12 @@ class SuperPickyMainWindow(QMainWindow):
         self.worker_signals.finished.connect(self._on_finished)
         self.worker_signals.error.connect(self._on_error)
 
-        # 禁用按钮
+        # 禁用按钮，显示取消按钮
         self.start_btn.setEnabled(False)
+        self.start_btn.setVisible(False)
         self.reset_btn.setEnabled(False)
+        self.cancel_btn.setVisible(True)
+        self.cancel_btn.setEnabled(True)
 
         # 启动工作线程
         self.worker = WorkerThread(
@@ -786,14 +827,21 @@ class SuperPickyMainWindow(QMainWindow):
     @Slot(dict)
     def _on_finished(self, stats):
         """处理完成"""
+        # 恢复按钮状态
         self.start_btn.setEnabled(True)
+        self.start_btn.setVisible(True)
         self.reset_btn.setEnabled(True)
+        self.cancel_btn.setVisible(False)
+        self.cancel_btn.setEnabled(False)
         self.post_da_btn.setEnabled(True)
-        self.progress_bar.setValue(100)
-        self.progress_percent_label.setText("100%")
-        self.progress_info_label.setText(self.i18n.t("labels.complete"))
-
-        self._update_status(self.i18n.t("labels.complete"), COLORS['success'])
+        
+        if not stats.get('cancelled', False):
+            self.progress_bar.setValue(100)
+            self.progress_percent_label.setText("100%")
+            self.progress_info_label.setText(self.i18n.t("labels.complete"))
+            self._update_status(self.i18n.t("labels.complete"), COLORS['success'])
+        else:
+            self._update_status("已取消", COLORS['warning'])
 
         # 显示报告（不清空之前的日志）
         report = self._format_statistics_report(stats)
@@ -815,7 +863,26 @@ class SuperPickyMainWindow(QMainWindow):
         self._log(f"Error: {error_msg}", "error")
         self._update_status("Error", COLORS['error'])
         self.start_btn.setEnabled(True)
+        self.start_btn.setVisible(True)
         self.reset_btn.setEnabled(True)
+        self.cancel_btn.setVisible(False)
+        self.cancel_btn.setEnabled(False)
+    
+    @Slot()
+    def _cancel_processing(self):
+        """取消处理"""
+        if self.worker and self.worker.is_alive():
+            reply = StyledMessageBox.question(
+                self,
+                "确认取消",
+                "确定要取消当前处理吗？",
+                yes_text="是",
+                no_text="否"
+            )
+            if reply == StyledMessageBox.Yes:
+                self.worker._stop_event.set()
+                self._log("⚠️  正在取消处理...", "warning")
+                self.cancel_btn.setEnabled(False)
 
     @Slot()
     def _reset_directory(self):
@@ -1067,16 +1134,40 @@ class SuperPickyMainWindow(QMainWindow):
         avg_time = stats.get('avg_time', 0)
         picked = stats.get('picked', 0)
         flying = stats.get('flying', 0)
+        cancelled = stats.get('cancelled', False)
 
         bird_total = star_3 + star_2 + star_1 + star_0
 
         report = "\n" + "━" * 50 + "\n"
-        report += f"  {t('report.title')}\n"
+        if cancelled:
+            report += f"  {t('report.title')} (已取消)\n"
+        else:
+            report += f"  {t('report.title')}\n"
         report += "━" * 50 + "\n\n"
 
         report += t("report.total_photos", total=total) + "\n"
         report += t("report.total_time", time_sec=total_time, time_min=total_time/60) + "\n"
-        report += t("report.avg_time", avg=avg_time) + "\n\n"
+        report += t("report.avg_time", avg=avg_time) + "\n"
+        
+        # 新增详细统计
+        longest_photo = stats.get('longest_photo')
+        shortest_photo = stats.get('shortest_photo')
+        avg_with_bird = stats.get('avg_with_bird_time', 0)
+        avg_no_bird = stats.get('avg_no_bird_time', 0)
+        
+        if longest_photo:
+            longest_time_s = longest_photo[1] / 1000
+            report += f"\n⏱️  处理时间统计:\n"
+            report += f"   最长: {longest_photo[0]} ({longest_time_s:.2f}秒)\n"
+        if shortest_photo:
+            shortest_time_s = shortest_photo[1] / 1000
+            report += f"   最短: {shortest_photo[0]} ({shortest_time_s:.2f}秒)\n"
+        if avg_with_bird > 0:
+            report += f"   带鸟平均: {avg_with_bird/1000:.2f}秒/张\n"
+        if avg_no_bird > 0:
+            report += f"   不带鸟平均: {avg_no_bird/1000:.2f}秒/张\n"
+        
+        report += "\n"
 
         if total > 0:
             report += f"  ★★★  {star_3:>4}  ({star_3/total*100:>5.1f}%)\n"

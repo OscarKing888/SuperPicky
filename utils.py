@@ -101,45 +101,104 @@ def get_best_device(preferred_device='auto'):
     Returns:
         str: 设备名称 ('mps', 'cuda', 'cpu')
     """
+    print(f"\n🔍 设备选择过程 (首选: {preferred_device})")
+    print("=" * 60)
+    
     try:
         import torch
+        print(f"✅ PyTorch 已导入，版本: {torch.__version__}")
+        
+        # 检查 MPS (Apple GPU)
+        try:
+            mps_available = torch.backends.mps.is_available()
+            print(f"   MPS (Apple GPU): {'✅ 可用' if mps_available else '❌ 不可用'}")
+        except Exception as e:
+            mps_available = False
+            print(f"   MPS (Apple GPU): ❌ 检查失败 ({e})")
+        
+        # 检查 CUDA (NVIDIA GPU)
+        try:
+            cuda_available = torch.cuda.is_available()
+            cuda_version = torch.version.cuda if cuda_available else None
+            cuda_device_count = torch.cuda.device_count() if cuda_available else 0
+            
+            print(f"   CUDA (NVIDIA GPU): {'✅ 可用' if cuda_available else '❌ 不可用'}")
+            if cuda_available:
+                print(f"      CUDA 版本: {cuda_version}")
+                print(f"      GPU 数量: {cuda_device_count}")
+                if cuda_device_count > 0:
+                    for i in range(cuda_device_count):
+                        gpu_name = torch.cuda.get_device_name(i)
+                        print(f"      GPU {i}: {gpu_name}")
+            else:
+                # 检查为什么 CUDA 不可用
+                print(f"      PyTorch 编译时 CUDA 支持: {torch.version.cuda is not None}")
+                if torch.version.cuda is None:
+                    print(f"      ⚠️  PyTorch 未编译 CUDA 支持，可能是 CPU 版本")
+        except Exception as e:
+            cuda_available = False
+            print(f"   CUDA (NVIDIA GPU): ❌ 检查失败 ({e})")
         
         # 如果指定了设备，直接返回（如果可用）
         if preferred_device == 'mps':
-            if torch.backends.mps.is_available():
+            if mps_available:
+                print(f"✅ 选择设备: MPS (Apple GPU)")
+                print("=" * 60)
                 return 'mps'
             else:
-                # MPS 不可用，尝试其他设备
+                print(f"⚠️  MPS 不可用，切换到自动选择模式")
                 preferred_device = 'auto'
         
         if preferred_device == 'cuda':
-            if torch.cuda.is_available():
+            if cuda_available:
+                print(f"✅ 选择设备: CUDA (NVIDIA GPU)")
+                print("=" * 60)
                 return 'cuda'
             else:
-                # CUDA 不可用，尝试其他设备
+                print(f"⚠️  CUDA 不可用，切换到自动选择模式")
                 preferred_device = 'auto'
         
         # 自动选择最佳设备（优先级：MPS > CUDA > CPU）
         if preferred_device == 'auto':
+            print(f"\n📋 自动选择最佳设备 (优先级: MPS > CUDA > CPU)")
+            
             # 1. 优先尝试 MPS (Apple GPU)
-            if torch.backends.mps.is_available():
+            if mps_available:
+                print(f"✅ 选择设备: MPS (Apple GPU)")
+                print("=" * 60)
                 return 'mps'
+            else:
+                print(f"   ⏭️  跳过 MPS (不可用)")
             
             # 2. 尝试 CUDA (NVIDIA GPU)
-            if torch.cuda.is_available():
+            if cuda_available:
+                print(f"✅ 选择设备: CUDA (NVIDIA GPU)")
+                print("=" * 60)
                 return 'cuda'
+            else:
+                print(f"   ⏭️  跳过 CUDA (不可用)")
             
             # 3. 默认使用 CPU
+            print(f"⚠️  选择设备: CPU (所有 GPU 都不可用)")
+            print("=" * 60)
             return 'cpu'
         
         # 如果指定了 CPU 或其他，直接返回
+        print(f"✅ 选择设备: {preferred_device}")
+        print("=" * 60)
         return preferred_device
         
     except ImportError:
-        # 如果没有安装 torch，返回 CPU
+        print(f"❌ PyTorch 未安装，无法使用 GPU")
+        print(f"⚠️  选择设备: CPU")
+        print("=" * 60)
         return 'cpu'
     except Exception as e:
-        # 任何其他错误，返回 CPU
+        print(f"❌ 设备检测异常: {e}")
+        import traceback
+        print(f"   详细错误: {traceback.format_exc()}")
+        print(f"⚠️  选择设备: CPU (降级)")
+        print("=" * 60)
         return 'cpu'
 
 

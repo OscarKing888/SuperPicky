@@ -13,8 +13,12 @@ from advanced_config import get_advanced_config
 os.environ['YOLO_VERBOSE'] = 'False'
 
 
-def load_yolo_model():
-    """加载 YOLO 模型（自动启用 GPU 加速：MPS/CUDA）"""
+def load_yolo_model(device='auto'):
+    """加载 YOLO 模型（自动启用 GPU 加速：MPS/CUDA）
+    
+    Args:
+        device: 计算设备 ('auto', 'cuda', 'cpu', 'mps')
+    """
     from utils import get_best_device
     
     model_path = config.ai.get_model_path()
@@ -23,29 +27,33 @@ def load_yolo_model():
     # 自动检测并使用最佳 GPU 设备
     try:
         import torch
-        device = get_best_device('auto')
+        device = get_best_device(device)
         
+        # 验证设备是否真的可用（双重检查）
         if device == 'mps':
             if torch.backends.mps.is_available():
-                print("✅ 检测到 Apple GPU (MPS)，启用硬件加速")
+                print("✅ YOLO 模型将使用 Apple GPU (MPS) 进行推理")
             else:
-                print("⚠️  MPS 不可用，使用 CPU 推理")
+                print("⚠️  MPS 验证失败，降级到 CPU")
                 device = 'cpu'
         elif device == 'cuda':
             if torch.cuda.is_available():
                 gpu_name = torch.cuda.get_device_name(0) if torch.cuda.device_count() > 0 else "NVIDIA GPU"
-                print(f"✅ 检测到 {gpu_name} (CUDA)，启用硬件加速")
+                print(f"✅ YOLO 模型将使用 {gpu_name} (CUDA) 进行推理")
             else:
-                print("⚠️  CUDA 不可用，使用 CPU 推理")
+                print("⚠️  CUDA 验证失败，降级到 CPU")
                 device = 'cpu'
         else:
-            print("⚠️  使用 CPU 推理")
+            print("⚠️  YOLO 模型将使用 CPU 进行推理")
         
         # 保存设备信息供后续使用
         model._device = device
+        print(f"📌 YOLO 模型设备已设置为: {device}\n")
         
     except Exception as e:
         print(f"⚠️  GPU检测失败: {e}，使用CPU推理")
+        import traceback
+        print(f"   详细错误: {traceback.format_exc()}")
         model._device = 'cpu'
 
     return model

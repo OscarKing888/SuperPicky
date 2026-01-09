@@ -103,13 +103,19 @@ class FlightDetector:
         if not self.model_path.exists():
             raise FileNotFoundError(f"飞版检测模型未找到: {self.model_path}")
         
-        # 确定设备
-        if torch.backends.mps.is_available():
-            self.device = torch.device("mps")
-        elif torch.cuda.is_available():
-            self.device = torch.device("cuda")
-        else:
-            self.device = torch.device("cpu")
+        # 确定设备（使用 utils 中的 get_best_device 自动选择最佳设备）
+        try:
+            from utils import get_best_device
+            device_str = get_best_device('auto')
+            self.device = torch.device(device_str)
+        except ImportError:
+            # 如果 utils 不可用，使用本地逻辑
+            if torch.backends.mps.is_available():
+                self.device = torch.device("mps")
+            elif torch.cuda.is_available():
+                self.device = torch.device("cuda")
+            else:
+                self.device = torch.device("cpu")
         
         # 构建并加载模型
         self.model = self._build_model()
