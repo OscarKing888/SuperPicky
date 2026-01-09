@@ -724,7 +724,7 @@ class SuperPickyMainWindow(QMainWindow):
 
         self._check_report_csv()
 
-        # 检测历史记录
+        # V4.1: 检测历史记录 - 只问是否重置（重新评星功能已禁用）
         history_csv = os.path.join(directory, ".superpicky", "report.csv")
         history_manifest = os.path.join(directory, ".superpicky_manifest.json")
 
@@ -732,12 +732,12 @@ class SuperPickyMainWindow(QMainWindow):
             reply = StyledMessageBox.question(
                 self,
                 self.i18n.t("messages.history_detected_title"),
-                self.i18n.t("messages.history_detected_msg"),
+                self.i18n.t("messages.history_reset_msg"),
                 yes_text=self.i18n.t("labels.yes"),
                 no_text=self.i18n.t("labels.no")
             )
             if reply == StyledMessageBox.Yes:
-                QTimer.singleShot(100, self._open_post_adjustment)
+                QTimer.singleShot(100, self._reset_directory)
 
     def _check_report_csv(self):
         """检查是否有 report.csv"""
