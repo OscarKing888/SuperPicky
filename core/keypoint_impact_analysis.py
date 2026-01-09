@@ -133,8 +133,11 @@ def analyze_image(jpg_path, yolo_model, keypoint_model, device, transform):
                     box = r.boxes.xyxy[i].cpu().numpy().astype(int)
                     x1, y1, x2, y2 = box
                     
-                    # 读取图片并裁剪
-                    img = cv2.imread(jpg_path)
+                    # 读取图片并裁剪（支持 HEIF/HEIC）
+                    from utils import read_image
+                    img = read_image(jpg_path)
+                    if img is None:
+                        continue
                     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
                     bird_crop = img[y1:y2, x1:x2]
                     break
@@ -201,7 +204,7 @@ def find_jpg_files(directory):
     jpg_files = []
     for root, dirs, files in os.walk(directory):
         for f in files:
-            if f.lower().endswith(('.jpg', '.jpeg')):
+            if f.lower().endswith(('.jpg', '.jpeg', '.heif', '.heic', '.hif')):
                 jpg_files.append(os.path.join(root, f))
     return jpg_files
 

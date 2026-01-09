@@ -20,6 +20,8 @@ class ExifToolManager:
         """初始化ExifTool管理器"""
         # 获取exiftool路径（支持PyInstaller打包）
         self.exiftool_path = self._get_exiftool_path()
+        # 环境变量（用于 exiftool_bundle，将在验证时设置）
+        self._exiftool_env = os.environ.copy()
 
         # 验证exiftool可用性
         if not self._verify_exiftool():
@@ -51,22 +53,76 @@ class ExifToolManager:
                 print(f"   ⚠️  未找到可执行的 exiftool")
                 return abs_path
         else:
-            # 开发环境路径
+            # 开发环境路径 - 按优先级查找
             project_root = os.path.dirname(os.path.abspath(__file__))
-            return os.path.join(project_root, 'exiftool')
+            
+            # 优先级1: exiftool_bundle/exiftool (完整 bundle 版本，包含 lib 目录)
+            bundle_path = os.path.join(project_root, 'exiftool_bundle', 'exiftool')
+            if os.path.exists(bundle_path) and os.access(bundle_path, os.X_OK):
+                print(f"🔍 使用 exiftool_bundle 版本: {bundle_path}")
+                return bundle_path
+            
+            # 优先级2: 项目根目录的 exiftool
+            root_path = os.path.join(project_root, 'exiftool')
+            if os.path.exists(root_path) and os.access(root_path, os.X_OK):
+                print(f"🔍 使用根目录版本: {root_path}")
+                return root_path
+            
+            # 优先级3: 尝试系统路径中的 exiftool
+            import shutil
+            system_exiftool = shutil.which('exiftool')
+            if system_exiftool:
+                print(f"🔍 使用系统路径版本: {system_exiftool}")
+                return system_exiftool
+            
+            # 如果都找不到，返回 bundle 路径（让验证函数给出更详细的错误）
+            print(f"⚠️  未找到 exiftool，将尝试: {bundle_path}")
+            return bundle_path
 
     def _verify_exiftool(self) -> bool:
         """验证exiftool是否可用"""
         print(f"\n🧪 验证 ExifTool 是否可执行...")
         print(f"   路径: {self.exiftool_path}")
+        print(f"   存在: {os.path.exists(self.exiftool_path)}")
+        if os.path.exists(self.exiftool_path):
+            print(f"   可执行: {os.access(self.exiftool_path, os.X_OK)}")
         print(f"   测试命令: {self.exiftool_path} -ver")
 
+        # 首先检查文件是否存在
+        if not os.path.exists(self.exiftool_path):
+            print(f"   ❌ ExifTool 文件不存在")
+            return False
+        
+        # 检查是否可执行
+        if not os.access(self.exiftool_path, os.X_OK):
+            print(f"   ⚠️  ExifTool 文件不可执行，尝试添加执行权限...")
+            try:
+                os.chmod(self.exiftool_path, 0o755)
+                print(f"   ✅ 已添加执行权限")
+            except Exception as e:
+                print(f"   ❌ 无法添加执行权限: {e}")
+                return False
+
         try:
+            # 对于 exiftool_bundle 中的 exiftool，需要设置 PERL5LIB 环境变量
+            env = os.environ.copy()
+            if 'exiftool_bundle' in self.exiftool_path:
+                bundle_dir = os.path.dirname(self.exiftool_path)
+                lib_dir = os.path.join(bundle_dir, 'lib')
+                if os.path.exists(lib_dir):
+                    perl_lib = env.get('PERL5LIB', '')
+                    if perl_lib:
+                        env['PERL5LIB'] = f"{lib_dir}:{perl_lib}"
+                    else:
+                        env['PERL5LIB'] = lib_dir
+                    print(f"   设置 PERL5LIB: {env['PERL5LIB']}")
+            
             result = subprocess.run(
                 [self.exiftool_path, '-ver'],
                 capture_output=True,
                 text=True,
-                timeout=5
+                timeout=5,
+                env=env
             )
             print(f"   返回码: {result.returncode}")
             print(f"   stdout: {result.stdout.strip()}")
@@ -75,6 +131,8 @@ class ExifToolManager:
 
             if result.returncode == 0:
                 print(f"   ✅ ExifTool 验证成功")
+                # 保存环境变量供后续使用
+                self._exiftool_env = env
                 return True
             else:
                 print(f"   ❌ ExifTool 返回非零退出码")
@@ -85,6 +143,8 @@ class ExifToolManager:
             return False
         except Exception as e:
             print(f"   ❌ ExifTool 验证异常: {type(e).__name__}: {e}")
+            import traceback
+            print(f"   详细错误: {traceback.format_exc()}")
             return False
 
     def set_rating_and_pick(
@@ -141,7 +201,8 @@ class ExifToolManager:
                 cmd,
                 capture_output=True,
                 text=True,
-                timeout=30
+                timeout=30,
+                env=self._exiftool_env
             )
 
             if result.returncode == 0:
@@ -385,7 +446,8 @@ class ExifToolManager:
                 cmd,
                 capture_output=True,
                 text=True,
-                timeout=30
+                timeout=30,
+                env=self._exiftool_env
             )
 
             if result.returncode == 0:

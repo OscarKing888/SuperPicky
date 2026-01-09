@@ -14,31 +14,54 @@ os.environ['YOLO_VERBOSE'] = 'False'
 
 
 def load_yolo_model():
-    """加载 YOLO 模型（启用MPS GPU加速）"""
+    """加载 YOLO 模型（自动启用 GPU 加速：MPS/CUDA）"""
+    from utils import get_best_device
+    
     model_path = config.ai.get_model_path()
     model = YOLO(str(model_path))
 
-    # 尝试使用 Apple MPS (Metal Performance Shaders) GPU 加速
+    # 自动检测并使用最佳 GPU 设备
     try:
         import torch
-        if torch.backends.mps.is_available():
-            print("✅ 检测到 Apple GPU (MPS)，启用硬件加速")
-            # YOLO模型会自动识别device参数
-            # 注意：不需要手动 model.to('mps')，YOLO会在推理时自动处理
+        device = get_best_device('auto')
+        
+        if device == 'mps':
+            if torch.backends.mps.is_available():
+                print("✅ 检测到 Apple GPU (MPS)，启用硬件加速")
+            else:
+                print("⚠️  MPS 不可用，使用 CPU 推理")
+                device = 'cpu'
+        elif device == 'cuda':
+            if torch.cuda.is_available():
+                gpu_name = torch.cuda.get_device_name(0) if torch.cuda.device_count() > 0 else "NVIDIA GPU"
+                print(f"✅ 检测到 {gpu_name} (CUDA)，启用硬件加速")
+            else:
+                print("⚠️  CUDA 不可用，使用 CPU 推理")
+                device = 'cpu'
         else:
-            print("⚠️  MPS不可用，使用CPU推理")
+            print("⚠️  使用 CPU 推理")
+        
+        # 保存设备信息供后续使用
+        model._device = device
+        
     except Exception as e:
         print(f"⚠️  GPU检测失败: {e}，使用CPU推理")
+        model._device = 'cpu'
 
     return model
 
 
 def preprocess_image(image_path, target_size=None):
     """预处理图像"""
+    from utils import read_image
+    
     if target_size is None:
         target_size = config.ai.TARGET_IMAGE_SIZE
     
-    img = cv2.imread(image_path)
+    img = read_image(image_path)
+    if img is None:
+        raise ValueError(f"无法读取图片: {image_path}")
+    
     h, w = img.shape[:2]
     scale = target_size / max(w, h)
     img = cv2.resize(img, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
@@ -53,9 +76,11 @@ _iqa_scorer = None
 
 def _get_iqa_scorer():
     """获取 IQA 评分器单例"""
+    from utils import get_best_device
     global _iqa_scorer
     if _iqa_scorer is None:
-        _iqa_scorer = get_iqa_scorer(device='mps')
+        device = get_best_device('auto')
+        _iqa_scorer = get_iqa_scorer(device=device)
     return _iqa_scorer
 
 
@@ -89,13 +114,56 @@ def detect_and_draw_birds(image_path, model, output_path, dir, ui_settings, i18n
     nima_score = None  # 美学评分
     # V3.2: 移除 BRISQUE（不再使用）
 
-    # 使用配置检查文件类型
-    if not config.is_jpg_file(image_path):
-        log_message("ERROR: not a jpg file", dir)
-        return None
-
+    # 检查文件是否存在
     if not os.path.exists(image_path):
         log_message(f"ERROR: in detect_and_draw_birds, {image_path} not found", dir)
+        return None
+
+    # 对于 HEIF/HEIC/HIF 文件，需要先转换为临时 JPG 文件
+    # 因为某些 AI 模型可能无法直接处理这些格式
+    temp_jpg_path = None
+    file_ext = os.path.splitext(image_path)[1].lower()
+    is_heif_format = file_ext in ['.heif', '.heic', '.hif']
+    
+    if is_heif_format:
+        try:
+            # 创建临时 JPG 文件
+            import tempfile
+            temp_dir = os.path.join(dir, '.superpicky', 'temp_jpg')
+            os.makedirs(temp_dir, exist_ok=True)
+            
+            file_basename = os.path.splitext(os.path.basename(image_path))[0]
+            temp_jpg_path = os.path.join(temp_dir, f"{file_basename}_temp.jpg")
+            
+            # 使用 PIL + pillow-heif 读取并转换为 JPG
+            try:
+                from pillow_heif import register_heif_opener
+                register_heif_opener()
+            except ImportError:
+                pass
+            
+            from PIL import Image
+            pil_image = Image.open(image_path).convert('RGB')
+            pil_image.save(temp_jpg_path, 'JPEG', quality=95)
+            
+            # 使用临时 JPG 文件进行后续处理（仅用于 AI 推理）
+            # 注意：原始文件路径（image_path 的原始值）不会被修改，
+            # 调用者传入的文件路径保持不变，EXIF 会写入原始文件
+            original_image_path = image_path  # 保存原始路径
+            image_path = temp_jpg_path  # 临时使用 JPG 进行 AI 推理
+            log_message(f"🔄 已转换 {file_ext.upper()} 为临时 JPG（仅用于 AI 推理，EXIF 将写入原始文件）", dir)
+        except Exception as e:
+            log_message(f"⚠️  HEIF 转换失败，尝试直接处理: {e}", dir)
+            # 如果转换失败，继续尝试直接处理
+    
+    # 使用配置检查文件类型（现在应该是 JPG 或已转换的临时文件）
+    if not config.is_jpg_file(image_path) and not is_heif_format:
+        log_message("ERROR: not a jpg file", dir)
+        if temp_jpg_path and os.path.exists(temp_jpg_path):
+            try:
+                os.remove(temp_jpg_path)
+            except:
+                pass
         return None
 
     # 记录总处理开始时间
@@ -111,17 +179,53 @@ def detect_and_draw_birds(image_path, model, output_path, dir, ui_settings, i18n
 
     # Step 2: YOLO推理
     step_start = time.time()
-    # 使用MPS设备进行推理（如果可用），失败时降级到CPU
+    # 自动选择最佳设备进行推理（MPS/CUDA/CPU）
+    from utils import get_best_device
+    
+    # 获取模型保存的设备，或自动选择
+    device = getattr(model, '_device', None) or get_best_device('auto')
+    
+    # 尝试使用首选设备
     try:
-        # 尝试使用MPS设备
-        results = model(image, device='mps')
-    except Exception as mps_error:
-        # MPS失败，降级到CPU
-        log_message(f"⚠️  MPS推理失败，降级到CPU: {mps_error}", dir)
-        try:
-            results = model(image, device='cpu')
-        except Exception as cpu_error:
-            log_message(f"❌ AI推理完全失败: {cpu_error}", dir)
+        results = model(image, device=device)
+    except Exception as device_error:
+        # 首选设备失败，尝试降级
+        log_message(f"⚠️  {device.upper()} 推理失败，尝试降级: {device_error}", dir)
+        
+        # 降级策略：MPS -> CUDA -> CPU
+        fallback_devices = []
+        if device == 'mps':
+            fallback_devices = ['cuda', 'cpu']
+        elif device == 'cuda':
+            fallback_devices = ['cpu']
+        else:
+            fallback_devices = []
+        
+        success = False
+        for fallback_device in fallback_devices:
+            try:
+                import torch
+                if fallback_device == 'cuda' and not torch.cuda.is_available():
+                    continue
+                if fallback_device == 'mps' and not torch.backends.mps.is_available():
+                    continue
+                    
+                log_message(f"🔄 尝试使用 {fallback_device.upper()} 设备...", dir)
+                results = model(image, device=fallback_device)
+                success = True
+                device = fallback_device
+                break
+            except Exception:
+                continue
+        
+        if not success:
+            # 所有设备都失败，使用 CPU 作为最后尝试
+            try:
+                log_message(f"🔄 最后尝试使用 CPU 设备...", dir)
+                results = model(image, device='cpu')
+                device = 'cpu'
+            except Exception as cpu_error:
+                log_message(f"❌ AI推理完全失败: {cpu_error}", dir)
             # 返回"无鸟"结果（V3.1）
             # V3.3: 使用英文列名
             data = {
@@ -136,6 +240,12 @@ def detect_and_draw_birds(image_path, model, output_path, dir, ui_settings, i18n
                 "rating": -1
             }
             write_to_csv(data, dir, False)
+            # 清理临时 JPG 文件（如果创建了）
+            if 'temp_jpg_path' in locals() and temp_jpg_path and os.path.exists(temp_jpg_path):
+                try:
+                    os.remove(temp_jpg_path)
+                except Exception:
+                    pass
             return found_bird, bird_result, 0.0, 0.0, None, None, None, None  # V3.7: 8 values including mask
 
     yolo_time = (time.time() - step_start) * 1000
@@ -318,4 +428,11 @@ def detect_and_draw_birds(image_path, model, output_path, dir, ui_settings, i18n
             # Mask processing failed, ignore
             pass
 
+    # 清理临时 JPG 文件（如果创建了）
+    if 'temp_jpg_path' in locals() and temp_jpg_path and os.path.exists(temp_jpg_path):
+        try:
+            os.remove(temp_jpg_path)
+        except Exception:
+            pass  # 忽略清理错误
+    
     return found_bird, bird_result, bird_confidence, bird_sharpness, nima_score, bird_bbox, img_dims, bird_mask

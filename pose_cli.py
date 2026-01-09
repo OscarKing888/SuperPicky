@@ -331,7 +331,7 @@ def cmd_detect(args):
     
     elif input_path.is_dir():
         # 批量处理目录
-        image_extensions = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.webp'}
+        image_extensions = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.webp', '.heif', '.heic', '.hif'}
         images = [f for f in input_path.iterdir() 
                   if f.suffix.lower() in image_extensions]
         
@@ -451,7 +451,7 @@ def cmd_benchmark(args):
     
     # 收集测试图片
     input_path = Path(args.input)
-    image_extensions = {'.jpg', '.jpeg', '.png', '.bmp'}
+    image_extensions = {'.jpg', '.jpeg', '.png', '.bmp', '.heif', '.heic', '.hif'}
     images = [f for f in input_path.iterdir() 
               if f.suffix.lower() in image_extensions][:args.num]
     

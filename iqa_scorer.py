@@ -121,10 +121,17 @@ class IQAScorer:
             return None
 
         try:
+            # 注册 pillow-heif（如果还没有注册）
+            try:
+                from pillow_heif import register_heif_opener
+                register_heif_opener()
+            except ImportError:
+                pass  # pillow-heif 可能已经注册或未安装
+            
             # 加载模型
             topiq_model = self._load_topiq()
 
-            # 加载图片
+            # 加载图片（支持 HEIF/HEIC）
             img = Image.open(image_path).convert('RGB')
             
             # 调整尺寸到 384x384 (TOPIQ 推荐尺寸，避免 MPS 兼容性问题)

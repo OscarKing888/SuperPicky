@@ -380,7 +380,8 @@ class PhotoProcessor:
             if use_keypoints and detected and bird_bbox is not None and img_dims is not None:
                 try:
                     import cv2
-                    orig_img = cv2.imread(filepath)  # 只读取一次!
+                    from utils import read_image
+                    orig_img = read_image(filepath)  # 只读取一次!（支持 HEIF/HEIC）
                     if orig_img is not None:
                         h_orig, w_orig = orig_img.shape[:2]
                         # 获取YOLO处理时的图像尺寸
@@ -472,10 +473,13 @@ class PhotoProcessor:
                 # 双眼可见，需要计算NIMA以进行星级判定
                 try:
                     from iqa_scorer import get_iqa_scorer
+                    from utils import get_best_device
                     import time as time_module
                     
                     step_start = time_module.time()
-                    scorer = get_iqa_scorer(device='mps')
+                    # 自动选择最佳设备（MPS/CUDA/CPU）
+                    device = get_best_device('auto')
+                    scorer = get_iqa_scorer(device=device)
                     
                     # V3.7: 使用全图而非裁剪图进行TOPIQ美学评分
                     # 全图评分 + 头部锐度阈值 是更好的组合：
@@ -651,7 +655,9 @@ class PhotoProcessor:
             # 记录统计
             self._update_stats(rating_value, is_flying, has_exposure_issue)
             
-            # V3.4: 确定要处理的目标文件（RAW 优先，没有则用 JPEG）
+            # V3.4: 确定要处理的目标文件（RAW 优先，没有则用 JPEG/HEIF）
+            # 注意：对于 HEIF/HEIC/HIF 文件，虽然 AI 推理时使用了临时 JPG，
+            # 但 EXIF 元数据会写入原始文件（filepath 始终指向原始文件）
             target_file_path = None
             target_extension = None
             
@@ -725,8 +731,9 @@ class PhotoProcessor:
                     }]
                     exiftool_mgr.batch_set_metadata(single_batch)
             else:
-                # V3.4: 纯 JPEG 文件（没有对应 RAW）
-                target_file_path = filepath  # 使用当前处理的 JPEG 路径
+                # V3.4: 纯 JPEG/HEIF 文件（没有对应 RAW）
+                # 注意：filepath 始终是原始文件路径（如 .hif），即使 AI 推理时使用了临时 JPG
+                target_file_path = filepath  # 使用原始文件路径（HIF/HEIF/HEIC/JPG）
                 target_extension = os.path.splitext(filename)[1]
             
             # V3.4: 以下操作对 RAW 和纯 JPEG 都执行
@@ -1065,8 +1072,8 @@ class PhotoProcessor:
                             'folder': folder
                         })
                 else:
-                    # V3.4: 纯 JPEG 文件
-                    for jpg_ext in ['.jpg', '.jpeg', '.JPG', '.JPEG']:
+                    # V3.4: 纯 JPEG/HEIF 文件（包括 HEIF/HEIC）
+                    for jpg_ext in ['.jpg', '.jpeg', '.heif', '.heic', '.hif', '.JPG', '.JPEG', '.HEIF', '.heic', '.hif']:
                         jpg_path = os.path.join(self.dir_path, prefix + jpg_ext)
                         if os.path.exists(jpg_path):
                             folder = RATING_FOLDER_NAMES.get(rating, "0星_放弃")

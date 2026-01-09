@@ -26,7 +26,7 @@ class FileConfig:
             self.RAW_EXTENSIONS = ['.nef', '.cr2', '.cr3', '.arw', '.raf', 
                                  '.orf', '.rw2', '.pef', '.dng', '.3fr', '.iiq']
         if self.JPG_EXTENSIONS is None:
-            self.JPG_EXTENSIONS = ['.jpg', '.jpeg']
+            self.JPG_EXTENSIONS = ['.jpg', '.jpeg', '.heif', '.heic', '.hif']
 
 
 @dataclass 

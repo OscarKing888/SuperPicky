@@ -341,7 +341,10 @@ class PoseDetector:
         Returns:
             输出图片路径
         """
-        img = cv2.imread(image_path)
+        from utils import read_image
+        img = read_image(image_path)
+        if img is None:
+            raise ValueError(f"无法读取图片: {image_path}")
         if img is None:
             raise ValueError(f"无法读取图片: {image_path}")
         

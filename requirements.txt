@@ -16,6 +16,12 @@ rawpy>=0.18.0
 imageio>=2.0.0
 numpy>=1.20.0
 Pillow>=9.0.0
+pillow-heif>=0.13.0
+
+# AI 模型依赖
+torch>=2.0.0
+torchvision>=0.15.0
+timm>=0.9.0
 
 # UI 框架 (PySide6 分支)
 PySide6>=6.6.0

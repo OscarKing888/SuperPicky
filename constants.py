@@ -21,7 +21,7 @@ RATING_FOLDER_NAMES = {
 RAW_EXTENSIONS = ['.nef', '.cr2', '.cr3', '.arw', '.raf', '.orf', '.rw2', '.pef', '.dng', '.3fr', '.iiq']
 
 # 支持的 JPG 文件扩展名（小写）
-JPG_EXTENSIONS = ['.jpg', '.jpeg']
+JPG_EXTENSIONS = ['.jpg', '.jpeg', '.heif', '.heic', '.hif']
 
 # 所有支持的图片扩展名（用于文件查找，包含大小写）
 IMAGE_EXTENSIONS = (

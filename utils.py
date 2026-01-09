@@ -4,6 +4,7 @@
 """
 import os
 import csv
+import numpy as np
 from datetime import datetime
 
 
@@ -87,3 +88,100 @@ def write_to_csv(data: dict, directory: str, header: bool = False):
                 writer.writerow(data)
     except Exception as e:
         log_message(f"Warning: Could not write to CSV file: {e}", directory)
+
+
+def get_best_device(preferred_device='auto'):
+    """
+    获取最佳计算设备（自动选择或使用首选设备）
+    
+    Args:
+        preferred_device: 首选设备 ('auto', 'mps', 'cuda', 'cpu')
+                         'auto' 会自动选择最佳可用设备
+        
+    Returns:
+        str: 设备名称 ('mps', 'cuda', 'cpu')
+    """
+    try:
+        import torch
+        
+        # 如果指定了设备，直接返回（如果可用）
+        if preferred_device == 'mps':
+            if torch.backends.mps.is_available():
+                return 'mps'
+            else:
+                # MPS 不可用，尝试其他设备
+                preferred_device = 'auto'
+        
+        if preferred_device == 'cuda':
+            if torch.cuda.is_available():
+                return 'cuda'
+            else:
+                # CUDA 不可用，尝试其他设备
+                preferred_device = 'auto'
+        
+        # 自动选择最佳设备（优先级：MPS > CUDA > CPU）
+        if preferred_device == 'auto':
+            # 1. 优先尝试 MPS (Apple GPU)
+            if torch.backends.mps.is_available():
+                return 'mps'
+            
+            # 2. 尝试 CUDA (NVIDIA GPU)
+            if torch.cuda.is_available():
+                return 'cuda'
+            
+            # 3. 默认使用 CPU
+            return 'cpu'
+        
+        # 如果指定了 CPU 或其他，直接返回
+        return preferred_device
+        
+    except ImportError:
+        # 如果没有安装 torch，返回 CPU
+        return 'cpu'
+    except Exception as e:
+        # 任何其他错误，返回 CPU
+        return 'cpu'
+
+
+def read_image(image_path):
+    """
+    读取图片文件，支持 JPG、PNG、HEIF、HEIC 等格式
+    
+    Args:
+        image_path: 图片文件路径
+        
+    Returns:
+        numpy.ndarray: BGR 格式的图像数组（OpenCV 格式），如果读取失败返回 None
+    """
+    import cv2
+    
+    # 检查文件扩展名
+    ext = os.path.splitext(image_path)[1].lower()
+    
+    # 对于 HEIF/HEIC 文件，使用 PIL + pillow-heif 读取
+    if ext in ['.heif', '.heic', '.hif']:
+        try:
+            # 注册 pillow-heif（如果还没有注册）
+            try:
+                from pillow_heif import register_heif_opener
+                register_heif_opener()
+            except ImportError:
+                pass  # pillow-heif 可能已经注册或未安装
+            
+            # 使用 PIL 读取 HEIF/HEIC
+            from PIL import Image
+            pil_image = Image.open(image_path).convert('RGB')
+            
+            # 转换为 numpy 数组（RGB）
+            img_array = np.array(pil_image)
+            
+            # 转换为 BGR（OpenCV 格式）
+            img_bgr = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
+            return img_bgr
+        except Exception as e:
+            # 如果读取失败，尝试用 OpenCV 读取（某些系统可能支持）
+            pass
+    
+    # 对于其他格式（JPG、PNG 等），使用 OpenCV 读取
+    img = cv2.imread(image_path)
+    return img

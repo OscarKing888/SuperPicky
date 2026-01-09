@@ -320,7 +320,7 @@ def cmd_info(args):
         folder_path = os.path.join(args.directory, folder)
         if os.path.exists(folder_path):
             count = len([f for f in os.listdir(folder_path) 
-                        if f.lower().endswith(('.nef', '.cr2', '.arw', '.jpg', '.jpeg'))])
+                        if f.lower().endswith(('.nef', '.cr2', '.arw', '.jpg', '.jpeg', '.heif', '.heic', '.hif'))])
             existing_folders.append((folder, count))
     
     if existing_folders:

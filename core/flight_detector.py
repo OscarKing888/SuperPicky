@@ -157,7 +157,12 @@ class FlightDetector:
         
         # 处理不同输入类型
         if isinstance(image, str):
-            # 文件路径
+            # 文件路径（支持 HEIF/HEIC）
+            try:
+                from pillow_heif import register_heif_opener
+                register_heif_opener()
+            except ImportError:
+                pass  # pillow-heif 可能已经注册或未安装
             pil_image = Image.open(image).convert('RGB')
         elif isinstance(image, np.ndarray):
             # numpy 数组（假设是 BGR，需要转换）
@@ -216,6 +221,12 @@ class FlightDetector:
             
             for img in batch:
                 if isinstance(img, str):
+                    # 支持 HEIF/HEIC
+                    try:
+                        from pillow_heif import register_heif_opener
+                        register_heif_opener()
+                    except ImportError:
+                        pass  # pillow-heif 可能已经注册或未安装
                     pil_image = Image.open(img).convert('RGB')
                 elif isinstance(img, np.ndarray):
                     import cv2
