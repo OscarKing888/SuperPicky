@@ -429,16 +429,8 @@ class BurstDetector:
             
             for i, photo in enumerate(group.photos):
                 if i == group.best_index:
-                    # 最佳照片：保留原位，设紫色标签
-                    if exiftool_mgr:
-                        try:
-                            exiftool_mgr.batch_set_metadata([{
-                                'file': photo.filepath,
-                                'label': 'Purple'
-                            }])
-                            stats['best_marked'] += 1
-                        except Exception as e:
-                            print(f"⚠️ 设置紫色标签失败: {e}")
+                    # 最佳照片：保留原位（V4.1: 不再设置紫色标签，避免覆盖飞鸟/对焦标签）
+                    stats['best_marked'] += 1
                 else:
                     # 非最佳：移入子目录
                     try:

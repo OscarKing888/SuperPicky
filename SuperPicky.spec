@@ -24,7 +24,7 @@ ultralytics_datas = collect_data_files('ultralytics')
 # 组合所有数据文件 (V3.7: 添加 TOPIQ 权重)
 all_datas = [
     # AI模型文件
-    (os.path.join(base_path, 'models/yolo11m-seg.pt'), 'models'),
+    (os.path.join(base_path, 'models/yolo11l-seg.pt'), 'models'),
     # V3.5: 鸟类关键点检测模型
     (os.path.join(base_path, 'models/cub200_keypoint_resnet50.pth'), 'models'),
     # V3.5: 飞行姿态检测模型

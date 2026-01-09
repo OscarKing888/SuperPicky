@@ -27,7 +27,7 @@ from ultralytics import YOLO
 
 # 配置
 MODEL_PATH = "models/cub200_keypoint_resnet50.pth"
-YOLO_MODEL_PATH = "models/yolo11m-seg.pt"
+YOLO_MODEL_PATH = "models/yolo11l-seg.pt"
 IMG_SIZE = 416
 VISIBILITY_THRESHOLD = 0.5  # 可见性阈值
 
