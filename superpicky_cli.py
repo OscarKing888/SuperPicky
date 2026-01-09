@@ -289,6 +289,27 @@ def cmd_reset(args):
     i18n = get_i18n('zh_CN')
     success = reset(args.directory, i18n=i18n)
     
+    # V3.9: 删除空的评分目录
+    print("\n🗑️  步骤3: 清理空目录...")
+    deleted_dirs = 0
+    for rating_dir in rating_dirs:
+        rating_path = os.path.join(args.directory, rating_dir)
+        if os.path.exists(rating_path) and os.path.isdir(rating_path):
+            # 检查是否为空（或只包含隐藏文件/目录）
+            contents = [f for f in os.listdir(rating_path) if not f.startswith('.')]
+            if len(contents) == 0:
+                try:
+                    shutil.rmtree(rating_path)
+                    print(f"  🗑️ 已删除空目录: {rating_dir}")
+                    deleted_dirs += 1
+                except Exception as e:
+                    print(f"  ⚠️ 删除目录失败: {rating_dir}: {e}")
+    
+    if deleted_dirs > 0:
+        print(f"  ✅ 已清理 {deleted_dirs} 个空评分目录")
+    else:
+        print("  ℹ️  无空目录需要清理")
+    
     if success:
         print("\n✅ 目录重置完成!")
         return 0

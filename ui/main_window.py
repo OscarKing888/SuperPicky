@@ -983,6 +983,27 @@ class SuperPickyMainWindow(QMainWindow):
 
                 emit_log("\n" + i18n.t("logs.reset_step2"))
                 success = reset(directory_path, log_callback=emit_log, i18n=i18n)
+                
+                # V3.9: 删除空的评分目录
+                emit_log("\n步骤3: 清理空目录...")
+                deleted_dirs = 0
+                for rating_dir in rating_dirs:
+                    rating_path = os.path.join(directory_path, rating_dir)
+                    if os.path.exists(rating_path) and os.path.isdir(rating_path):
+                        # 检查是否为空（或只包含隐藏文件/目录）
+                        contents = [f for f in os.listdir(rating_path) if not f.startswith('.')]
+                        if len(contents) == 0:
+                            try:
+                                shutil.rmtree(rating_path)
+                                emit_log(f"  🗑️ 已删除空目录: {rating_dir}")
+                                deleted_dirs += 1
+                            except Exception as e:
+                                emit_log(f"  ⚠️ 删除目录失败: {rating_dir}: {e}")
+                
+                if deleted_dirs > 0:
+                    emit_log(f"  ✅ 已清理 {deleted_dirs} 个空评分目录")
+                else:
+                    emit_log("  ℹ️ 无空目录需要清理")
 
                 emit_log("\n" + i18n.t("logs.reset_complete"))
                 complete_signal.emit(success, restore_stats, exif_stats)
