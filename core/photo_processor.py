@@ -870,10 +870,10 @@ class PhotoProcessor:
         # V3.8: 曝光问题标识（已在reason中显示"欠曝/过曝"，故不再单独显示标签）
         # exposure_tag = "【曝光】" if has_exposure_issue else ""
         
-        # V3.9: 对焦状态标识（显示全部四个状态：精焦/合焦/失焦/脱焦）
-        focus_tag = ""
-        if focus_status:
-            focus_tag = f"【{focus_status}】"
+        # V3.9: 对焦状态标识（已在reason中显示"精焦/合焦/失焦/脱焦"，故不再单独显示标签）
+        # focus_tag = ""
+        # if focus_status:
+        #     focus_tag = f"【{focus_status}】"
         
         # 简化原因显示（V3.9: 增加到35字符避免截断）
         reason_short = reason if len(reason) < 35 else reason[:32] + "..."
@@ -884,8 +884,8 @@ class PhotoProcessor:
         else:
             time_text = f"{time_ms:.0f}ms"
         
-        # 输出简化格式（移除了exposure_tag，因为reason中已有欠曝/过曝信息）
-        self._log(f"[{index:03d}/{total}] {filename} | {star_text} ({reason_short}) {flight_tag}{focus_tag}| {time_text}")
+        # 输出简化格式（对焦状态已在reason中显示）
+        self._log(f"[{index:03d}/{total}] {filename} | {star_text} ({reason_short}) {flight_tag}| {time_text}")
     
     def _save_debug_crop(
         self,
