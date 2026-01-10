@@ -489,10 +489,15 @@ class PhotoProcessor:
             regular_files = [f for f in files_tbr if f not in [hf[0] for hf in heif_files]]
             
             # 创建统一的AI处理队列（HEIF转换输出和常规文件都进入此队列）
-            shared_ai_queue = JobQueue()
+            device_configs = builder.device_mgr.get_all_configs()
+            total_inference_workers = sum(cfg['max_workers'] for cfg in device_configs)
+            queue_maxsize = max(8, total_inference_workers * 2)
+            shared_ai_queue = JobQueue(maxsize=queue_maxsize)
             
             # 构建并启动流水线
             pipelines = []
+            heif_pipeline = None
+            ai_pipeline = None
             
             # 1. HEIF转换阶段（如果有HEIF文件）
             # 转换完成后立即将结果放入shared_ai_queue，实现流式处理
@@ -523,6 +528,8 @@ class PhotoProcessor:
             self._log("⏳ 等待流水线处理完成...")
             import time
             last_progress_log = time.time()
+            last_adjust_time = time.time()
+            cpu_threads = builder.device_mgr.get_device_config('cpu')['max_workers']
             
             for pipeline in pipelines:
                 # 轮询等待，允许中断检查
@@ -559,6 +566,15 @@ class PhotoProcessor:
                                 self._log(f"  [{stage.name}] 已处理: {processed}, 失败: {failed}, "
                                         f"队列: {queue_stats.get('total_put', 0)}/{queue_stats.get('total_done', 0)}")
                         last_progress_log = current_time
+                    
+                    if current_time - last_adjust_time >= 10.0:
+                        self._adjust_pipeline_workers(
+                            heif_pipeline=heif_pipeline,
+                            ai_pipeline=ai_pipeline,
+                            shared_ai_queue=shared_ai_queue,
+                            cpu_threads=cpu_threads
+                        )
+                        last_adjust_time = current_time
                     
                     if all_done:
                         break
@@ -683,6 +699,70 @@ class PhotoProcessor:
                     self.star2_reasons[file_prefix] = 'both'
         
         # 更新CSV（在EXIF写入阶段已经处理，这里可以跳过）
+
+    def _adjust_pipeline_workers(
+        self,
+        heif_pipeline,
+        ai_pipeline,
+        shared_ai_queue,
+        cpu_threads: int
+    ):
+        if not heif_pipeline or not ai_pipeline or cpu_threads <= 1:
+            return
+        
+        heif_stage = next((stage for stage in heif_pipeline.stages if stage.name.startswith("HEIF")), None)
+        cpu_stage = next(
+            (stage for stage in ai_pipeline.stages if getattr(stage, 'device', '').lower() == 'cpu'
+             and stage.name.startswith("AI处理")),
+            None
+        )
+        
+        if not heif_stage or not cpu_stage:
+            return
+        
+        heif_stats = heif_stage.get_stats()
+        cpu_stats = cpu_stage.get_stats()
+        if heif_stats.get('processed', 0) < 4 or cpu_stats.get('processed', 0) < 4:
+            return
+        
+        conversion_avg = heif_stats.get('avg_time', 0.0)
+        inference_avg = cpu_stats.get('avg_time', 0.0)
+        conversion_backlog = heif_stage.input_queue.qsize() if heif_stage.input_queue else 0
+        inference_backlog = shared_ai_queue.qsize() if shared_ai_queue else 0
+        
+        current_conv = heif_stage.max_workers
+        current_infer = cpu_stage.max_workers
+        target_conv = current_conv
+        
+        if conversion_avg > 0 and inference_avg > 0:
+            if conversion_avg > inference_avg * 1.2:
+                target_conv += 2
+            elif inference_avg > conversion_avg * 1.2:
+                target_conv -= 2
+        
+        if conversion_backlog > 0 and inference_backlog == 0:
+            target_conv += 2
+        if inference_backlog > max(4, conversion_backlog * 2):
+            target_conv -= 2
+        
+        min_conv = 1
+        max_conv = max(1, cpu_threads - 1)
+        target_conv = max(min_conv, min(max_conv, target_conv))
+        target_infer = cpu_threads - target_conv
+        
+        if abs(target_conv - current_conv) < 2 and abs(target_infer - current_infer) < 2:
+            return
+        
+        heif_stage.max_workers = target_conv
+        cpu_stage.max_workers = target_infer
+        heif_stage.stop()
+        cpu_stage.stop()
+        heif_stage.start()
+        cpu_stage.start()
+        self._log(
+            f"⚙️  动态调整线程: HEIF转换 {current_conv}→{target_conv}, "
+            f"CPU推理 {current_infer}→{target_infer}"
+        )
     
     def _process_images(self, files_tbr, raw_dict):
         """处理所有图片 - AI检测、关键点检测与评分"""
