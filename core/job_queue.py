@@ -212,6 +212,11 @@ class PipelineStage(ABC):
             try:
                 job.start()
                 result = self.process_job(job)
+                if isinstance(result, dict):
+                    if isinstance(job.data, dict):
+                        job.data = {**job.data, **result}
+                    else:
+                        job.data = result
                 job.complete(result)
                 
                 # 如果有输出队列，将结果传递给下一阶段
@@ -444,4 +449,3 @@ class DeviceManager:
     
     def __repr__(self) -> str:
         return f"DeviceManager(active={self.active_devices}, use_all={self.use_all_devices})"
-
