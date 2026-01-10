@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<project version="4">
-  <component name="JavaScriptLibraryMappings">
-    <excludedPredefinedLibrary name="SuperPicky_SandBox/dist/dmg_temp/Applications/Utilities/Adobe Creative Cloud Experience/CCXProcess/CCXProcess.app/Contents/js/node_modules" />
-    <excludedPredefinedLibrary name="SuperPicky_SandBox/dist/dmg_temp/Applications/Wave.app/Contents/Resources/tsunamiscaffold/nm/lightningcss/node_modules" />
-  </component>
-</project>

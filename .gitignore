@@ -72,3 +72,10 @@ package_unsigned.sh
 .agent/
 .claude/
 
+
+# IDE 配置
+.idea/
+
+# 用户配置文件
+advanced_config.json
+
