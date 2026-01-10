@@ -105,14 +105,11 @@ class PipelineBuilder:
         cpu_threads = self.device_mgr.get_device_config('cpu')['max_workers']
         min_workers = min(4, cpu_threads)
         max_workers = min(cpu_threads, max(min_workers, multiprocessing.cpu_count() // 2))
-        if max_workers_override is not None:
-            conversion_workers = max(1, max_workers_override)
-        else:
-            conversion_workers = self._calculate_conversion_workers(
-                total_inference_workers,
-                min_workers=min_workers,
-                max_workers=max_workers
-            )
+        conversion_workers = self._calculate_conversion_workers(
+            total_inference_workers,
+            min_workers=min_workers,
+            max_workers=max_workers
+        )
         
         # 创建HEIF转换阶段，输出直接进入统一的AI队列
         heif_stage = HEIFConversionStage(
@@ -236,8 +233,6 @@ class PipelineBuilder:
             max_workers = device_config['max_workers']
             if device == 'cpu':
                 has_cpu_stage = True
-                if cpu_max_workers_override is not None:
-                    max_workers = max(1, cpu_max_workers_override)
                 if preprocess_workers > max_workers:
                     max_workers = preprocess_workers
             

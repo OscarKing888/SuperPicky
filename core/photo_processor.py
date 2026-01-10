@@ -498,11 +498,6 @@ class PhotoProcessor:
             pipelines = []
             heif_pipeline = None
             ai_pipeline = None
-            cpu_threads = builder.device_mgr.get_device_config('cpu')['max_workers']
-            exif_workers = 2
-            cpu_budget = max(1, cpu_threads - exif_workers)
-            initial_conversion_workers = min(max(4, cpu_budget // 2), max(1, cpu_budget - 1))
-            initial_cpu_infer_workers = max(1, cpu_budget - initial_conversion_workers)
             
             # 1. HEIF转换阶段（如果有HEIF文件）
             # 转换完成后立即将结果放入shared_ai_queue，实现流式处理
@@ -585,8 +580,7 @@ class PhotoProcessor:
                             heif_pipeline=heif_pipeline,
                             ai_pipeline=ai_pipeline,
                             shared_ai_queue=shared_ai_queue,
-                            cpu_threads=cpu_threads,
-                            reserved_cpu=exif_workers
+                            cpu_threads=cpu_threads
                         )
                         last_adjust_time = current_time
                     
@@ -719,8 +713,7 @@ class PhotoProcessor:
         heif_pipeline,
         ai_pipeline,
         shared_ai_queue,
-        cpu_threads: int,
-        reserved_cpu: int = 0
+        cpu_threads: int
     ):
         if not heif_pipeline or not ai_pipeline or cpu_threads <= 1:
             return
@@ -760,11 +753,10 @@ class PhotoProcessor:
         if inference_backlog > max(4, conversion_backlog * 2):
             target_conv -= 2
         
-        available_cpu = max(1, cpu_threads - reserved_cpu)
         min_conv = 1
-        max_conv = max(1, available_cpu - 1)
+        max_conv = max(1, cpu_threads - 1)
         target_conv = max(min_conv, min(max_conv, target_conv))
-        target_infer = max(1, available_cpu - target_conv)
+        target_infer = cpu_threads - target_conv
         
         if abs(target_conv - current_conv) < 2 and abs(target_infer - current_infer) < 2:
             return
