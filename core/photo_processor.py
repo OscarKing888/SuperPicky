@@ -489,7 +489,10 @@ class PhotoProcessor:
             regular_files = [f for f in files_tbr if f not in [hf[0] for hf in heif_files]]
             
             # 创建统一的AI处理队列（HEIF转换输出和常规文件都进入此队列）
-            shared_ai_queue = JobQueue()
+            device_configs = builder.device_mgr.get_all_configs()
+            total_inference_workers = sum(cfg['max_workers'] for cfg in device_configs)
+            queue_maxsize = max(8, total_inference_workers * 2)
+            shared_ai_queue = JobQueue(maxsize=queue_maxsize)
             
             # 构建并启动流水线
             pipelines = []
