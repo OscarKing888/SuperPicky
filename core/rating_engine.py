@@ -192,16 +192,16 @@ class RatingEngine:
             if adjusted_topiq is not None:
                 adjusted_topiq = adjusted_topiq * 1.1
         
-        # 设置对焦状态后缀
+        # 设置对焦状态后缀（精焦/合焦/失焦/脱焦）
         focus_suffix = ""
         if focus_sharpness_weight > 1.0:
-            focus_suffix = "，对焦头部"
+            focus_suffix = "，精焦"
         elif focus_sharpness_weight >= 1.0:
             pass  # 合焦在鸟身上，正常，不显示后缀
         elif focus_sharpness_weight >= 0.7:
-            focus_suffix = "，对焦偏移"
+            focus_suffix = "，失焦"
         else:  # 0.5
-            focus_suffix = "，对焦错误"
+            focus_suffix = "，脱焦"
         
         # 第五步：基础星级判定（锐度 >= 阈值 AND/OR TOPIQ >= 阈值）
         sharpness_ok = adjusted_sharpness >= self.sharpness_threshold

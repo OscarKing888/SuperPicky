@@ -645,13 +645,13 @@ class PhotoProcessor:
             focus_status_en = None  # 英文版本用于调试图（避免中文字体问题）
             if detected:  # 只有检测到鸟才计算对焦状态
                 if focus_sharpness_weight > 1.0:
-                    focus_status = "精准"
+                    focus_status = "精焦"
                     focus_status_en = "BEST"
                 elif focus_sharpness_weight >= 1.0:
                     focus_status = "合焦"
                     focus_status_en = "GOOD"
                 elif focus_sharpness_weight >= 0.7:
-                    focus_status = "偏移"
+                    focus_status = "失焦"
                     focus_status_en = "BAD"
                 elif focus_sharpness_weight < 0.7:
                     focus_status = "脱焦"
