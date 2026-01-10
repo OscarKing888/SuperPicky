@@ -82,7 +82,8 @@ class PipelineBuilder:
     def build_heif_conversion_stage(
         self,
         heif_files: List[tuple],
-        output_queue: JobQueue
+        output_queue: JobQueue,
+        max_workers_override: Optional[int] = None
     ) -> Pipeline:
         """
         构建HEIF转换阶段（仅转换，不包含AI处理）
@@ -192,7 +193,8 @@ class PipelineBuilder:
     def build_unified_ai_processing_pipeline(
         self,
         regular_files: List[str],
-        shared_ai_queue: JobQueue
+        shared_ai_queue: JobQueue,
+        cpu_max_workers_override: Optional[int] = None
     ) -> Pipeline:
         """
         构建统一的AI处理流水线

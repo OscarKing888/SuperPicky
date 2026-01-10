@@ -503,7 +503,11 @@ class PhotoProcessor:
             # 转换完成后立即将结果放入shared_ai_queue，实现流式处理
             if heif_files:
                 self._log(f"📦 构建HEIF转换阶段（{len(heif_files)}个文件，转换完成后立即进入推理队列）...")
-                heif_pipeline = builder.build_heif_conversion_stage(heif_files, shared_ai_queue)
+                heif_pipeline = builder.build_heif_conversion_stage(
+                    heif_files,
+                    shared_ai_queue,
+                    max_workers_override=initial_conversion_workers
+                )
                 heif_pipeline.start()
                 pipelines.append(heif_pipeline)
             
@@ -516,7 +520,11 @@ class PhotoProcessor:
                     self._pipeline_total_files = total_files
                     self._pipeline_processed_files = 0
                 self._log(f"📦 构建统一AI处理流水线（{total_files}个文件，HEIF转换完成后CPU可参与推理）...")
-                ai_pipeline = builder.build_unified_ai_processing_pipeline(regular_files, shared_ai_queue)
+                ai_pipeline = builder.build_unified_ai_processing_pipeline(
+                    regular_files,
+                    shared_ai_queue,
+                    cpu_max_workers_override=initial_cpu_infer_workers
+                )
                 ai_pipeline.start()
                 pipelines.append(ai_pipeline)
             
