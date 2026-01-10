@@ -12,7 +12,7 @@
 # 核心依赖
 ultralytics>=8.0.0
 opencv-python>=4.0.0
-rawpy>=0.18.0
+# rawpy>=0.18.0  # 注意：rawpy仅支持Python <=3.11，Python 3.12+需要从源码编译或使用替代方案
 imageio>=2.0.0
 numpy>=1.20.0
 Pillow>=9.0.0

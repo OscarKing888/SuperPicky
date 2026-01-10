@@ -1,12 +1,39 @@
 import os
-import rawpy
 import imageio
 from utils import log_message
 from exiftool_manager import get_exiftool_manager
 import glob
 import shutil
 
+# 尝试导入rawpy，如果失败则使用降级方案
+try:
+    import rawpy
+    RAWPY_AVAILABLE = True
+except ImportError as e:
+    RAWPY_AVAILABLE = False
+    RAWPY_ERROR = str(e)
+    # 延迟导入错误提示，只在实际使用时显示
+
 def raw_to_jpeg(raw_file_path):
+    """
+    将RAW文件转换为JPEG
+    
+    如果rawpy不可用，会显示错误信息并返回False
+    """
+    # 检查rawpy是否可用
+    if not RAWPY_AVAILABLE:
+        filename = os.path.basename(raw_file_path)
+        directory_path = os.path.dirname(raw_file_path)
+        error_msg = (
+            f"❌ RAW转换失败: rawpy模块不可用\n"
+            f"   错误: {RAWPY_ERROR}\n"
+            f"   文件: {filename}\n"
+            f"   解决方案: 请运行 fix_rawpy.bat 修复rawpy安装\n"
+            f"   或者降级到 Python 3.12/3.13 并重新安装依赖"
+        )
+        log_message(error_msg, directory_path)
+        return False
+    
     filename = os.path.basename(raw_file_path)
     file_prefix, _ = os.path.splitext(filename)
     directory_path = raw_file_path[:-len(filename)]

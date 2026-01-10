@@ -66,6 +66,7 @@ class WorkerSignals(QObject):
     log = Signal(str, str)  # message, tag
     finished = Signal(dict)
     error = Signal(str)
+    processor_created = Signal(object)  # processor实例信号
 
 
 class WorkerThread(threading.Thread):
@@ -182,6 +183,10 @@ class WorkerThread(threading.Thread):
             callbacks=callbacks
         )
         
+        # 发送processor创建信号（供UI监控使用）
+        if hasattr(self.signals, 'processor_created'):
+            self.signals.processor_created.emit(processor)
+        
         # 检查是否已取消
         if self._stop_event.is_set():
             self.signals.log.emit("⚠️  处理已取消", "warning")
@@ -252,7 +257,7 @@ class SuperPickyMainWindow(QMainWindow):
         """设置窗口属性"""
         self.setWindowTitle(self.i18n.t("app.window_title"))
         self.setMinimumSize(720, 680)
-        self.resize(820, 760)
+        self.resize(820, 860)
 
         # 应用全局样式表
         self.setStyleSheet(GLOBAL_STYLE)
@@ -298,6 +303,10 @@ class SuperPickyMainWindow(QMainWindow):
         # 参数设置
         self._create_parameters_section(main_layout)
         main_layout.addSpacing(20)
+
+        # 流水线监控区域
+        self._create_pipeline_monitor_section(main_layout)
+        main_layout.addSpacing(12)
 
         # 日志区域
         self._create_log_section(main_layout)
@@ -536,7 +545,7 @@ class SuperPickyMainWindow(QMainWindow):
         import multiprocessing
         cpu_cores = multiprocessing.cpu_count()
         
-        cpu_threads_layout = QHBoxLayout()
+        cpu_threads_layout = device_layout #QHBoxLayout()
         cpu_threads_layout.setSpacing(10)
         
         cpu_threads_label = QLabel("CPU线程数:")
@@ -558,10 +567,10 @@ class SuperPickyMainWindow(QMainWindow):
         cpu_threads_layout.addWidget(cpu_threads_hint)
         
         cpu_threads_layout.addStretch()
-        advanced_options_layout.addLayout(cpu_threads_layout)
+        #advanced_options_layout.addLayout(cpu_threads_layout)
         
         # GPU并发数控制
-        gpu_concurrent_layout = QHBoxLayout()
+        gpu_concurrent_layout = device_layout #QHBoxLayout()
         gpu_concurrent_layout.setSpacing(10)
         
         gpu_concurrent_label = QLabel("GPU并发数:")
@@ -569,8 +578,8 @@ class SuperPickyMainWindow(QMainWindow):
         gpu_concurrent_layout.addWidget(gpu_concurrent_label)
         
         self.gpu_concurrent_spin = QSpinBox()
-        self.gpu_concurrent_spin.setRange(1, 8)  # 最多8个并发任务
-        self.gpu_concurrent_spin.setValue(1)  # 默认串行
+        self.gpu_concurrent_spin.setRange(1, 32)  # 最多32个并发任务
+        self.gpu_concurrent_spin.setValue(10)  # 默认串行
         self.gpu_concurrent_spin.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px; padding: 2px 8px;")
         gpu_concurrent_layout.addWidget(self.gpu_concurrent_spin)
         
@@ -579,7 +588,7 @@ class SuperPickyMainWindow(QMainWindow):
         gpu_concurrent_layout.addWidget(gpu_concurrent_hint)
         
         gpu_concurrent_layout.addStretch()
-        advanced_options_layout.addLayout(gpu_concurrent_layout)
+        #advanced_options_layout.addLayout(gpu_concurrent_layout)
         
         # 保留临时JPG选项
         keep_jpg_layout = QHBoxLayout()
@@ -590,7 +599,7 @@ class SuperPickyMainWindow(QMainWindow):
         keep_jpg_layout.addWidget(keep_jpg_label)
         
         self.keep_temp_jpg_check = QCheckBox()
-        self.keep_temp_jpg_check.setChecked(False)  # 默认不保留
+        self.keep_temp_jpg_check.setChecked(True)  # 默认保留
         keep_jpg_layout.addWidget(self.keep_temp_jpg_check)
         
         keep_jpg_layout.addStretch()
@@ -598,6 +607,31 @@ class SuperPickyMainWindow(QMainWindow):
         
         params_layout.addLayout(advanced_options_layout)
         parent_layout.addWidget(params_frame)
+
+    def _create_pipeline_monitor_section(self, parent_layout):
+        """创建流水线监控区域"""
+        from ui.pipeline_monitor import PipelineMonitorWidget
+        
+        self.pipeline_monitor = PipelineMonitorWidget(self)
+        parent_layout.addWidget(self.pipeline_monitor)
+        
+        # 创建定时器定期更新流水线状态
+        self.pipeline_update_timer = QTimer(self)
+        self.pipeline_update_timer.timeout.connect(self._update_pipeline_status)
+        self.pipeline_update_timer.start(200)  # 每200ms更新一次
+        
+        # 保存processor引用（用于获取状态）
+        self.current_processor = None
+    
+    def _update_pipeline_status(self):
+        """更新流水线状态"""
+        if hasattr(self, 'current_processor') and self.current_processor:
+            try:
+                status = self.current_processor.get_pipeline_status()
+                if hasattr(self, 'pipeline_monitor'):
+                    self.pipeline_monitor.update_pipeline_data(status)
+            except Exception:
+                pass  # 静默失败，不影响主流程
 
     def _create_log_section(self, parent_layout):
         """创建日志区域"""
@@ -851,6 +885,16 @@ class SuperPickyMainWindow(QMainWindow):
         self.progress_bar.setValue(0)
         self.progress_info_label.setText("")
         self.progress_percent_label.setText("")
+        
+        # 重置流水线监控
+        if hasattr(self, 'pipeline_monitor'):
+            self.current_processor = None
+            self.pipeline_monitor.update_pipeline_data({
+                'conversion': {'workers': 0, 'active_jobs': []},
+                'queue': {'size': 0, 'max_size': 100},
+                'inference_gpu': {'workers': 0, 'active_jobs': []},
+                'inference_cpu': {'workers': 0, 'active_jobs': []}
+            })
 
         self._update_status(self.i18n.t("labels.processing"), COLORS['warning'])
         self._log(self.i18n.t("logs.processing_start"))
@@ -888,6 +932,10 @@ class SuperPickyMainWindow(QMainWindow):
         self.worker_signals.log.connect(self._on_log)
         self.worker_signals.finished.connect(self._on_finished)
         self.worker_signals.error.connect(self._on_error)
+        
+        # 连接processor创建信号（如果存在）
+        if hasattr(self.worker_signals, 'processor_created'):
+            self.worker_signals.processor_created.connect(self._on_processor_created)
 
         # 禁用按钮，显示取消按钮
         self.start_btn.setEnabled(False)
@@ -905,6 +953,11 @@ class SuperPickyMainWindow(QMainWindow):
         )
         self.worker.start()
 
+    @Slot(object)
+    def _on_processor_created(self, processor):
+        """当processor创建时，保存引用用于监控"""
+        self.current_processor = processor
+    
     @Slot(int)
     def _on_progress(self, value):
         """进度更新"""
@@ -919,6 +972,8 @@ class SuperPickyMainWindow(QMainWindow):
     @Slot(dict)
     def _on_finished(self, stats):
         """处理完成"""
+        # 清空processor引用
+        self.current_processor = None
         # 恢复按钮状态
         self.start_btn.setEnabled(True)
         self.start_btn.setVisible(True)
@@ -952,6 +1007,8 @@ class SuperPickyMainWindow(QMainWindow):
     @Slot(str)
     def _on_error(self, error_msg):
         """处理错误"""
+        # 清空processor引用
+        self.current_processor = None
         self._log(f"Error: {error_msg}", "error")
         self._update_status("Error", COLORS['error'])
         self.start_btn.setEnabled(True)

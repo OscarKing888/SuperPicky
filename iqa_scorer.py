@@ -170,7 +170,11 @@ class IQAScorer:
             
             # 转为张量
             transform = T.ToTensor()
-            img_tensor = transform(img).unsqueeze(0).to(self.device)
+            img_tensor = transform(img).unsqueeze(0)
+            
+            # 确保模型和张量在同一设备上
+            model_device = next(topiq_model.parameters()).device
+            img_tensor = img_tensor.to(model_device)
 
             # 计算评分
             with torch.no_grad():

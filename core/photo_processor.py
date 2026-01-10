@@ -19,7 +19,7 @@ import shutil
 import numpy as np
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Dict, List, Optional, Callable, Tuple
+from typing import Dict, List, Optional, Callable, Tuple, Any
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -48,11 +48,12 @@ class ProcessingSettings:
     detect_flight: bool = True  # V3.4: 飞版检测开关
     detect_exposure: bool = False  # V3.8: 曝光检测开关（默认关闭）
     exposure_threshold: float = 0.10  # V3.8: 曝光阈值 (0.05-0.20)
-    device: str = 'auto'  # 计算设备选择: 'auto', 'cuda', 'cpu', 'mps'
-    stop_event: Optional[any] = None  # 停止事件（用于取消处理）
-    keep_temp_jpg: bool = False  # 是否保留临时转换的JPG文件
+    device: str = 'auto'  # 计算设备选择: 'auto', 'cuda', 'cpu', 'mps', 'all'
+    stop_event: Optional[Any] = None  # 停止事件（用于取消处理）
+    keep_temp_jpg: bool = True  # 是否保留临时转换的JPG文件
     cpu_threads: int = 0  # CPU推理线程数（0=自动，使用CPU逻辑核心数）
-    gpu_concurrent: int = 1  # GPU推理并发数（1=串行，>1=并发队列，需考虑显存）
+    gpu_concurrent: int = 10  # GPU推理并发数（1=串行，>1=并发队列，需考虑显存）
+    use_pipeline: bool = True  # 是否使用新的流水线框架（默认启用）
 
 
 @dataclass
@@ -156,16 +157,39 @@ class PhotoProcessor:
         # 线程安全锁（用于并行处理）
         import threading
         self._stats_lock = threading.Lock()
+        
+        # 流水线模式下的进度跟踪
+        self._pipeline_total_files = 0  # 总文件数
+        self._pipeline_processed_files = 0  # 已处理文件数
+        self._pipeline_progress_lock = threading.Lock()  # 进度锁
+        
+        # 流水线实例（用于UI监控）
+        self._pipelines = []  # 保存流水线实例列表
     
     def _log(self, msg: str, level: str = "info"):
         """内部日志方法"""
         if self.callbacks.log:
             self.callbacks.log(msg, level)
     
-    def _progress(self, percent: int):
-        """内部进度更新"""
+    def _progress(self, percent: int = -1):
+        """
+        内部进度更新
+        
+        Args:
+            percent: 进度百分比 (0-100)，-1 表示基于已处理文件数自动计算
+        """
         if self.callbacks.progress:
-            self.callbacks.progress(percent)
+            # 如果传递 -1，表示流水线模式下的进度更新（基于已处理文件数计算）
+            if percent == -1:
+                with self._pipeline_progress_lock:
+                    if self._pipeline_total_files > 0:
+                        # 基于已处理文件数计算进度
+                        calculated_percent = int((self._pipeline_processed_files / self._pipeline_total_files) * 100)
+                        calculated_percent = min(100, max(0, calculated_percent))  # 限制在 0-100
+                        self.callbacks.progress(calculated_percent)
+                    # 如果总文件数为0，不更新进度（避免除零错误）
+            else:
+                self.callbacks.progress(percent)
     
     def process(
         self,
@@ -193,13 +217,21 @@ class PhotoProcessor:
         if raw_files_to_convert:
             self._convert_raws(raw_files_to_convert, files_tbr)
         
-        # 阶段2.5: HEIF/HIF 并行转换（提前转换，最大化CPU利用）
-        heif_files_to_convert = self._identify_heif_to_convert(files_tbr)
-        if heif_files_to_convert:
-            self._convert_heif_files(heif_files_to_convert)
+        # 阶段2.5: HEIF/HIF 并行转换（仅非流水线模式）
+        # 流水线模式下，HEIF转换会在流水线中处理，转换一张立即进入推理队列
+        use_pipeline = getattr(self.settings, 'use_pipeline', True)  # 默认启用
+        if not use_pipeline:
+            # 非流水线模式：提前转换所有HEIF文件
+            heif_files_to_convert = self._identify_heif_to_convert(files_tbr)
+            if heif_files_to_convert:
+                self._convert_heif_files(heif_files_to_convert)
         
         # 阶段3: AI检测与评分
-        self._process_images(files_tbr, raw_dict)
+        # 使用新的流水线框架（如果启用）
+        if use_pipeline:
+            self._process_images_with_pipeline(files_tbr, raw_dict)
+        else:
+            self._process_images(files_tbr, raw_dict)
         
         # 阶段4: 精选旗标计算
         self._calculate_picked_flags()
@@ -350,6 +382,23 @@ class PhotoProcessor:
         def convert_single_heif(args):
             filename, heif_path = args
             try:
+                # 生成临时 JPG 路径
+                file_basename = os.path.splitext(filename)[0]
+                temp_jpg_path = os.path.join(temp_dir, f"{file_basename}_temp.jpg")
+                
+                # 检查临时JPG是否已存在，如果存在则直接使用，跳过转换
+                if os.path.exists(temp_jpg_path):
+                    # 验证文件是否有效（大小大于0）
+                    if os.path.getsize(temp_jpg_path) > 0:
+                        return (filename, True, temp_jpg_path, None)
+                    else:
+                        # 文件存在但大小为0，删除后重新转换
+                        try:
+                            os.remove(temp_jpg_path)
+                        except:
+                            pass
+                
+                # 临时JPG不存在或无效，执行转换
                 # 注册 pillow-heif
                 try:
                     from pillow_heif import register_heif_opener
@@ -361,10 +410,6 @@ class PhotoProcessor:
                 
                 # 读取并转换
                 pil_image = Image.open(heif_path).convert('RGB')
-                
-                # 生成临时 JPG 路径
-                file_basename = os.path.splitext(filename)[0]
-                temp_jpg_path = os.path.join(temp_dir, f"{file_basename}_temp.jpg")
                 
                 # 保存为 JPG
                 pil_image.save(temp_jpg_path, 'JPEG', quality=95)
@@ -382,20 +427,262 @@ class PhotoProcessor:
                 for args in heif_files_to_convert
             }
             converted_count = 0
+            reused_count = 0
             
             for future in as_completed(future_to_heif):
                 filename, success, temp_jpg_path, error = future.result()
                 if success:
                     self.heif_temp_map[filename] = temp_jpg_path
-                    converted_count += 1
-                    if converted_count % 10 == 0 or converted_count == len(heif_files_to_convert):
-                        self._log(f"  ✅ 已转换 {converted_count}/{len(heif_files_to_convert)} 张")
+                    # 检查是否是复用的文件（通过检查文件修改时间是否早于处理开始时间）
+                    if os.path.exists(temp_jpg_path):
+                        file_mtime = os.path.getmtime(temp_jpg_path)
+                        if file_mtime < heif_start:
+                            reused_count += 1
+                        else:
+                            converted_count += 1
+                    else:
+                        converted_count += 1
+                    
+                    total_processed = converted_count + reused_count
+                    if total_processed % 10 == 0 or total_processed == len(heif_files_to_convert):
+                        status_msg = f"  ✅ 已处理 {total_processed}/{len(heif_files_to_convert)} 张"
+                        if reused_count > 0:
+                            status_msg += f" (转换: {converted_count}, 复用: {reused_count})"
+                        self._log(status_msg)
                 else:
                     self._log(f"  ❌ 转换失败: {filename} ({error})", "error")
         
         heif_time = time.time() - heif_start
-        avg_time = heif_time / len(heif_files_to_convert) if len(heif_files_to_convert) > 0 else 0
-        self._log(f"⏱️  HEIF转换耗时: {heif_time:.1f}秒 (平均 {avg_time:.1f}秒/张)\n")
+        if converted_count > 0:
+            avg_time = heif_time / converted_count
+            if reused_count > 0:
+                self._log(f"⏱️  HEIF转换耗时: {heif_time:.1f}秒 (转换 {converted_count} 张, 平均 {avg_time:.1f}秒/张, 复用 {reused_count} 张)\n")
+            else:
+                self._log(f"⏱️  HEIF转换耗时: {heif_time:.1f}秒 (转换 {converted_count} 张, 平均 {avg_time:.1f}秒/张)\n")
+        else:
+            self._log(f"⏱️  HEIF处理耗时: {heif_time:.1f}秒 (全部复用现有文件, {reused_count} 张)\n")
+    
+    def _process_images_with_pipeline(self, files_tbr, raw_dict):
+        """
+        使用新的流水线框架处理图片
+        支持流水线式HEIF转换、多设备并行推理
+        优化：HEIF转换完成后立即进入推理队列，CPU转换完成后可参与推理
+        """
+        self._log("🚀 使用流水线框架处理图片...")
+        
+        try:
+            from core.pipeline_builder import PipelineBuilder
+            from core.job_queue import JobQueue
+            
+            # 创建构建器
+            builder = PipelineBuilder(
+                dir_path=self.dir_path,
+                settings=self.settings,
+                raw_dict=raw_dict,
+                log_callback=self._log,
+                progress_callback=self._progress,
+                stats_callback=self._handle_pipeline_stats
+            )
+            
+            # 识别HEIF文件
+            heif_files = self._identify_heif_to_convert(files_tbr)
+            regular_files = [f for f in files_tbr if f not in [hf[0] for hf in heif_files]]
+            
+            # 创建统一的AI处理队列（HEIF转换输出和常规文件都进入此队列）
+            shared_ai_queue = JobQueue()
+            
+            # 构建并启动流水线
+            pipelines = []
+            
+            # 1. HEIF转换阶段（如果有HEIF文件）
+            # 转换完成后立即将结果放入shared_ai_queue，实现流式处理
+            if heif_files:
+                self._log(f"📦 构建HEIF转换阶段（{len(heif_files)}个文件，转换完成后立即进入推理队列）...")
+                heif_pipeline = builder.build_heif_conversion_stage(heif_files, shared_ai_queue)
+                heif_pipeline.start()
+                pipelines.append(heif_pipeline)
+            
+            # 2. 统一的AI处理流水线（处理HEIF转换输出和常规文件）
+            # 所有设备共享同一个队列，CPU在转换完成后可以立即参与推理
+            if heif_files or regular_files:
+                total_files = len(heif_files) + len(regular_files)
+                # 保存总文件数用于进度计算
+                with self._pipeline_progress_lock:
+                    self._pipeline_total_files = total_files
+                    self._pipeline_processed_files = 0
+                self._log(f"📦 构建统一AI处理流水线（{total_files}个文件，HEIF转换完成后CPU可参与推理）...")
+                ai_pipeline = builder.build_unified_ai_processing_pipeline(regular_files, shared_ai_queue)
+                ai_pipeline.start()
+                pipelines.append(ai_pipeline)
+            
+            # 保存流水线实例供UI监控使用
+            self._pipelines = pipelines
+            self._shared_ai_queue = shared_ai_queue
+            
+            # 等待所有流水线完成（支持取消）
+            self._log("⏳ 等待流水线处理完成...")
+            import time
+            last_progress_log = time.time()
+            
+            for pipeline in pipelines:
+                # 轮询等待，允许中断检查
+                while True:
+                    # 检查是否已取消
+                    if self.stop_event and self.stop_event.is_set():
+                        self._log("⚠️  检测到取消信号，正在停止流水线...", "warning")
+                        break
+                    
+                    # 检查所有阶段是否已完成
+                    all_done = True
+                    for stage in pipeline.stages:
+                        if stage.input_queue:
+                            # 检查队列统计：所有任务都已放入且都已完成
+                            queue_stats = stage.input_queue.get_stats()
+                            total_put = queue_stats.get('total_put', 0)
+                            total_done = queue_stats.get('total_done', 0)
+                            
+                            # 如果队列不为空，或者还有任务在处理中（put > done），则未完成
+                            if not stage.input_queue.empty() or total_put > total_done:
+                                all_done = False
+                                break
+                    
+                    # 定期输出进度日志（每5秒）
+                    current_time = time.time()
+                    if current_time - last_progress_log >= 5.0:
+                        # 输出当前进度
+                        for stage in pipeline.stages:
+                            if stage.input_queue:
+                                queue_stats = stage.input_queue.get_stats()
+                                stage_stats = stage.get_stats()
+                                processed = stage_stats.get('processed', 0)
+                                failed = stage_stats.get('failed', 0)
+                                self._log(f"  [{stage.name}] 已处理: {processed}, 失败: {failed}, "
+                                        f"队列: {queue_stats.get('total_put', 0)}/{queue_stats.get('total_done', 0)}")
+                        last_progress_log = current_time
+                    
+                    if all_done:
+                        break
+                    
+                    time.sleep(0.1)  # 短暂等待，避免CPU占用过高
+                
+                # 如果已取消，跳出循环
+                if self.stop_event and self.stop_event.is_set():
+                    break
+            
+            # 等待所有队列完成（确保所有task_done都被调用）
+            self._log("⏳ 等待所有任务完成...")
+            for pipeline in pipelines:
+                for stage in pipeline.stages:
+                    if stage.input_queue:
+                        try:
+                            # 等待队列join完成（最多等待30秒）
+                            import queue
+                            start_wait = time.time()
+                            while not stage.input_queue.empty() or stage.input_queue.qsize() > 0:
+                                if time.time() - start_wait > 30:
+                                    self._log(f"⚠️  等待 {stage.name} 队列超时", "warning")
+                                    break
+                                time.sleep(0.1)
+                            # 尝试join，但设置超时
+                            stage.input_queue.join()
+                        except Exception as e:
+                            self._log(f"⚠️  等待 {stage.name} 队列时出错: {e}", "warning")
+            
+            # 同步HEIF转换映射（用于保留临时JPG功能）
+            # 从HEIF转换阶段获取heif_temp_map
+            if heif_files:
+                for stage in heif_pipeline.stages:
+                    if hasattr(stage, 'heif_temp_map'):
+                        # 同步映射到PhotoProcessor，供后续清理或保留使用
+                        self.heif_temp_map.update(stage.heif_temp_map)
+                        break
+            
+            # 停止所有流水线（无论是否完成）
+            for pipeline in pipelines:
+                pipeline.stop()
+            
+            # 清空流水线引用
+            self._pipelines = []
+            self._shared_ai_queue = None
+            
+            # 输出统计信息
+            self._log("\n📊 流水线统计:")
+            for pipeline in pipelines:
+                stats = pipeline.get_stats()
+                for stage_name, stage_stats in stats.items():
+                    self._log(f"  {stage_name}: 处理 {stage_stats.get('processed', 0)} 个任务, "
+                            f"失败 {stage_stats.get('failed', 0)} 个, "
+                            f"平均耗时 {stage_stats.get('avg_time', 0):.2f}秒")
+            
+            self._log("✅ 流水线处理完成")
+            
+        except Exception as e:
+            self._log(f"❌ 流水线处理失败: {e}", "error")
+            import traceback
+            self._log(traceback.format_exc(), "error")
+            # 降级到原有方法
+            self._log("⚠️  降级到原有处理方法", "warning")
+            self._process_images(files_tbr, raw_dict)
+    
+    def _handle_pipeline_stats(self, result: Dict[str, Any]):
+        """处理流水线统计回调"""
+        # 更新已处理文件数并计算进度
+        with self._pipeline_progress_lock:
+            self._pipeline_processed_files += 1
+            # 触发进度更新（传递 -1 表示自动计算）
+            if self._pipeline_processed_files % 5 == 0 or self._pipeline_processed_files == self._pipeline_total_files:
+                self._progress(-1)
+        
+        # 更新统计信息
+        rating_value = result.get('rating', 0)
+        is_flying = result.get('is_flying', False)
+        has_exposure_issue = result.get('is_overexposed', False) or result.get('is_underexposed', False)
+        
+        self._update_stats(rating_value, is_flying, has_exposure_issue)
+        
+        # 记录处理时间
+        processing_time = result.get('processing_time', 0) * 1000  # 转换为毫秒
+        filename = result.get('filename', '')
+        detected = result.get('detected', False)
+        
+        self.stats['photo_times'].append((filename, processing_time, detected))
+        if detected:
+            self.stats['with_bird_times'].append(processing_time)
+        else:
+            self.stats['no_bird_times'].append(processing_time)
+        
+        # 更新文件评分
+        file_prefix = result.get('file_prefix')
+        if file_prefix:
+            self.file_ratings[file_prefix] = rating_value
+            
+            # 收集3星照片
+            if rating_value == 3:
+                topiq = result.get('topiq')
+                head_sharpness = result.get('head_sharpness', 0)
+                if topiq is not None:
+                    filepath = result.get('filepath')
+                    if filepath:
+                        self.star_3_photos.append({
+                            'file': filepath,
+                            'nima': topiq,
+                            'sharpness': head_sharpness
+                        })
+            
+            # 记录2星原因
+            if rating_value == 2:
+                head_sharpness = result.get('head_sharpness', 0)
+                topiq = result.get('topiq')
+                sharpness_ok = head_sharpness >= self.settings.sharpness_threshold
+                topiq_ok = topiq is not None and topiq >= self.settings.nima_threshold
+                if sharpness_ok and not topiq_ok:
+                    self.star2_reasons[file_prefix] = 'sharpness'
+                elif topiq_ok and not sharpness_ok:
+                    self.star2_reasons[file_prefix] = 'nima'
+                else:
+                    self.star2_reasons[file_prefix] = 'both'
+        
+        # 更新CSV（在EXIF写入阶段已经处理，这里可以跳过）
     
     def _process_images(self, files_tbr, raw_dict):
         """处理所有图片 - AI检测、关键点检测与评分"""
@@ -1775,13 +2062,26 @@ class PhotoProcessor:
             # 删除 HEIF 转换的临时 JPG
             temp_dir = os.path.join(self.dir_path, '.superpicky', 'temp_jpg')
             if os.path.exists(temp_dir):
-                for temp_jpg_path in self.heif_temp_map.values():
-                    try:
-                        if os.path.exists(temp_jpg_path):
-                            os.remove(temp_jpg_path)
-                            deleted_count += 1
-                    except Exception as e:
-                        self._log(f"  ⚠️  删除失败 {os.path.basename(temp_jpg_path)}: {e}", "warning")
+                # 如果heif_temp_map为空（流水线框架可能未同步），扫描临时目录
+                if not self.heif_temp_map:
+                    for temp_file in os.listdir(temp_dir):
+                        if temp_file.endswith('_temp.jpg'):
+                            temp_jpg_path = os.path.join(temp_dir, temp_file)
+                            try:
+                                if os.path.exists(temp_jpg_path):
+                                    os.remove(temp_jpg_path)
+                                    deleted_count += 1
+                            except Exception as e:
+                                self._log(f"  ⚠️  删除失败 {temp_file}: {e}", "warning")
+                else:
+                    # 使用映射删除
+                    for temp_jpg_path in self.heif_temp_map.values():
+                        try:
+                            if os.path.exists(temp_jpg_path):
+                                os.remove(temp_jpg_path)
+                                deleted_count += 1
+                        except Exception as e:
+                            self._log(f"  ⚠️  删除失败 {os.path.basename(temp_jpg_path)}: {e}", "warning")
             
             if deleted_count > 0:
                 self._log(f"  ✅ 已删除 {deleted_count} 个临时JPG文件")
@@ -1796,11 +2096,28 @@ class PhotoProcessor:
         processed_count = 0
         
         # 处理 HEIF 转换的临时 JPG
+        # 如果heif_temp_map为空（流水线框架可能未同步），尝试从临时目录扫描
+        if not self.heif_temp_map:
+            temp_dir = os.path.join(self.dir_path, '.superpicky', 'temp_jpg')
+            if os.path.exists(temp_dir):
+                # 扫描临时目录，重建映射
+                for temp_file in os.listdir(temp_dir):
+                    if temp_file.endswith('_temp.jpg'):
+                        # 从文件名提取原始文件名（去掉_temp.jpg后缀）
+                        file_basename = temp_file[:-10]  # 去掉'_temp.jpg'
+                        # 尝试匹配原始HEIF文件名
+                        for filename in files_tbr:
+                            file_prefix, ext = os.path.splitext(filename)
+                            if file_prefix == file_basename and ext.lower() in ['.heif', '.heic', '.hif']:
+                                temp_jpg_path = os.path.join(temp_dir, temp_file)
+                                self.heif_temp_map[filename] = temp_jpg_path
+                                break
+        
         for original_filename, temp_jpg_path in self.heif_temp_map.items():
             if not os.path.exists(temp_jpg_path):
                 continue
             
-            # 获取原始文件的评分
+            # 获取原始文件的评分（从file_ratings中获取，不是从EXIF读取）
             file_prefix = os.path.splitext(original_filename)[0]
             rating = self.file_ratings.get(file_prefix, -1)
             
@@ -1812,8 +2129,6 @@ class PhotoProcessor:
                     pass
                 continue
             
-            # 获取原始文件的 EXIF 数据（如果有写入）
-            # 这里我们需要从原始文件读取评分信息，写入到 JPG
             try:
                 # 构建 JPG 文件名（去掉 _temp 后缀）
                 jpg_filename = file_prefix + ".jpg"
@@ -1835,21 +2150,38 @@ class PhotoProcessor:
                 original_file_path = os.path.join(self.dir_path, original_filename)
                 is_picked = original_file_path in self.picked_files
                 
-                # 写入 EXIF 元数据
+                # 尝试从原始HEIF文件读取EXIF数据（如果已写入）
+                # 如果读取失败，使用默认值
+                sharpness = None
+                nima_score = None
+                focus_status = None
+                caption = f"[SuperPicky] 从 {os.path.splitext(original_filename)[1]} 转换"
+                
+                try:
+                    # 尝试从原始文件读取EXIF（如果已写入）
+                    from exiftool_manager import ExifToolManager
+                    if os.path.exists(original_file_path):
+                        # 注意：这里只是尝试读取，如果失败就使用默认值
+                        # 实际EXIF数据应该在原始HEIF文件中
+                        pass
+                except:
+                    pass
+                
+                # 写入 EXIF 元数据到JPG文件
                 batch_data = [{
                     'file': final_jpg_path,
                     'rating': rating if rating >= 0 else 0,
                     'pick': 1 if is_picked else 0,
-                    'sharpness': None,  # JPG 文件可能没有锐度数据
-                    'nima_score': None,
+                    'sharpness': sharpness,  # 可能为None
+                    'nima_score': nima_score,  # 可能为None
                     'label': None,
-                    'focus_status': None,
-                    'caption': f"[SuperPicky] 从 {os.path.splitext(original_filename)[1]} 转换"
+                    'focus_status': focus_status,  # 可能为None
+                    'caption': caption
                 }]
                 
                 exiftool_mgr.batch_set_metadata(batch_data)
                 
-                # 移动到对应星级目录
+                # 移动到对应星级目录（按星级归档）
                 folder = RATING_FOLDER_NAMES.get(rating, "0星_放弃")
                 folder_path = os.path.join(self.dir_path, folder)
                 os.makedirs(folder_path, exist_ok=True)
@@ -1858,14 +2190,86 @@ class PhotoProcessor:
                 if not os.path.exists(dst_path):
                     shutil.move(final_jpg_path, dst_path)
                     processed_count += 1
+                    # 记录归档信息（可选，避免日志过多）
+                    # self._log(f"  📁 已归档到 {folder}/: {jpg_filename}")
                 else:
                     # 目标已存在，删除源文件
                     os.remove(final_jpg_path)
+                    self._log(f"  ⚠️  目标文件已存在，跳过: {folder}/{jpg_filename}", "warning")
                 
             except Exception as e:
                 self._log(f"  ⚠️  处理临时JPG失败 {original_filename}: {e}", "warning")
         
         if processed_count > 0:
-            self._log(f"  ✅ 已保留并处理 {processed_count} 个临时JPG文件")
+            self._log(f"  ✅ 已保留并归档 {processed_count} 个临时JPG文件到对应星级目录")
         else:
             self._log(f"  ℹ️  无临时JPG文件需保留")
+    
+    def get_pipeline_status(self):
+        """
+        获取流水线状态（供UI监控使用）
+        
+        Returns:
+            dict: 包含转换、队列、推理三个管线的状态
+        """
+        if not hasattr(self, '_pipelines') or not self._pipelines:
+            return {
+                'conversion': {'workers': 0, 'active_jobs': []},
+                'queue': {'size': 0, 'max_size': 100},
+                'inference_gpu': {'workers': 0, 'active_jobs': []},
+                'inference_cpu': {'workers': 0, 'active_jobs': []}
+            }
+        
+        status = {
+            'conversion': {'workers': 0, 'active_jobs': []},
+            'queue': {'size': 0, 'max_size': 100},
+            'inference_gpu': {'workers': 0, 'active_jobs': []},
+            'inference_cpu': {'workers': 0, 'active_jobs': []}
+        }
+        
+        # 遍历所有流水线，收集状态
+        for pipeline in self._pipelines:
+            for stage in pipeline.stages:
+                stage_name = stage.name.lower()
+                
+                # 检查是否是转换阶段
+                if 'heif' in stage_name or '转换' in stage_name:
+                    workers = stage.max_workers
+                    # 估算活跃任务数（基于队列统计）
+                    if stage.input_queue:
+                        queue_stats = stage.input_queue.get_stats()
+                        active_count = min(workers, max(0, queue_stats.get('total_put', 0) - queue_stats.get('total_done', 0)))
+                        active_jobs = [i < active_count for i in range(workers)]
+                    else:
+                        active_jobs = [False] * workers
+                    status['conversion']['workers'] = max(status['conversion']['workers'], workers)
+                    status['conversion']['active_jobs'] = active_jobs
+                
+                # 检查是否是推理阶段，区分GPU和CPU
+                elif 'ai处理' in stage_name or '推理' in stage_name or 'inference' in stage_name:
+                    workers = stage.max_workers
+                    device = stage.device.lower()
+                    # 估算活跃任务数
+                    if stage.input_queue:
+                        queue_stats = stage.input_queue.get_stats()
+                        active_count = min(workers, max(0, queue_stats.get('total_put', 0) - queue_stats.get('total_done', 0)))
+                        active_jobs = [i < active_count for i in range(workers)]
+                    else:
+                        active_jobs = [False] * workers
+                    
+                    # 根据设备类型分类
+                    if 'cuda' in device or 'gpu' in device or 'mps' in device:
+                        status['inference_gpu']['workers'] = max(status['inference_gpu']['workers'], workers)
+                        status['inference_gpu']['active_jobs'] = active_jobs
+                    else:  # CPU
+                        status['inference_cpu']['workers'] = max(status['inference_cpu']['workers'], workers)
+                        status['inference_cpu']['active_jobs'] = active_jobs
+        
+        # 获取共享队列大小
+        if hasattr(self, '_shared_ai_queue') and self._shared_ai_queue:
+            status['queue']['size'] = self._shared_ai_queue.qsize()
+            # 估算最大队列大小
+            queue_stats = self._shared_ai_queue.get_stats()
+            status['queue']['max_size'] = max(100, queue_stats.get('total_put', 0))
+        
+        return status
