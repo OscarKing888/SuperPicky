@@ -55,7 +55,13 @@ class PipelineBuilder:
             use_all_devices=(settings.device == 'all' if hasattr(settings, 'device') else False)
         )
     
-    def _calculate_conversion_workers(self, inference_workers: int, speed_ratio: float = 10.0) -> int:
+    def _calculate_conversion_workers(
+        self,
+        inference_workers: int,
+        speed_ratio: float = 10.0,
+        min_workers: int = 1,
+        max_workers: Optional[int] = None
+    ) -> int:
         """
         根据推理速度计算转换线程数
         
@@ -67,15 +73,17 @@ class PipelineBuilder:
             转换线程数
         """
         # 推理慢10倍，转换线程应该是推理线程的1/10，但至少1个
-        conversion_workers = max(1, int(inference_workers / speed_ratio))
+        conversion_workers = max(min_workers, int(inference_workers / speed_ratio))
         # 但也不要太多，避免占用过多CPU
-        max_conversion = min(4, multiprocessing.cpu_count() // 2)
-        return min(conversion_workers, max_conversion)
+        if max_workers is None:
+            max_workers = min(4, multiprocessing.cpu_count() // 2)
+        return min(conversion_workers, max_workers)
     
     def build_heif_conversion_stage(
         self,
         heif_files: List[tuple],
-        output_queue: JobQueue
+        output_queue: JobQueue,
+        max_workers_override: Optional[int] = None
     ) -> Pipeline:
         """
         构建HEIF转换阶段（仅转换，不包含AI处理）
@@ -91,10 +99,20 @@ class PipelineBuilder:
         # 创建输入队列
         heif_input_queue = JobQueue()
         
-        # 计算并发数
+        # 计算并发数（至少4个线程用于预处理，优先喂给推理队列）
         device_configs = self.device_mgr.get_all_configs()
         total_inference_workers = sum(cfg['max_workers'] for cfg in device_configs)
-        conversion_workers = self._calculate_conversion_workers(total_inference_workers)
+        cpu_threads = self.device_mgr.get_device_config('cpu')['max_workers']
+        min_workers = min(4, cpu_threads)
+        max_workers = min(cpu_threads, max(min_workers, multiprocessing.cpu_count() // 2))
+        if max_workers_override is not None:
+            conversion_workers = max(1, max_workers_override)
+        else:
+            conversion_workers = self._calculate_conversion_workers(
+                total_inference_workers,
+                min_workers=min_workers,
+                max_workers=max_workers
+            )
         
         # 创建HEIF转换阶段，输出直接进入统一的AI队列
         heif_stage = HEIFConversionStage(
@@ -121,7 +139,7 @@ class PipelineBuilder:
                 }
             )
             heif_input_queue.put(job)
-        
+
         return pipeline
     
     def build_raw_pipeline(
@@ -178,7 +196,8 @@ class PipelineBuilder:
     def build_unified_ai_processing_pipeline(
         self,
         regular_files: List[str],
-        shared_ai_queue: JobQueue
+        shared_ai_queue: JobQueue,
+        cpu_max_workers_override: Optional[int] = None
     ) -> Pipeline:
         """
         构建统一的AI处理流水线
@@ -208,10 +227,19 @@ class PipelineBuilder:
         # 所有设备共享同一个输入队列，实现负载均衡
         device_configs = self.device_mgr.get_all_configs()
         ai_stages = []
+        cpu_threads = self.device_mgr.get_device_config('cpu')['max_workers']
+        preprocess_workers = min(4, cpu_threads)
+        has_cpu_stage = False
         
         for device_config in device_configs:
             device = device_config['device']
             max_workers = device_config['max_workers']
+            if device == 'cpu':
+                has_cpu_stage = True
+                if cpu_max_workers_override is not None:
+                    max_workers = max(1, cpu_max_workers_override)
+                if preprocess_workers > max_workers:
+                    max_workers = preprocess_workers
             
             # 所有设备共享同一个队列，实现真正的负载均衡
             # CPU在转换完成后可以立即参与推理
@@ -228,6 +256,21 @@ class PipelineBuilder:
                 progress_callback=self.progress_callback
             )
             ai_stages.append(ai_stage)
+        
+        if not has_cpu_stage and preprocess_workers > 0:
+            preprocess_stage = ImageProcessingStage(
+                input_queue=shared_ai_queue,
+                output_queue=exif_input_queue,
+                dir_path=self.dir_path,
+                raw_dict=self.raw_dict,
+                settings=self.settings,
+                device='cpu',
+                max_workers=preprocess_workers,
+                log_callback=self.log_callback,
+                stats_callback=self.stats_callback,
+                progress_callback=self.progress_callback
+            )
+            ai_stages.insert(0, preprocess_stage)
         
         # 构建流水线
         stages = ai_stages + [exif_stage]
@@ -251,4 +294,3 @@ class PipelineBuilder:
             shared_ai_queue.put(job)
         
         return pipeline
-
