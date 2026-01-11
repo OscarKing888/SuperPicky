@@ -651,7 +651,7 @@ class PhotoProcessor:
                 if focus_sharpness_weight > 1.0:
                     focus_status = "精焦"
                     focus_status_en = "BEST"
-                elif focus_sharpness_weight >= 1.0:
+                elif focus_sharpness_weight >= 0.9:  # V3.9.3: 鸟身也算合焦
                     focus_status = "合焦"
                     focus_status_en = "GOOD"
                 elif focus_sharpness_weight >= 0.7:

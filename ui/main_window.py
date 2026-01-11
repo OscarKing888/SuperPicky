@@ -1235,6 +1235,20 @@ class SuperPickyMainWindow(QMainWindow):
   1. {t("lightroom_guide.method1_step1")}
   2. {t("lightroom_guide.method1_step2")}
   3. {t("lightroom_guide.method1_step3")}
+  4. {t("lightroom_guide.method1_step4")}
+  5. {t("lightroom_guide.method1_step5")}
+
+{t("lightroom_guide.sort_title")}
+  · {t("lightroom_guide.sort_step3_city")}
+  · {t("lightroom_guide.sort_step3_state")}
+  · {t("lightroom_guide.field_caption")}
+
+{t("lightroom_guide.debug_title")}
+  {t("lightroom_guide.debug_tip")}
+  · {t("lightroom_guide.debug_explain1")}
+  · {t("lightroom_guide.debug_explain2")}
+  · {t("lightroom_guide.debug_explain3")}
+  · {t("lightroom_guide.debug_explain4")}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 """
