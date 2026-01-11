@@ -408,21 +408,28 @@ class SuperPickyMainWindow(QMainWindow):
         # 右侧: 版本号 + commit hash
         version_text = "V3.9.3"
         try:
-            import subprocess
-            result = subprocess.run(
-                ['git', 'rev-parse', '--short', 'HEAD'],
-                capture_output=True, text=True, timeout=2,
-                cwd=os.path.dirname(os.path.dirname(__file__))
-            )
-            if result.returncode == 0:
-                commit_hash = result.stdout.strip()
-                version_text = f"V3.9.3\n{commit_hash}"
+            # V3.9.3: 优先从构建信息读取（发布版本）
+            from core.build_info import COMMIT_HASH
+            if COMMIT_HASH:
+                version_text = f"V3.9.3\n{COMMIT_HASH}"
+            else:
+                # 回退到 git 命令（开发环境）
+                import subprocess
+                result = subprocess.run(
+                    ['git', 'rev-parse', '--short', 'HEAD'],
+                    capture_output=True, text=True, timeout=2,
+                    cwd=os.path.dirname(os.path.dirname(__file__))
+                )
+                if result.returncode == 0:
+                    commit_hash = result.stdout.strip()
+                    version_text = f"V3.9.3\n{commit_hash}"
         except:
-            pass  # 打包版本没有 git，使用默认版本号
+            pass  # 使用默认版本号
         version_label = QLabel(version_text)
         version_label.setStyleSheet(VERSION_STYLE)
         version_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         header_layout.addWidget(version_label)
+
 
         parent_layout.addWidget(header)
 

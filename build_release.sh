@@ -176,12 +176,38 @@ mkdir -p dist
 log_success "清理完成"
 
 # ============================================
+# 步骤2.5: 注入 Git Commit Hash
+# ============================================
+log_step "2.5" "注入构建信息"
+
+# 获取 git commit hash
+COMMIT_HASH=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+log_info "Commit Hash: ${COMMIT_HASH}"
+
+# 备份原始 build_info.py
+BUILD_INFO_FILE="core/build_info.py"
+BUILD_INFO_BACKUP="${BUILD_INFO_FILE}.backup"
+cp "${BUILD_INFO_FILE}" "${BUILD_INFO_BACKUP}"
+
+# 注入 commit hash
+sed -i.tmp "s/COMMIT_HASH = None/COMMIT_HASH = \"${COMMIT_HASH}\"/" "${BUILD_INFO_FILE}"
+rm -f "${BUILD_INFO_FILE}.tmp"  # macOS sed 的临时文件
+
+log_success "构建信息已注入"
+
+# ============================================
 # 步骤3: PyInstaller 打包
 # ============================================
 log_step "3" "PyInstaller 打包"
 
 log_info "正在打包应用..."
 ${PYINSTALLER} SuperPicky.spec --clean --noconfirm
+
+# 恢复原始 build_info.py
+if [ -f "${BUILD_INFO_BACKUP}" ]; then
+    mv "${BUILD_INFO_BACKUP}" "${BUILD_INFO_FILE}"
+    log_info "已恢复原始 build_info.py"
+fi
 
 if [ ! -d "dist/${APP_NAME}.app" ]; then
     log_error "打包失败！未找到 dist/${APP_NAME}.app"

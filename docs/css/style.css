@@ -338,8 +338,14 @@ header {
 
 .features-grid {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: var(--space-md);
+}
+
+@media (max-width: 900px) {
+    .features-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
 }
 
 .feature-card {
@@ -614,6 +620,16 @@ header {
     color: var(--bg-void);
 }
 
+.flag-badge.focus {
+    background: #ef4444;
+    color: white;
+}
+
+.flag-badge.burst {
+    background: #8b5cf6;
+    color: white;
+}
+
 .flag-info strong {
     display: block;
     font-size: 14px;
@@ -743,8 +759,18 @@ header {
 
 .guide-item img {
     width: 100%;
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+    object-position: top center;
     display: block;
     border-bottom: 1px solid var(--border-subtle);
+    background: var(--bg-card);
+}
+
+/* Placeholder indicator for images that need resizing */
+.guide-item img[data-needs-resize] {
+    outline: 3px dashed #ff6b6b;
+    outline-offset: -3px;
 }
 
 .guide-item-info {
@@ -1347,6 +1373,152 @@ footer {
 .feature-card:nth-child(2) { animation-delay: 0.15s; }
 .feature-card:nth-child(3) { animation-delay: 0.2s; }
 .feature-card:nth-child(4) { animation-delay: 0.25s; }
+
+/* === Lightroom Workflow Section === */
+.lightroom-section {
+    padding: var(--space-2xl) 0;
+    background: var(--bg-primary);
+}
+
+.lightroom-intro {
+    margin-bottom: var(--space-xl);
+}
+
+.lightroom-intro p {
+    font-size: 15px;
+    color: var(--text-secondary);
+    text-align: center;
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.lightroom-gallery {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-md);
+    margin-bottom: var(--space-lg);
+}
+
+.lightroom-item {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.lightroom-item:hover {
+    border-color: var(--border);
+    transform: translateY(-2px);
+}
+
+.lightroom-item img {
+    width: 100%;
+    aspect-ratio: 16 / 10;
+    object-fit: cover;
+    object-position: top center;
+    display: block;
+    border-bottom: 1px solid var(--border-subtle);
+    background: var(--bg-card);
+}
+
+/* Placeholder indicator for images that need resizing */
+.lightroom-item img[data-needs-resize] {
+    outline: 3px dashed #ff6b6b;
+    outline-offset: -3px;
+}
+
+.lightroom-item-info {
+    padding: var(--space-md);
+}
+
+.lightroom-step {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--accent);
+    margin-bottom: var(--space-xs);
+}
+
+.lightroom-item h4 {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+.lightroom-item p {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    line-height: 1.4;
+}
+
+.lightroom-tip {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-md);
+    background: var(--accent-dim);
+    border: 1px solid rgba(0, 212, 170, 0.2);
+    border-radius: var(--radius-md);
+    padding: var(--space-lg);
+}
+
+.tip-icon {
+    font-size: 20px;
+    flex-shrink: 0;
+}
+
+.tip-content strong {
+    display: block;
+    font-size: 14px;
+    color: var(--accent);
+    margin-bottom: 4px;
+}
+
+.tip-content p {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+/* Lightroom section inline language */
+.lightroom-intro p .lang-cn,
+.lightroom-intro p .lang-en,
+.lightroom-item h4 .lang-cn,
+.lightroom-item h4 .lang-en,
+.lightroom-item p .lang-cn,
+.lightroom-item p .lang-en,
+.tip-content strong .lang-cn,
+.tip-content strong .lang-en,
+.tip-content p .lang-cn,
+.tip-content p .lang-en {
+    display: none;
+}
+
+[data-lang="cn"] .lightroom-intro p .lang-cn,
+[data-lang="cn"] .lightroom-item h4 .lang-cn,
+[data-lang="cn"] .lightroom-item p .lang-cn,
+[data-lang="cn"] .tip-content strong .lang-cn,
+[data-lang="cn"] .tip-content p .lang-cn {
+    display: inline;
+}
+
+[data-lang="en"] .lightroom-intro p .lang-en,
+[data-lang="en"] .lightroom-item h4 .lang-en,
+[data-lang="en"] .lightroom-item p .lang-en,
+[data-lang="en"] .tip-content strong .lang-en,
+[data-lang="en"] .tip-content p .lang-en {
+    display: inline;
+}
+
+@media (max-width: 768px) {
+    .lightroom-gallery {
+        grid-template-columns: 1fr;
+    }
+
+    .lightroom-tip {
+        flex-direction: column;
+    }
+}
 
 /* === Smooth scroll offset for fixed header === */
 :target {

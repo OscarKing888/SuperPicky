@@ -51,12 +51,12 @@
                 <a href="#download" class="btn btn-primary">
                     <span class="lang-cn">下载 macOS 版</span>
                     <span class="lang-en">Download for macOS</span>
-                    <span class="btn-version">v3.8.0</span>
+                    <span class="btn-version">v3.9.3</span>
                 </a>
                 <a href="#download" class="btn btn-primary">
                     <span class="lang-cn">下载 Windows 版</span>
                     <span class="lang-en">Download for Windows</span>
-                    <span class="btn-version">v3.8</span>
+                    <span class="btn-version">v3.9.3</span>
                 </a>
                 <a href="#features" class="btn btn-ghost">
                     <span class="lang-cn">了解更多</span>
@@ -119,6 +119,28 @@
                 <div class="feature-card">
                     <div class="feature-number">03</div>
                     <h3>
+                        <span class="lang-cn">对焦判定</span>
+                        <span class="lang-en">Focus Detection</span>
+                    </h3>
+                    <p>
+                        <span class="lang-cn">读取 RAW 对焦点，判定精焦/合焦/失焦/脱焦状态</span>
+                        <span class="lang-en">RAW focus point analysis: BEST/GOOD/BAD/WORST status</span>
+                    </p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-number">04</div>
+                    <h3>
+                        <span class="lang-cn">连拍分组</span>
+                        <span class="lang-en">Burst Grouping</span>
+                    </h3>
+                    <p>
+                        <span class="lang-cn">自动识别连拍序列，分组整理到 burst 子目录</span>
+                        <span class="lang-en">Auto-detect burst sequences, organize into subdirectories</span>
+                    </p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-number">05</div>
+                    <h3>
                         <span class="lang-cn">自动分类</span>
                         <span class="lang-en">Auto Organize</span>
                     </h3>
@@ -128,7 +150,7 @@
                     </p>
                 </div>
                 <div class="feature-card">
-                    <div class="feature-number">04</div>
+                    <div class="feature-number">06</div>
                     <h3>
                         <span class="lang-cn">Lightroom 兼容</span>
                         <span class="lang-en">Lightroom Ready</span>
@@ -397,6 +419,38 @@
                         </div>
                     </div>
                     <div class="logic-flag">
+                        <span class="flag-badge focus">
+                            <span class="lang-cn">对焦</span>
+                            <span class="lang-en">Focus</span>
+                        </span>
+                        <div class="flag-info">
+                            <strong>
+                                <span class="lang-cn">对焦判定</span>
+                                <span class="lang-en">Focus Detection</span>
+                            </strong>
+                            <p>
+                                <span class="lang-cn">读取 RAW 文件中的对焦点位置，判断是否对焦在鸟头区域。精焦(BEST)给予锐度加成，失焦(BAD/WORST)则降低评分。红色标签标记精焦照片。</span>
+                                <span class="lang-en">Reads focus point from RAW files, determines if focused on bird's head. BEST focus gets sharpness bonus, BAD/WORST reduces rating. Red label marks best-focused photos.</span>
+                            </p>
+                        </div>
+                    </div>
+                    <div class="logic-flag">
+                        <span class="flag-badge burst">
+                            <span class="lang-cn">连拍</span>
+                            <span class="lang-en">Burst</span>
+                        </span>
+                        <div class="flag-info">
+                            <strong>
+                                <span class="lang-cn">连拍分组</span>
+                                <span class="lang-en">Burst Grouping</span>
+                            </strong>
+                            <p>
+                                <span class="lang-cn">通过时间戳和图像相似度（pHash）自动识别连拍序列，将同一组连拍照片整理到 burst_xxx 子目录，方便对比选择最佳帧。</span>
+                                <span class="lang-en">Auto-detects burst sequences via timestamps and image similarity (pHash), organizes them into burst_xxx subdirectories for easy comparison and best frame selection.</span>
+                            </p>
+                        </div>
+                    </div>
+                    <div class="logic-flag">
                         <span class="flag-badge exposure">
                             <span class="lang-cn">曝光</span>
                             <span class="lang-en">Exposure</span>
@@ -503,9 +557,10 @@
                     <span class="lang-en">Interface</span>
                 </span>
             </div>
+            <!-- 推荐尺寸: 800×600px (4:3 横向) -->
             <div class="guide-gallery">
                 <div class="guide-item">
-                    <img src="img/tutorial/step3_params.jpg" alt="参数设置">
+                    <img src="img/V3_9_3/设置界面.png" alt="参数设置" data-needs-resize data-current="1080x1416 竖向" data-target="800x600 横向">
                     <div class="guide-item-info">
                         <div class="guide-step">01</div>
                         <h4>
@@ -513,52 +568,128 @@
                             <span class="lang-en">Parameters</span>
                         </h4>
                         <p>
-                            <span class="lang-cn">锐度阈值 400，美学 5.0，可选飞行姿态和曝光检测</span>
-                            <span class="lang-en">Sharpness 400, Aesthetics 5.0, optional flight & exposure</span>
+                            <span class="lang-cn">锐度阈值、美学评分、可选飞行姿态和曝光检测</span>
+                            <span class="lang-en">Sharpness, Aesthetics threshold, optional flight & exposure</span>
                         </p>
                     </div>
                 </div>
                 <div class="guide-item">
-                    <img src="img/tutorial/step5_result.jpg" alt="选片结果">
+                    <img src="img/V3_9_3/开始处理过程.png" alt="处理过程">
                     <div class="guide-item-info">
                         <div class="guide-step">02</div>
+                        <h4>
+                            <span class="lang-cn">AI 处理</span>
+                            <span class="lang-en">AI Processing</span>
+                        </h4>
+                        <p>
+                            <span class="lang-cn">多模型协作分析，实时显示处理进度和评分详情</span>
+                            <span class="lang-en">Multi-model analysis with real-time progress and rating details</span>
+                        </p>
+                    </div>
+                </div>
+                <div class="guide-item">
+                    <img src="img/V3_9_3/选鸟结果.png" alt="选片结果">
+                    <div class="guide-item-info">
+                        <div class="guide-step">03</div>
                         <h4>
                             <span class="lang-cn">选片结果</span>
                             <span class="lang-en">Results</span>
                         </h4>
                         <p>
-                            <span class="lang-cn">按星级自动整理，显示锐度、美学、飞行等详细信息</span>
-                            <span class="lang-en">Auto-organized by rating with sharpness, aesthetics details</span>
+                            <span class="lang-cn">按星级自动整理，连拍分组，显示详细统计信息</span>
+                            <span class="lang-en">Auto-organized by rating, burst grouping, detailed statistics</span>
                         </p>
                     </div>
                 </div>
                 <div class="guide-item">
-                    <img src="img/tutorial/step7_pick.jpg" alt="Lightroom 整合">
-                    <div class="guide-item-info">
-                        <div class="guide-step">03</div>
-                        <h4>
-                            <span class="lang-cn">Lightroom 整合</span>
-                            <span class="lang-en">Lightroom Integration</span>
-                        </h4>
-                        <p>
-                            <span class="lang-cn">星级、精选旗标、飞版标签直接在 Lightroom 中可用</span>
-                            <span class="lang-en">Ratings, Pick flags, Flying labels ready in Lightroom</span>
-                        </p>
-                    </div>
-                </div>
-                <div class="guide-item">
-                    <img src="img/V3_9_3/Software-landingpage.png" alt="高级设置">
+                    <img src="img/V3_9_3/分星和连拍目录.png" alt="文件整理" data-needs-resize data-current="612x992 竖向" data-target="800x600 横向">
                     <div class="guide-item-info">
                         <div class="guide-step">04</div>
                         <h4>
-                            <span class="lang-cn">高级设置</span>
-                            <span class="lang-en">Advanced Settings</span>
+                            <span class="lang-cn">文件整理</span>
+                            <span class="lang-en">File Organization</span>
                         </h4>
                         <p>
-                            <span class="lang-cn">AI 置信度、最低锐度、精选比例等可自定义</span>
-                            <span class="lang-en">Customizable AI confidence, min sharpness, pick ratio</span>
+                            <span class="lang-cn">按星级分文件夹，连拍照片自动分组到 burst 子目录</span>
+                            <span class="lang-en">Star-rated folders, burst photos grouped in subdirectories</span>
                         </p>
                     </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Lightroom Workflow Section -->
+    <section class="lightroom-section" id="lightroom">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-label">
+                    <span class="lang-cn">Lightroom 工作流</span>
+                    <span class="lang-en">Lightroom Workflow</span>
+                </span>
+            </div>
+            <div class="lightroom-intro">
+                <p>
+                    <span class="lang-cn">慧眼选鸟的评分结果可以无缝导入 Lightroom Classic，让你的后期流程更加高效。</span>
+                    <span class="lang-en">SuperPicky ratings integrate seamlessly with Lightroom Classic for an efficient editing workflow.</span>
+                </p>
+            </div>
+            <!-- 推荐尺寸: 800×500px (16:10 横向) -->
+            <div class="lightroom-gallery">
+                <div class="lightroom-item">
+                    <img src="img/V3_9_3/按照原始文件夹导入到 lightroom.png" alt="导入到 Lightroom">
+                    <div class="lightroom-item-info">
+                        <div class="lightroom-step">01</div>
+                        <h4>
+                            <span class="lang-cn">导入照片</span>
+                            <span class="lang-en">Import Photos</span>
+                        </h4>
+                        <p>
+                            <span class="lang-cn">按原始文件夹结构导入到 Lightroom，保留星级目录组织</span>
+                            <span class="lang-en">Import with original folder structure, preserving star-rated organization</span>
+                        </p>
+                    </div>
+                </div>
+                <div class="lightroom-item">
+                    <img src="img/V3_9_3/元数据窗口-详情信息.png" alt="元数据详情" data-needs-resize data-current="732x906 竖向" data-target="800x500 横向">
+                    <div class="lightroom-item-info">
+                        <div class="lightroom-step">02</div>
+                        <h4>
+                            <span class="lang-cn">查看元数据</span>
+                            <span class="lang-en">View Metadata</span>
+                        </h4>
+                        <p>
+                            <span class="lang-cn">题注字段包含完整的 AI 分析结果：锐度、美学、对焦状态等</span>
+                            <span class="lang-en">Caption field contains full AI analysis: sharpness, aesthetics, focus status</span>
+                        </p>
+                    </div>
+                </div>
+                <div class="lightroom-item">
+                    <img src="img/V3_9_3/按照城市或者省份排序.png" alt="按质量排序" data-needs-resize data-current="282x1068 竖向窄条" data-target="800x500 横向">
+                    <div class="lightroom-item-info">
+                        <div class="lightroom-step">03</div>
+                        <h4>
+                            <span class="lang-cn">按质量排序</span>
+                            <span class="lang-en">Sort by Quality</span>
+                        </h4>
+                        <p>
+                            <span class="lang-cn">城市字段 = 锐度值，省份字段 = 美学评分，可直接排序筛选</span>
+                            <span class="lang-en">City = Sharpness, State = Aesthetics score, sortable and filterable</span>
+                        </p>
+                    </div>
+                </div>
+            </div>
+            <div class="lightroom-tip">
+                <div class="tip-icon">💡</div>
+                <div class="tip-content">
+                    <strong>
+                        <span class="lang-cn">元数据读取提示</span>
+                        <span class="lang-en">Metadata Reading Tip</span>
+                    </strong>
+                    <p>
+                        <span class="lang-cn">如果照片已在 Lightroom 中，选中所有照片后执行「元数据 → 从文件读取元数据」来同步评分和旗标。</span>
+                        <span class="lang-en">If photos are already in Lightroom, select all and use "Metadata → Read Metadata from Files" to sync ratings and flags.</span>
+                    </p>
                 </div>
             </div>
         </div>
@@ -582,7 +713,7 @@
                         </div>
                         <div class="download-meta">
                             <h3>SuperPicky <span class="platform-badge">macOS</span></h3>
-                            <p class="download-version">v3.8.0 · Apple Silicon (M1/M2/M3/M4)</p>
+                            <p class="download-version">v3.9.3 · Apple Silicon (M1/M2/M3/M4)</p>
                         </div>
                     </div>
                     <div class="download-links">
@@ -609,7 +740,7 @@
                         </div>
                         <div class="download-meta">
                             <h3>SuperPicky <span class="platform-badge">Windows</span></h3>
-                            <p class="download-version">v3.8 · Windows 10/11 · x64</p>
+                            <p class="download-version">v3.9.3 · Windows 10/11 · x64</p>
                         </div>
                     </div>
                     <div class="download-links">
