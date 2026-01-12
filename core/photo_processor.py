@@ -415,6 +415,11 @@ class PhotoProcessor:
             head_center_orig = None
             head_radius_val = None
             
+            # V3.9.4: 原图尺寸和裁剪偏移（用于对焦点坐标转换）
+            # 这些变量必须在循环开始时初始化，确保后续代码可用
+            w_orig, h_orig = None, None
+            x_orig, y_orig = 0, 0  # 裁剪偏移默认为 0
+            
             # V3.2优化: 只读取原图一次，在关键点检测和NIMA计算中复用
             orig_img = None  # 原图缓存
             bird_crop_bgr = None  # 裁剪区域缓存（BGR）
@@ -613,10 +618,11 @@ class PhotoProcessor:
             # V4.0: 对焦权重计算（仅对 1 星以上照片，节省时间）
             if preliminary_result.rating >= 1:
                 if focus_data_available and focus_result is not None:
-                    # V3.9 修复：使用原图尺寸而非 resize 后的 img_dims
-                    try:
+                    # V3.9.4 修复：使用原图尺寸而非 resize 后的 img_dims
+                    # 如果 w_orig/h_orig 为 None，使用 img_dims 作为后备
+                    if w_orig is not None and h_orig is not None:
                         orig_dims = (w_orig, h_orig)
-                    except NameError:
+                    else:
                         orig_dims = img_dims
                     
                     # V3.9.3: 修复 BBox 坐标系不匹配 bug
@@ -718,14 +724,30 @@ class PhotoProcessor:
                 
                 focus_point_crop = None
                 if focus_x is not None and focus_y is not None:
-                    # 对焦点从归一化坐标转换为裁剪区域坐标
-                    # w_orig, h_orig 在第 414 行已定义，直接使用
-                    try:
-                        fx_px = int(focus_x * w_orig) - x_orig
-                        fy_px = int(focus_y * h_orig) - y_orig
+                    # V3.9.4: 对焦点从归一化坐标转换为裁剪区域坐标
+                    # 使用 w_orig, h_orig（优先）或 bird_crop_bgr 尺寸 + 偏移（后备）
+                    img_w_for_focus = w_orig
+                    img_h_for_focus = h_orig
+                    
+                    # 如果原图尺寸未知，尝试从裁剪图推算（不太准确但总比没有好）
+                    if img_w_for_focus is None or img_h_for_focus is None:
+                        if img_dims is not None:
+                            # 使用 YOLO resize 的尺寸 + 缩放比例
+                            w_resized, h_resized = img_dims
+                            if bird_crop_bgr is not None:
+                                ch, cw = bird_crop_bgr.shape[:2]
+                                # 估算原图尺寸（使用 bbox 比例）
+                                if bird_bbox is not None:
+                                    bx, by, bw, bh = bird_bbox
+                                    scale_x = cw / bw if bw > 0 else 1
+                                    scale_y = ch / bh if bh > 0 else 1
+                                    img_w_for_focus = int(w_resized * scale_x)
+                                    img_h_for_focus = int(h_resized * scale_y)
+                    
+                    if img_w_for_focus is not None and img_h_for_focus is not None:
+                        fx_px = int(focus_x * img_w_for_focus) - x_orig
+                        fy_px = int(focus_y * img_h_for_focus) - y_orig
                         focus_point_crop = (fx_px, fy_px)
-                    except NameError:
-                        pass  # 变量未定义时跳过
                 
                 try:
                     self._save_debug_crop(
