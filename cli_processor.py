@@ -5,7 +5,7 @@ CLI Processor - 命令行处理器
 简化版 - 调用核心 PhotoProcessor
 """
 
-from typing import Dict, List
+from typing import Dict, List, Any
 from core.photo_processor import (
     PhotoProcessor,
     ProcessingSettings,
@@ -126,3 +126,95 @@ class CLIProcessor:
         
         lines = format_processing_summary(result.stats, include_time=True)
         print_summary(lines, self._log)
+        
+        # 在统计报告之后输出流水线耗时统计
+        if hasattr(result, 'pipeline_stats') and result.pipeline_stats:
+            self._log_pipeline_stats(result.pipeline_stats, result.total_files_processed)
+    
+    def _log_pipeline_stats(self, pipeline_stats: Dict[str, Any], total_files: int) -> None:
+        """输出流水线各阶段的耗时统计（在统计报告之后）"""
+        # 分类统计，按设备分开
+        heif_time = 0.0
+        heif_processed = 0
+        
+        # 按设备分开统计 AI 推理
+        cpu_ai_time = 0.0
+        cpu_processed = 0
+        cuda_ai_time = 0.0
+        cuda_processed = 0
+        mps_ai_time = 0.0
+        mps_processed = 0
+        
+        exif_time = 0.0
+        exif_processed = 0
+        
+        for stage_name, stage_stats in pipeline_stats.items():
+            total_time = stage_stats.get('total_time', 0.0)
+            processed = stage_stats.get('processed', 0)
+            
+            if 'HEIF' in stage_name or 'heif' in stage_name.lower():
+                heif_time += total_time
+                heif_processed += processed
+            elif 'EXIF' in stage_name or 'exif' in stage_name.lower():
+                exif_time += total_time
+                exif_processed += processed
+            elif 'CPU-Hybrid' in stage_name:
+                # CPUHybridStage 的名称是 "CPU-Hybrid"，需要单独处理
+                # 使用 inference_time 而不是 total_time（total_time 包含转换时间）
+                inference_time = stage_stats.get('inference_time', 0.0)
+                inferred = stage_stats.get('inferred', 0)
+                if inferred > 0:
+                    cpu_ai_time += inference_time
+                    cpu_processed += inferred
+            elif 'AI处理' in stage_name:
+                # 阶段名称格式: "AI处理-{device.upper()}"
+                device = stage_name.split('-')[-1] if '-' in stage_name else ''
+                device_upper = device.upper()
+                if device_upper == 'CPU':
+                    cpu_ai_time += total_time
+                    cpu_processed += processed
+                elif device_upper == 'CUDA':
+                    cuda_ai_time += total_time
+                    cuda_processed += processed
+                elif device_upper == 'MPS':
+                    mps_ai_time += total_time
+                    mps_processed += processed
+        
+        # 计算 AI 检测总耗时（所有设备）
+        ai_total_time = cpu_ai_time + cuda_ai_time + mps_ai_time
+        
+        # 输出统计信息（在"平均每张"之后，即使为0也显示）
+        self._log("")
+        self._log("⏱️  流水线耗时统计:")
+        
+        # HEIF转换（即使为0也显示）
+        heif_avg = heif_time / heif_processed if heif_processed > 0 else 0
+        self._log(f"  HEIF转换: {heif_time:.1f}秒 (平均 {heif_avg:.2f}秒/张, {heif_processed}张)")
+        
+        # AI推理按设备分开显示
+        if cpu_processed > 0:
+            cpu_avg = cpu_ai_time / cpu_processed if cpu_processed > 0 else 0
+            self._log(f"  AI推理(CPU): {cpu_ai_time:.1f}秒 (平均 {cpu_avg:.2f}秒/张, {cpu_processed}张)")
+        else:
+            self._log(f"  AI推理(CPU): 0.0秒 (平均 0.00秒/张, 0张)")
+        
+        if cuda_processed > 0:
+            cuda_avg = cuda_ai_time / cuda_processed if cuda_processed > 0 else 0
+            self._log(f"  AI推理(CUDA): {cuda_ai_time:.1f}秒 (平均 {cuda_avg:.2f}秒/张, {cuda_processed}张)")
+        else:
+            self._log(f"  AI推理(CUDA): 0.0秒 (平均 0.00秒/张, 0张)")
+        
+        if mps_processed > 0:
+            mps_avg = mps_ai_time / mps_processed if mps_processed > 0 else 0
+            self._log(f"  AI推理(MPS): {mps_ai_time:.1f}秒 (平均 {mps_avg:.2f}秒/张, {mps_processed}张)")
+        else:
+            self._log(f"  AI推理(MPS): 0.0秒 (平均 0.00秒/张, 0张)")
+        
+        # EXIF写入（即使为0也显示）
+        exif_avg = exif_time / exif_processed if exif_processed > 0 else 0
+        self._log(f"  EXIF写入: {exif_time:.1f}秒 (平均 {exif_avg:.2f}秒/张, {exif_processed}张)")
+        
+        # 输出 AI 检测总耗时
+        ai_avg = ai_total_time / total_files if total_files > 0 else 0
+        self._log(f"⏱️  AI检测总耗时: {ai_total_time:.1f}秒 (平均 {ai_avg:.2f}秒/张)")
+        self._log("")

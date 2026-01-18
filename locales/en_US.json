@@ -59,7 +59,10 @@
     "no": "No",
     "error": "Error",
     "resetting": "Resetting",
-    "exposure_detection": "Exposure Check"
+    "exposure_detection": "Exposure Check",
+    "burst": "Burst",
+    "exposure": "Exposure",
+    "job_queue": "Concurrent Processing"
   },
   "dialogs": {
     "file_organization_title": "File Organization",

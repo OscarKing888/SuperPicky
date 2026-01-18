@@ -59,7 +59,10 @@
     "no": "否",
     "error": "错误",
     "resetting": "重置中",
-    "exposure_detection": "曝光检测"
+    "exposure_detection": "曝光检测",
+    "burst": "连拍",
+    "exposure": "曝光",
+    "job_queue": "并发处理"
   },
   "dialogs": {
     "file_organization_title": "文件整理",

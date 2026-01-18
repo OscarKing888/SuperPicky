@@ -13,13 +13,14 @@ Core Photo Processor - 核心照片处理器
 """
 
 import os
+import sys
 import time
 import json
 import shutil
 import numpy as np
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Dict, List, Optional, Callable, Tuple
+from typing import Dict, List, Optional, Callable, Tuple, Any
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -281,6 +282,450 @@ class PhotoProcessor:
             self._log(f"⏱️  RAW转换耗时: {raw_time:.1f}秒 (平均 {avg_time*1000:.0f}ms/张)\n")
         else:
             self._log(f"⏱️  RAW转换耗时: {raw_time:.1f}秒 (平均 {avg_time:.1f}秒/张)\n")
+    
+    def process_single_image(
+        self,
+        filename: str,
+        filepath: str,
+        raw_dict: Dict[str, str],
+        model: Any = None,
+        keypoint_detector: Optional[KeypointDetector] = None,
+        flight_detector: Optional[FlightDetector] = None,
+        exiftool_mgr: Any = None,
+        use_keypoints: bool = True,
+        use_flight: bool = True,
+        ai_inference_path: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        处理单张图片 - AI检测、关键点检测与评分
+        
+        Args:
+            filename: 文件名
+            filepath: 文件路径
+            raw_dict: RAW文件字典
+            model: YOLO模型（可选，如果为None则自动加载）
+            keypoint_detector: 关键点检测器（可选）
+            flight_detector: 飞版检测器（可选）
+            exiftool_mgr: EXIF工具管理器（可选）
+            use_keypoints: 是否使用关键点检测
+            use_flight: 是否使用飞版检测
+            ai_inference_path: AI推理使用的路径（用于HEIF，如果为None则使用filepath）
+            
+        Returns:
+            处理结果字典，包含rating、reason、confidence等所有信息
+        """
+        photo_start_time = time.time()
+        
+        # 如果未提供模型，自动加载
+        if model is None:
+            model = load_yolo_model()
+        
+        # 如果未提供exiftool_mgr，自动获取
+        if exiftool_mgr is None:
+            exiftool_mgr = get_exiftool_manager()
+        
+        # 如果未提供keypoint_detector，尝试加载
+        if keypoint_detector is None and use_keypoints:
+            keypoint_detector = get_keypoint_detector()
+            try:
+                keypoint_detector.load_model()
+            except FileNotFoundError:
+                keypoint_detector = None
+                use_keypoints = False
+        
+        # 如果未提供flight_detector，尝试加载
+        if flight_detector is None and use_flight and self.settings.detect_flight:
+            flight_detector = get_flight_detector()
+            try:
+                flight_detector.load_model()
+            except FileNotFoundError:
+                flight_detector = None
+                use_flight = False
+        
+        file_prefix, _ = os.path.splitext(filename)
+        
+        # 确定AI推理使用的路径
+        inference_path = ai_inference_path if ai_inference_path else filepath
+        
+        # UI设置转为列表格式
+        ui_settings = [
+            self.settings.ai_confidence,
+            self.settings.sharpness_threshold,
+            self.settings.nima_threshold,
+            self.settings.save_crop,
+            self.settings.normalization_mode
+        ]
+        
+        # Phase 1: YOLO检测
+        try:
+            result = detect_and_draw_birds(
+                inference_path, model, None, self.dir_path, ui_settings, None, skip_nima=True
+            )
+            if result is None:
+                return {
+                    'filename': filename,
+                    'filepath': filepath,
+                    'file_prefix': file_prefix,
+                    'rating': -1,
+                    'reason': 'AI推理失败',
+                    'processing_time': (time.time() - photo_start_time),
+                }
+        except Exception as e:
+            return {
+                'filename': filename,
+                'filepath': filepath,
+                'file_prefix': file_prefix,
+                'rating': -1,
+                'reason': f'处理异常: {e}',
+                'processing_time': (time.time() - photo_start_time),
+            }
+        
+        # 解构 AI 结果
+        detected, _, confidence, sharpness, _, bird_bbox, img_dims, bird_mask = result
+        
+        # 早期退出 - 无鸟或置信度低
+        if not detected or (detected and confidence < 0.5):
+            if not detected:
+                rating_value = -1
+                reason = "未检测到鸟类"
+            else:
+                rating_value = 0
+                reason = f"置信度低({confidence:.0%})"
+            
+            return {
+                'filename': filename,
+                'filepath': filepath,
+                'file_prefix': file_prefix,
+                'rating': rating_value,
+                'reason': reason,
+                'confidence': confidence,
+                'detected': detected,
+                'processing_time': (time.time() - photo_start_time),
+            }
+        
+        # Phase 2: 关键点检测
+        all_keypoints_hidden = False
+        best_eye_visibility = 0.0
+        head_sharpness = 0.0
+        has_visible_eye = False
+        has_visible_beak = False
+        left_eye_vis = 0.0
+        right_eye_vis = 0.0
+        beak_vis = 0.0
+        head_center_orig = None
+        head_radius_val = None
+        w_orig, h_orig = None, None
+        x_orig, y_orig = 0, 0
+        orig_img = None
+        bird_crop_bgr = None
+        bird_crop_mask = None
+        bird_mask_orig = None
+        
+        if use_keypoints and detected and bird_bbox is not None and img_dims is not None:
+            try:
+                import cv2
+                orig_img = cv2.imread(filepath)  # 读取原图
+                if orig_img is not None:
+                    h_orig, w_orig = orig_img.shape[:2]
+                    w_resized, h_resized = img_dims
+                    scale_x = w_orig / w_resized
+                    scale_y = h_orig / h_resized
+                    x, y, w, h = bird_bbox
+                    x_orig = max(0, min(int(x * scale_x), w_orig - 1))
+                    y_orig = max(0, min(int(y * scale_y), h_orig - 1))
+                    w_orig_box = min(int(w * scale_x), w_orig - x_orig)
+                    h_orig_box = min(int(h * scale_y), h_orig - y_orig)
+                    bird_crop_bgr = orig_img[y_orig:y_orig+h_orig_box, x_orig:x_orig+w_orig_box]
+                    
+                    if bird_mask is not None:
+                        if bird_mask.shape[:2] != (h_orig, w_orig):
+                            bird_mask_orig = cv2.resize(bird_mask, (w_orig, h_orig), interpolation=cv2.INTER_NEAREST)
+                        else:
+                            bird_mask_orig = bird_mask
+                        bird_crop_mask = bird_mask_orig[y_orig:y_orig+h_orig_box, x_orig:x_orig+w_orig_box]
+                    
+                    if bird_crop_bgr.size > 0 and keypoint_detector:
+                        crop_rgb = cv2.cvtColor(bird_crop_bgr, cv2.COLOR_BGR2RGB)
+                        kp_result = keypoint_detector.detect(
+                            crop_rgb,
+                            box=(x_orig, y_orig, w_orig_box, h_orig_box),
+                            seg_mask=bird_crop_mask
+                        )
+                        if kp_result is not None:
+                            all_keypoints_hidden = kp_result.all_keypoints_hidden
+                            best_eye_visibility = kp_result.best_eye_visibility
+                            has_visible_eye = kp_result.visible_eye is not None
+                            has_visible_beak = kp_result.beak_vis >= 0.3
+                            left_eye_vis = kp_result.left_eye_vis
+                            right_eye_vis = kp_result.right_eye_vis
+                            beak_vis = kp_result.beak_vis
+                            head_sharpness = kp_result.head_sharpness
+                            
+                            ch, cw = bird_crop_bgr.shape[:2]
+                            if left_eye_vis >= right_eye_vis and left_eye_vis >= 0.3:
+                                eye_px = (int(kp_result.left_eye[0] * cw), int(kp_result.left_eye[1] * ch))
+                            elif right_eye_vis >= 0.3:
+                                eye_px = (int(kp_result.right_eye[0] * cw), int(kp_result.right_eye[1] * ch))
+                            else:
+                                eye_px = None
+                            
+                            if eye_px is not None:
+                                head_center_orig = (eye_px[0] + x_orig, eye_px[1] + y_orig)
+                                beak_px = (int(kp_result.beak[0] * cw), int(kp_result.beak[1] * ch))
+                                if beak_vis >= 0.3:
+                                    import math
+                                    dist = math.sqrt((eye_px[0] - beak_px[0])**2 + (eye_px[1] - beak_px[1])**2)
+                                    head_radius_val = int(dist * 1.2)
+                                else:
+                                    head_radius_val = int(max(cw, ch) * 0.15)
+                                head_radius_val = max(20, min(head_radius_val, min(cw, ch) // 2))
+            except Exception as e:
+                pass  # 关键点检测失败不影响主流程
+        
+        # Phase 3: TOPIQ评分
+        topiq = None
+        if detected and not all_keypoints_hidden and best_eye_visibility >= 0.3:
+            try:
+                from iqa_scorer import get_iqa_scorer
+                scorer = get_iqa_scorer(device='mps')
+                topiq = scorer.calculate_nima(filepath)
+            except Exception:
+                pass
+        
+        # Phase 4: 飞版检测
+        is_flying = False
+        flight_confidence = 0.0
+        if use_flight and flight_detector and detected and bird_crop_bgr is not None and bird_crop_bgr.size > 0:
+            try:
+                flight_result = flight_detector.detect(bird_crop_bgr)
+                is_flying = flight_result.is_flying
+                flight_confidence = flight_result.confidence
+            except Exception:
+                pass
+        
+        # Phase 5: 曝光检测
+        is_overexposed = False
+        is_underexposed = False
+        if self.settings.detect_exposure and detected and bird_crop_bgr is not None and bird_crop_bgr.size > 0:
+            try:
+                exposure_detector = get_exposure_detector()
+                exposure_result = exposure_detector.detect(
+                    bird_crop_bgr,
+                    threshold=self.settings.exposure_threshold
+                )
+                is_overexposed = exposure_result.is_overexposed
+                is_underexposed = exposure_result.is_underexposed
+            except Exception:
+                pass
+        
+        # 初步评分
+        preliminary_result = self.rating_engine.calculate(
+            detected=detected,
+            confidence=confidence,
+            sharpness=head_sharpness,
+            topiq=topiq,
+            all_keypoints_hidden=all_keypoints_hidden,
+            best_eye_visibility=best_eye_visibility,
+            is_overexposed=is_overexposed,
+            is_underexposed=is_underexposed,
+            focus_sharpness_weight=1.0,
+            focus_topiq_weight=1.0,
+            is_flying=False,
+        )
+        
+        # Phase 6: 对焦点验证
+        focus_sharpness_weight = 1.0
+        focus_topiq_weight = 1.0
+        focus_x, focus_y = None, None
+        focus_data_available = False
+        focus_result = None
+        
+        if detected and bird_bbox is not None and img_dims is not None:
+            if file_prefix in raw_dict:
+                raw_ext = raw_dict[file_prefix]
+                raw_path = os.path.join(self.dir_path, file_prefix + raw_ext)
+                if raw_ext.lower() in ['.nef', '.nrw', '.arw', '.cr3', '.cr2', '.orf', '.raf', '.rw2']:
+                    try:
+                        focus_detector = get_focus_detector()
+                        focus_result = focus_detector.detect(raw_path)
+                        if focus_result is not None:
+                            focus_data_available = True
+                            focus_x, focus_y = focus_result.x, focus_result.y
+                    except Exception:
+                        pass
+        
+        if preliminary_result.rating >= 1:
+            if focus_data_available and focus_result is not None:
+                if w_orig is not None and h_orig is not None:
+                    orig_dims = (w_orig, h_orig)
+                else:
+                    orig_dims = img_dims
+                
+                if img_dims is not None and bird_bbox is not None:
+                    scale_x = orig_dims[0] / img_dims[0]
+                    scale_y = orig_dims[1] / img_dims[1]
+                    bx, by, bw, bh = bird_bbox
+                    bird_bbox_orig = (
+                        int(bx * scale_x),
+                        int(by * scale_y),
+                        int(bw * scale_x),
+                        int(bh * scale_y)
+                    )
+                else:
+                    bird_bbox_orig = bird_bbox
+                
+                focus_sharpness_weight, focus_topiq_weight = verify_focus_in_bbox(
+                    focus_result,
+                    bird_bbox_orig,
+                    orig_dims,
+                    seg_mask=bird_mask_orig,
+                    head_center=head_center_orig,
+                    head_radius=head_radius_val,
+                )
+            elif file_prefix in raw_dict:
+                raw_ext = raw_dict[file_prefix]
+                if raw_ext.lower() in ['.nef', '.nrw', '.arw', '.cr3', '.cr2', '.orf', '.raf', '.rw2']:
+                    is_manual_focus = False
+                    try:
+                        import subprocess
+                        focus_detector = get_focus_detector()
+                        exiftool_path = focus_detector._get_exiftool_path()
+                        raw_path = os.path.join(self.dir_path, file_prefix + raw_ext)
+                        creationflags = subprocess.CREATE_NO_WINDOW if sys.platform.startswith('win') else 0
+                        result = subprocess.run(
+                            [exiftool_path, '-FocusMode', '-s', '-s', '-s', raw_path],
+                            capture_output=True, text=True, timeout=5,
+                            creationflags=creationflags
+                        )
+                        focus_mode = result.stdout.strip().lower()
+                        if 'manual' in focus_mode or focus_mode == 'mf' or focus_mode == 'm':
+                            is_manual_focus = True
+                    except:
+                        pass
+                    
+                    if is_manual_focus:
+                        focus_sharpness_weight = 1.0
+                        focus_topiq_weight = 1.0
+                    else:
+                        focus_sharpness_weight = 0.7
+                        focus_topiq_weight = 0.9
+        
+        # 最终评分
+        rating_result = self.rating_engine.calculate(
+            detected=detected,
+            confidence=confidence,
+            sharpness=head_sharpness,
+            topiq=topiq,
+            all_keypoints_hidden=all_keypoints_hidden,
+            best_eye_visibility=best_eye_visibility,
+            is_overexposed=is_overexposed,
+            is_underexposed=is_underexposed,
+            focus_sharpness_weight=focus_sharpness_weight,
+            focus_topiq_weight=focus_topiq_weight,
+            is_flying=is_flying,
+        )
+        
+        rating_value = rating_result.rating
+        pick = rating_result.pick
+        reason = rating_result.reason
+        
+        # 计算对焦状态
+        focus_status = None
+        focus_status_en = None
+        if detected:
+            if focus_sharpness_weight > 1.0:
+                focus_status = "精焦"
+                focus_status_en = "BEST"
+            elif focus_sharpness_weight >= 0.9:
+                focus_status = "合焦"
+                focus_status_en = "GOOD"
+            elif focus_sharpness_weight >= 0.7:
+                focus_status = "失焦"
+                focus_status_en = "BAD"
+            elif focus_sharpness_weight < 0.7:
+                focus_status = "脱焦"
+                focus_status_en = "WORST"
+        
+        # 生成调试可视化图
+        if detected and bird_crop_bgr is not None:
+            head_center_crop = None
+            if head_center_orig is not None:
+                head_center_crop = (head_center_orig[0] - x_orig, head_center_orig[1] - y_orig)
+            
+            focus_point_crop = None
+            if focus_x is not None and focus_y is not None:
+                img_w_for_focus = w_orig
+                img_h_for_focus = h_orig
+                if img_w_for_focus is None or img_h_for_focus is None:
+                    if img_dims is not None:
+                        w_resized, h_resized = img_dims
+                        if bird_crop_bgr is not None:
+                            ch, cw = bird_crop_bgr.shape[:2]
+                            if bird_bbox is not None:
+                                bx, by, bw, bh = bird_bbox
+                                scale_x = cw / bw if bw > 0 else 1
+                                scale_y = ch / bh if bh > 0 else 1
+                                img_w_for_focus = int(w_resized * scale_x)
+                                img_h_for_focus = int(h_resized * scale_y)
+                
+                if img_w_for_focus is not None and img_h_for_focus is not None:
+                    fx_px = int(focus_x * img_w_for_focus) - x_orig
+                    fy_px = int(focus_y * img_h_for_focus) - y_orig
+                    focus_point_crop = (fx_px, fy_px)
+            
+            try:
+                self._save_debug_crop(
+                    filename,
+                    bird_crop_bgr,
+                    bird_crop_mask,
+                    head_center_crop,
+                    head_radius_val,
+                    focus_point_crop,
+                    focus_status_en
+                )
+            except Exception:
+                pass
+        
+        # 计算调整后的值
+        adj_sharpness = head_sharpness * focus_sharpness_weight if head_sharpness else 0
+        if is_flying and head_sharpness:
+            adj_sharpness = adj_sharpness * 1.2
+        adj_topiq = topiq * focus_topiq_weight if topiq else None
+        if is_flying and adj_topiq:
+            adj_topiq = adj_topiq * 1.1
+        
+        processing_time = time.time() - photo_start_time
+        
+        return {
+            'filename': filename,
+            'filepath': filepath,
+            'file_prefix': file_prefix,
+            'rating': rating_value,
+            'pick': pick,
+            'reason': reason,
+            'confidence': confidence,
+            'head_sharpness': head_sharpness,
+            'topiq': topiq,
+            'adj_sharpness': adj_sharpness,
+            'adj_topiq': adj_topiq,
+            'is_flying': is_flying,
+            'flight_confidence': flight_confidence,
+            'is_overexposed': is_overexposed,
+            'is_underexposed': is_underexposed,
+            'focus_status': focus_status,
+            'focus_sharpness_weight': focus_sharpness_weight,
+            'focus_topiq_weight': focus_topiq_weight,
+            'focus_x': focus_x,
+            'focus_y': focus_y,
+            'has_visible_eye': has_visible_eye,
+            'has_visible_beak': has_visible_beak,
+            'left_eye_vis': left_eye_vis,
+            'right_eye_vis': right_eye_vis,
+            'beak_vis': beak_vis,
+            'best_eye_visibility': best_eye_visibility,
+            'detected': detected,
+            'processing_time': processing_time,
+        }
     
     def _process_images(self, files_tbr, raw_dict):
         """处理所有图片 - AI检测、关键点检测与评分"""

@@ -5,6 +5,8 @@
 import os
 import csv
 from datetime import datetime
+import cv2
+import numpy as np
 
 
 def log_message(message: str, directory: str = None, file_only: bool = False):
@@ -87,3 +89,37 @@ def write_to_csv(data: dict, directory: str, header: bool = False):
                 writer.writerow(data)
     except Exception as e:
         log_message(f"Warning: Could not write to CSV file: {e}", directory)
+
+
+def read_image(path: str):
+    """Read image file and return BGR ndarray or None."""
+    if not path:
+        return None
+
+    ext = os.path.splitext(path)[1].lower()
+    heif_exts = {'.heic', '.heif', '.hif'}
+
+    if ext in heif_exts:
+        try:
+            from pillow_heif import register_heif_opener
+            register_heif_opener()
+        except Exception:
+            pass
+
+        try:
+            from PIL import Image
+            image = Image.open(path).convert('RGB')
+            return cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+        except Exception:
+            return None
+
+    image = cv2.imread(path)
+    if image is not None:
+        return image
+
+    try:
+        from PIL import Image
+        image = Image.open(path).convert('RGB')
+        return cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+    except Exception:
+        return None

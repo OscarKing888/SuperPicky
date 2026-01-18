@@ -65,7 +65,7 @@ def visualize_focus_test(nef_path: str, output_path: str = None):
     
     if result is None or not result[0]:
         print("❌ 未检测到鸟")
-        os.remove(temp_jpg)
+        # os.remove(temp_jpg)
         return
     
     detected, _, confidence, sharpness, _, bird_bbox, img_dims, bird_mask = result
@@ -254,7 +254,7 @@ def visualize_focus_test(nef_path: str, output_path: str = None):
     print(f"\n✅ 已保存到: {output_path}")
     
     # 清理临时文件
-    os.remove(temp_jpg)
+    #os.remove(temp_jpg)
     
     return output_path
 

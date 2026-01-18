@@ -75,8 +75,10 @@ class IQAScorer:
                 
                 # 初始化 TOPIQ 模型
                 self._topiq_model = CFANet()
-                load_topiq_weights(self._topiq_model, weight_path, self.device)
-                self._topiq_model.to(self.device)
+                # 先加载到 CPU，再移动到目标设备（避免设备不匹配）
+                load_topiq_weights(self._topiq_model, weight_path, torch.device('cpu'))
+                # 确保模型所有参数都在目标设备上
+                self._topiq_model = self._topiq_model.to(self.device)
                 self._topiq_model.eval()
                 print("✅ TOPIQ 模型加载完成")
             except Exception as e:
@@ -92,6 +94,10 @@ class IQAScorer:
                     print("✅ TOPIQ 模型加载完成 (CPU模式)")
                 except Exception as e2:
                     raise RuntimeError(f"TOPIQ 模型加载失败: {e2}")
+        else:
+            # 确保模型在正确的设备上
+            if next(self._topiq_model.parameters()).device != self.device:
+                self._topiq_model = self._topiq_model.to(self.device)
         return self._topiq_model
 
     def calculate_nima(self, image_path: str) -> Optional[float]:
@@ -132,7 +138,13 @@ class IQAScorer:
             
             # 转为张量
             transform = T.ToTensor()
-            img_tensor = transform(img).unsqueeze(0).to(self.device)
+            img_tensor = transform(img).unsqueeze(0)
+            
+            # 确保输入张量在正确的设备上
+            img_tensor = img_tensor.to(self.device)
+            
+            # 确保模型在正确的设备上
+            topiq_model = topiq_model.to(self.device)
 
             # 计算评分
             with torch.no_grad():
@@ -178,24 +190,33 @@ class IQAScorer:
         return aesthetic_score, None
 
 
-# 全局单例
-_iqa_scorer_instance = None
+# 按设备存储的实例字典（支持多设备）
+_iqa_scorer_instances = {}
 
 
 def get_iqa_scorer(device='mps') -> IQAScorer:
     """
-    获取 IQA 评分器单例
+    获取 IQA 评分器实例（按设备创建，支持多设备）
 
     Args:
-        device: 计算设备
+        device: 计算设备 ('mps', 'cuda', 'cpu')
 
     Returns:
         IQAScorer 实例
     """
-    global _iqa_scorer_instance
-    if _iqa_scorer_instance is None:
-        _iqa_scorer_instance = IQAScorer(device=device)
-    return _iqa_scorer_instance
+    global _iqa_scorer_instances
+    
+    # 标准化设备字符串
+    if isinstance(device, torch.device):
+        device_str = str(device)
+    else:
+        device_str = str(device)
+    
+    # 为每个设备创建独立的实例
+    if device_str not in _iqa_scorer_instances:
+        _iqa_scorer_instances[device_str] = IQAScorer(device=device)
+    
+    return _iqa_scorer_instances[device_str]
 
 
 # 便捷函数 (保持向后兼容)

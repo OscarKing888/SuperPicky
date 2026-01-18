@@ -12,23 +12,49 @@ from advanced_config import get_advanced_config
 # 禁用 Ultralytics 设置警告
 os.environ['YOLO_VERBOSE'] = 'False'
 
+def _resolve_device(device):
+    """Resolve requested device string to a supported value."""
+    if device is None:
+        device = 'auto'
 
-def load_yolo_model():
-    """加载 YOLO 模型（启用MPS GPU加速）"""
+    if isinstance(device, str):
+        device = device.lower()
+
+    try:
+        import torch
+        has_cuda = torch.cuda.is_available()
+        has_mps = torch.backends.mps.is_available()
+    except Exception:
+        has_cuda = False
+        has_mps = False
+
+    if device in ('', 'auto'):
+        if has_cuda:
+            return 'cuda'
+        if has_mps:
+            return 'mps'
+        return 'cpu'
+
+    if isinstance(device, str) and device.startswith('cuda'):
+        return 'cuda' if has_cuda else 'cpu'
+
+    if device == 'mps':
+        return 'mps' if has_mps else 'cpu'
+
+    if device == 'cpu':
+        return 'cpu'
+
+    return 'cpu'
+
+
+
+def load_yolo_model(device='auto'):
+    """?? YOLO ?????????"""
     model_path = config.ai.get_model_path()
     model = YOLO(str(model_path))
 
-    # 尝试使用 Apple MPS (Metal Performance Shaders) GPU 加速
-    try:
-        import torch
-        if torch.backends.mps.is_available():
-            print("✅ 检测到 Apple GPU (MPS)，启用硬件加速")
-            # YOLO模型会自动识别device参数
-            # 注意：不需要手动 model.to('mps')，YOLO会在推理时自动处理
-        else:
-            print("⚠️  MPS不可用，使用CPU推理")
-    except Exception as e:
-        print(f"⚠️  GPU检测失败: {e}，使用CPU推理")
+    resolved_device = _resolve_device(device)
+    model._sp_device = resolved_device
 
     return model
 
@@ -59,7 +85,7 @@ def _get_iqa_scorer():
     return _iqa_scorer
 
 
-def detect_and_draw_birds(image_path, model, output_path, dir, ui_settings, i18n=None, skip_nima=False):
+def detect_and_draw_birds(image_path, model, output_path, dir, ui_settings, i18n=None, skip_nima=False, device=None):
     """
     检测并标记鸟类（V3.1 - 简化版，移除预览功能）
 
@@ -109,21 +135,42 @@ def detect_and_draw_birds(image_path, model, output_path, dir, ui_settings, i18n
     # V3.3: 简化日志，移除步骤详情
     # log_message(f"  ⏱️  [1/4] 图像预处理: {preprocess_time:.1f}ms", dir)
 
-    # Step 2: YOLO推理
+    # Step 2: YOLO??
     step_start = time.time()
-    # 使用MPS设备进行推理（如果可用），失败时降级到CPU
+    requested_device = device
+    if requested_device:
+        requested_device = _resolve_device(requested_device)
+    else:
+        requested_device = getattr(model, '_sp_device', None)
+    if requested_device in ('', 'auto'):
+        requested_device = None
     try:
-        # 尝试使用MPS设备
-        results = model(image, device='mps')
-    except Exception as mps_error:
-        # MPS失败，降级到CPU
-        log_message(f"⚠️  MPS推理失败，降级到CPU: {mps_error}", dir)
-        try:
-            results = model(image, device='cpu')
-        except Exception as cpu_error:
-            log_message(f"❌ AI推理完全失败: {cpu_error}", dir)
-            # 返回"无鸟"结果（V3.1）
-            # V3.3: 使用英文列名
+        if requested_device:
+            results = model(image, device=requested_device)
+        else:
+            results = model(image)
+    except Exception as primary_error:
+        if requested_device and requested_device != 'cpu':
+            log_message(f"WARNING: {requested_device.upper()} inference failed, fallback to CPU: {primary_error}", dir)
+            try:
+                results = model(image, device='cpu')
+            except Exception as cpu_error:
+                log_message(f"ERROR: AI inference failed: {cpu_error}", dir)
+                data = {
+                    "filename": os.path.splitext(os.path.basename(image_path))[0],
+                    "has_bird": "no",
+                    "confidence": 0.0,
+                    "head_sharp": "-",
+                    "left_eye": "-",
+                    "right_eye": "-",
+                    "beak": "-",
+                    "nima_score": "-",
+                    "rating": -1
+                }
+                write_to_csv(data, dir, False)
+                return found_bird, bird_result, 0.0, 0.0, None, None, None, None
+        else:
+            log_message(f"ERROR: AI inference failed: {primary_error}", dir)
             data = {
                 "filename": os.path.splitext(os.path.basename(image_path))[0],
                 "has_bird": "no",
@@ -136,8 +183,8 @@ def detect_and_draw_birds(image_path, model, output_path, dir, ui_settings, i18n
                 "rating": -1
             }
             write_to_csv(data, dir, False)
-            return found_bird, bird_result, 0.0, 0.0, None, None, None, None  # V3.7: 8 values including mask
-
+            return found_bird, bird_result, 0.0, 0.0, None, None, None, None
+    
     yolo_time = (time.time() - step_start) * 1000
     # V3.3: 简化日志，移除步骤详情
     # if i18n:
