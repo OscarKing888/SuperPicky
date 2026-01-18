@@ -6,6 +6,7 @@ SuperPicky - 更新检测器
 """
 
 import sys
+import platform
 import urllib.request
 import json
 import re
@@ -21,10 +22,19 @@ GITHUB_REPO = "jamesphotography/SuperPicky"
 GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 GITHUB_RELEASES_URL = f"https://github.com/{GITHUB_REPO}/releases/latest"
 
-# 平台对应的 Asset 文件名模式
-PLATFORM_PATTERNS = {
-    'darwin': ['.dmg', '-mac', '_mac', 'macos', 'osx'],
-    'win32': ['.exe', '.msi', '-win', '_win', 'windows', '-setup'],
+# 平台+架构对应的 Asset 文件名模式
+# 三层匹配策略：精确架构 > 通用版本 > 任意版本
+PLATFORM_ARCH_PATTERNS = {
+    'darwin': {
+        'arm64': ['_arm64', '-arm64', '_apple_silicon', '-apple_silicon', '_m1', '-m1', '_m2', '-m2'],
+        'x86_64': ['_x64', '-x64', '_x86_64', '-x86_64', '_intel', '-intel'],
+        'universal': ['_universal', '-universal', '_mac', '-mac', 'macos', '.dmg']
+    },
+    'win32': {
+        'AMD64': ['_x64', '-x64', '_win64', '-win64'],
+        'x86': ['_x86', '-x86', '_win32', '-win32'],
+        'universal': ['_win', '-win', 'windows', '.exe', '.msi', '-setup']
+    }
 }
 
 
@@ -104,45 +114,101 @@ class UpdateChecker:
     
     def _find_platform_download(self, assets: list) -> Optional[str]:
         """
-        根据当前平台查找对应的下载链接
-        
+        根据当前平台和架构查找对应的下载链接
+
+        三层匹配策略：
+        1. 精确架构匹配 - 优先查找 arm64/intel/x64 精确匹配
+        2. 通用版本回退 - 查找 universal 版本
+        3. 任意版本兜底 - 返回第一个平台相关的 DMG/EXE
+
         Args:
             assets: GitHub Release 的 assets 列表
-            
+
         Returns:
             下载链接或 None
         """
         if not assets:
             return None
-        
-        # 确定当前平台的模式
+
+        # 确定当前平台和架构
         platform_key = 'darwin' if sys.platform == 'darwin' else 'win32'
-        patterns = PLATFORM_PATTERNS.get(platform_key, [])
-        
-        # 遍历 assets 查找匹配
+        machine = platform.machine()  # arm64, x86_64, AMD64, x86 等
+
+        arch_patterns = PLATFORM_ARCH_PATTERNS.get(platform_key, {})
+        if not arch_patterns:
+            return None
+
+        # 获取当前架构的精确匹配模式
+        exact_patterns = arch_patterns.get(machine, [])
+        universal_patterns = arch_patterns.get('universal', [])
+
+        # 第一层：精确架构匹配
         for asset in assets:
             name = asset.get('name', '').lower()
             download_url = asset.get('browser_download_url', '')
-            
-            for pattern in patterns:
+
+            for pattern in exact_patterns:
                 if pattern.lower() in name:
                     return download_url
-        
-        # 如果没有找到平台特定的，返回第一个（可能是通用包）
-        if assets:
-            return assets[0].get('browser_download_url')
-        
+
+        # 第二层：通用版本回退
+        for asset in assets:
+            name = asset.get('name', '').lower()
+            download_url = asset.get('browser_download_url', '')
+
+            for pattern in universal_patterns:
+                if pattern.lower() in name:
+                    return download_url
+
+        # 第三层：任意平台相关版本兜底
+        # macOS: 返回第一个 .dmg 文件
+        # Windows: 返回第一个 .exe 或 .msi 文件
+        fallback_extensions = ['.dmg'] if platform_key == 'darwin' else ['.exe', '.msi']
+        for asset in assets:
+            name = asset.get('name', '').lower()
+            download_url = asset.get('browser_download_url', '')
+
+            for ext in fallback_extensions:
+                if name.endswith(ext):
+                    return download_url
+
         return None
     
     @staticmethod
     def get_platform_name() -> str:
-        """获取当前平台名称（用于UI显示）"""
+        """获取当前平台名称（用于UI显示，包含架构信息）"""
+        machine = platform.machine()
+
         if sys.platform == 'darwin':
-            return 'macOS'
+            if machine == 'arm64':
+                return 'macOS (Apple Silicon)'
+            else:
+                return 'macOS (Intel)'
         elif sys.platform.startswith('win'):
-            return 'Windows'
+            if machine == 'AMD64':
+                return 'Windows (64-bit)'
+            else:
+                return 'Windows (32-bit)'
         else:
-            return 'Linux'
+            return f'Linux ({machine})'
+
+    @staticmethod
+    def get_platform_short_name() -> str:
+        """获取平台简短标识（用于文件命名匹配）"""
+        machine = platform.machine()
+
+        if sys.platform == 'darwin':
+            if machine == 'arm64':
+                return 'mac_arm64'
+            else:
+                return 'mac_intel'
+        elif sys.platform.startswith('win'):
+            if machine == 'AMD64':
+                return 'win64'
+            else:
+                return 'win32'
+        else:
+            return f'linux_{machine}'
 
 
 def check_update_async(callback, current_version: str = CURRENT_VERSION):
@@ -168,11 +234,13 @@ def check_update_async(callback, current_version: str = CURRENT_VERSION):
 if __name__ == "__main__":
     print("=== SuperPicky 更新检测器测试 ===\n")
     print(f"当前版本: {CURRENT_VERSION}")
-    print(f"当前平台: {UpdateChecker.get_platform_name()}\n")
-    
+    print(f"当前平台: {UpdateChecker.get_platform_name()}")
+    print(f"平台标识: {UpdateChecker.get_platform_short_name()}")
+    print(f"CPU 架构: {platform.machine()}\n")
+
     checker = UpdateChecker()
     has_update, info = checker.check_for_updates()
-    
+
     if has_update:
         print(f"✅ 发现新版本: {info['version']}")
         print(f"📦 下载链接: {info['download_url']}")

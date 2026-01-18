@@ -2,29 +2,35 @@
 # -*- coding: utf-8 -*-
 """
 SuperPicky CLI - 命令行入口
-完整功能版本 - 支持处理、重置、重新评星
+完整功能版本 - 支持处理、重置、重新评星、鸟类识别
 
 Usage:
     python superpicky_cli.py process /path/to/photos [options]
     python superpicky_cli.py reset /path/to/photos
     python superpicky_cli.py restar /path/to/photos [options]
     python superpicky_cli.py info /path/to/photos
+    python superpicky_cli.py identify /path/to/bird.jpg [options]
 
 Examples:
     # 基本处理
     python superpicky_cli.py process ~/Photos/Birds
-    
+
     # 自定义阈值
     python superpicky_cli.py process ~/Photos/Birds --sharpness 600 --nima 5.2
-    
+
     # 不移动文件，只写EXIF
     python superpicky_cli.py process ~/Photos/Birds --no-organize
-    
+
     # 重置目录
     python superpicky_cli.py reset ~/Photos/Birds
-    
+
     # 重新评星
     python superpicky_cli.py restar ~/Photos/Birds --sharpness 700 --nima 5.5
+
+    # 鸟类识别
+    python superpicky_cli.py identify ~/Photos/bird.jpg
+    python superpicky_cli.py identify ~/Photos/bird.NEF --top 10
+    python superpicky_cli.py identify ~/Photos/bird.jpg --write-exif
 """
 
 import argparse
@@ -625,6 +631,81 @@ def cmd_info(args):
     return 0
 
 
+def cmd_identify(args):
+    """识别鸟类"""
+    from birdid.bird_identifier import identify_bird, YOLO_AVAILABLE, RAW_SUPPORT
+
+    print_banner()
+    print(f"\n🐦 鸟类识别")
+    print(f"📸 图片: {args.image}")
+    print(f"⚙️  YOLO裁剪: {'是' if args.yolo else '否'}")
+    print(f"⚙️  GPS过滤: {'是' if args.gps else '否'}")
+    print(f"⚙️  返回数量: {args.top}")
+    print()
+
+    if not YOLO_AVAILABLE:
+        print("⚠️  YOLO 模块未安装，将使用完整图像识别")
+
+    # 执行识别
+    print("🔍 正在识别...")
+    result = identify_bird(
+        args.image,
+        use_yolo=args.yolo,
+        use_gps=args.gps,
+        top_k=args.top
+    )
+
+    if not result['success']:
+        print(f"\n❌ 识别失败: {result.get('error', '未知错误')}")
+        return 1
+
+    # 显示结果
+    print(f"\n{'═' * 50}")
+    print("  识别结果")
+    print(f"{'═' * 50}")
+
+    if result.get('yolo_info'):
+        print(f"\n📍 YOLO检测: {result['yolo_info']}")
+
+    if result.get('gps_info'):
+        gps = result['gps_info']
+        print(f"🌍 GPS位置: {gps['info']}")
+
+    results = result.get('results', [])
+    if not results:
+        print("\n⚠️  未能识别出鸟类")
+        return 0
+
+    print(f"\n🐦 Top-{len(results)} 识别结果:")
+    for i, r in enumerate(results, 1):
+        cn_name = r.get('cn_name', '未知')
+        en_name = r.get('en_name', 'Unknown')
+        confidence = r.get('confidence', 0)
+        ebird_match = "✓" if r.get('ebird_match') else ""
+
+        print(f"  {i}. {cn_name} ({en_name})")
+        print(f"     置信度: {confidence:.1f}% {ebird_match}")
+
+    # 写入 EXIF（如果启用）
+    if args.write_exif and results:
+        from exiftool_manager import get_exiftool_manager
+
+        best = results[0]
+        bird_name = f"{best['cn_name']} ({best['en_name']})"
+
+        print(f"\n📝 写入 EXIF Title...")
+        exiftool_mgr = get_exiftool_manager()
+        success = exiftool_mgr.set_metadata(args.image, {'Title': bird_name})
+
+        if success:
+            print(f"  ✅ 已写入: {bird_name}")
+        else:
+            print(f"  ❌ 写入失败")
+
+    print()
+    return 0
+
+
 def main():
     """主入口"""
     parser = argparse.ArgumentParser(
@@ -638,6 +719,8 @@ Examples:
   %(prog)s reset ~/Photos/Birds -y             # 重置目录(无确认)
   %(prog)s restar ~/Photos/Birds -s 700 -n 5.5 # 重新评星
   %(prog)s info ~/Photos/Birds                 # 查看目录信息
+  %(prog)s identify ~/Photos/bird.jpg          # 识别鸟类
+  %(prog)s identify bird.NEF --write-exif      # 识别并写入EXIF
         """
     )
     
@@ -712,22 +795,40 @@ Examples:
     p_burst.add_argument('--execute', action='store_true',
                          help='实际执行处理（默认仅预览）')
     p_burst.set_defaults(phash=True)
-    
+
+    # ===== identify 命令 =====
+    p_identify = subparsers.add_parser('identify', help='识别鸟类')
+    p_identify.add_argument('image', help='图片文件路径')
+    p_identify.add_argument('-t', '--top', type=int, default=5,
+                           help='返回前 N 个结果 (默认: 5)')
+    p_identify.add_argument('--no-yolo', action='store_false', dest='yolo',
+                           help='禁用 YOLO 裁剪')
+    p_identify.add_argument('--no-gps', action='store_false', dest='gps',
+                           help='禁用 GPS 过滤')
+    p_identify.add_argument('--write-exif', action='store_true',
+                           help='将识别结果写入 EXIF Title')
+    p_identify.set_defaults(yolo=True, gps=True)
+
     # 解析参数
     args = parser.parse_args()
-    
+
     if not args.command:
         parser.print_help()
         return 1
-    
-    # 验证目录
-    if not os.path.isdir(args.directory):
-        print(f"❌ 目录不存在: {args.directory}")
-        return 1
-    
-    # 转换为绝对路径
-    args.directory = os.path.abspath(args.directory)
-    
+
+    # identify 命令验证文件，其他命令验证目录
+    if args.command == 'identify':
+        if not os.path.isfile(args.image):
+            print(f"❌ 文件不存在: {args.image}")
+            return 1
+        args.image = os.path.abspath(args.image)
+    else:
+        # 验证目录
+        if not os.path.isdir(args.directory):
+            print(f"❌ 目录不存在: {args.directory}")
+            return 1
+        args.directory = os.path.abspath(args.directory)
+
     # 执行命令
     if args.command == 'process':
         return cmd_process(args)
@@ -739,6 +840,8 @@ Examples:
         return cmd_info(args)
     elif args.command == 'burst':
         return cmd_burst(args)
+    elif args.command == 'identify':
+        return cmd_identify(args)
     else:
         parser.print_help()
         return 1

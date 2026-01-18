@@ -417,6 +417,7 @@
     "new_version_available": "New version {version} is available!",
     "current_version": "Current version: {version}",
     "latest_version": "Latest version: {version}",
+    "platform": "Current platform: {platform}",
     "download_now": "Download Now",
     "download_for_platform": "Download for {platform}",
     "remind_later": "Remind Me Later",

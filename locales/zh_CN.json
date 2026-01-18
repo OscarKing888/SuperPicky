@@ -455,6 +455,7 @@
     "new_version_available": "新版本 {version} 已发布！",
     "current_version": "当前版本: {version}",
     "latest_version": "最新版本: {version}",
+    "platform": "当前平台: {platform}",
     "download_now": "立即下载",
     "download_for_platform": "下载 {platform} 版本",
     "remind_later": "稍后提醒",

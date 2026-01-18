@@ -158,11 +158,27 @@ if [ -z "$VERSION" ]; then
 fi
 log_success "检测到版本: v${VERSION}"
 
-# 设置输出文件名
-if [ "$MODE" = "test" ]; then
-    DMG_NAME="${APP_NAME}_v${VERSION}_test.dmg"
+# ============================================
+# 步骤1.5: 检测 CPU 架构
+# ============================================
+log_info "检测 CPU 架构..."
+ARCH=$(uname -m)
+if [ "$ARCH" = "arm64" ]; then
+    ARCH_SUFFIX="arm64"
+    log_success "检测到 Apple Silicon (arm64)"
+elif [ "$ARCH" = "x86_64" ]; then
+    ARCH_SUFFIX="intel"
+    log_success "检测到 Intel (x86_64)"
 else
-    DMG_NAME="${APP_NAME}_v${VERSION}.dmg"
+    ARCH_SUFFIX="$ARCH"
+    log_warning "未知架构: $ARCH"
+fi
+
+# 设置输出文件名（包含架构信息）
+if [ "$MODE" = "test" ]; then
+    DMG_NAME="${APP_NAME}_v${VERSION}_${ARCH_SUFFIX}_test.dmg"
+else
+    DMG_NAME="${APP_NAME}_v${VERSION}_${ARCH_SUFFIX}.dmg"
 fi
 DMG_PATH="dist/${DMG_NAME}"
 
@@ -334,6 +350,7 @@ echo -e "${GREEN}========================================${NC}"
 echo ""
 echo -e "应用: ${CYAN}dist/${APP_NAME}.app${NC}"
 echo -e "DMG:  ${CYAN}${DMG_PATH}${NC}"
+echo -e "架构: ${CYAN}${ARCH_SUFFIX}${NC}"
 echo ""
 
 if [ "$MODE" = "release" ]; then
@@ -342,6 +359,8 @@ if [ "$MODE" = "release" ]; then
     echo "下一步:"
     echo "  1. 测试 DMG 安装包"
     echo "  2. 上传到 GitHub Releases"
+    echo ""
+    echo "注意: 如需构建其他架构版本，请在对应架构的 Mac 上重新运行此脚本"
 else
     echo -e "状态: ${YELLOW}已签名（未公证）${NC}"
     echo ""

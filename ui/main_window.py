@@ -271,6 +271,7 @@ class SuperPickyMainWindow(QMainWindow):
         self._setup_window()
         self._setup_menu()
         self._setup_ui()
+        self._setup_birdid_dock()  # V4.0: 识鸟停靠面板
         self._show_initial_help()
 
         # 连接重置信号
@@ -278,8 +279,57 @@ class SuperPickyMainWindow(QMainWindow):
         self.reset_complete_signal.connect(self._on_reset_complete)
         self.reset_error_signal.connect(self._on_reset_error)
 
+        # V4.0: 自动启动识鸟 API 服务器
+        self._birdid_server_process = None
+        QTimer.singleShot(1000, self._auto_start_birdid_server)
+
         # V3.9.5: 启动时检查更新（延迟2秒，避免阻塞UI）
         QTimer.singleShot(2000, self._check_for_updates)
+
+    def keyPressEvent(self, event):
+        """全局键盘事件 - 粘贴图片自动识鸟"""
+        from PySide6.QtGui import QKeySequence
+        from PySide6.QtWidgets import QApplication
+        
+        # 检查是否是粘贴快捷键
+        if event.matches(QKeySequence.StandardKey.Paste):
+            clipboard = QApplication.clipboard()
+            mime = clipboard.mimeData()
+            
+            # 如果剪贴板有图片，自动发送到识鸟面板
+            if mime.hasImage():
+                image = clipboard.image()
+                if not image.isNull() and hasattr(self, 'birdid_dock'):
+                    # 确保识鸟面板可见
+                    if not self.birdid_dock.isVisible():
+                        self.birdid_dock.show()
+                    # 发送图片到识鸟面板
+                    self.birdid_dock.on_image_pasted(image)
+                    event.accept()
+                    return
+        
+        super().keyPressEvent(event)
+
+    def _paste_image_for_birdid(self):
+        """菜单触发：从剪贴板粘贴图片进行识鸟"""
+        from PySide6.QtWidgets import QApplication
+        
+        clipboard = QApplication.clipboard()
+        mime = clipboard.mimeData()
+        
+        if mime.hasImage():
+            image = clipboard.image()
+            if not image.isNull() and hasattr(self, 'birdid_dock'):
+                # 确保识鸟面板可见
+                if not self.birdid_dock.isVisible():
+                    self.birdid_dock.show()
+                    self.birdid_dock_action.setChecked(True)
+                # 发送图片到识鸟面板
+                self.birdid_dock.on_image_pasted(image)
+            else:
+                self._log("剪贴板中没有有效的图片")
+        else:
+            self._log("剪贴板中没有图片，请先截图或复制图片")
 
     def _get_app_icon(self):
         """获取应用图标"""
@@ -304,8 +354,8 @@ class SuperPickyMainWindow(QMainWindow):
     def _setup_window(self):
         """设置窗口属性"""
         self.setWindowTitle(self.i18n.t("app.window_title"))
-        self.setMinimumSize(720, 680)
-        self.resize(820, 760)
+        self.setMinimumSize(680, 600)
+        self.resize(750, 720)
 
         # 应用全局样式表
         self.setStyleSheet(GLOBAL_STYLE)
@@ -319,13 +369,30 @@ class SuperPickyMainWindow(QMainWindow):
         """设置菜单栏"""
         menubar = self.menuBar()
 
+        # 编辑菜单（粘贴功能）
+        edit_menu = menubar.addMenu("编辑")
+        
+        paste_image_action = QAction("粘贴图片识鸟", self)
+        paste_image_action.setShortcut("Ctrl+V")  # Mac 会自动转为 Cmd+V
+        paste_image_action.triggered.connect(self._paste_image_for_birdid)
+        edit_menu.addAction(paste_image_action)
+
         # 工具菜单
         tools_menu = menubar.addMenu("工具")
 
-        # 鸟类识别 GUI
-        birdid_gui_action = QAction("鸟类识别...", self)
+        # 识鸟面板（可勾选显示/隐藏）
+        self.birdid_dock_action = QAction("识鸟面板", self)
+        self.birdid_dock_action.setCheckable(True)
+        self.birdid_dock_action.setChecked(True)
+        self.birdid_dock_action.triggered.connect(self._toggle_birdid_dock)
+        tools_menu.addAction(self.birdid_dock_action)
+
+        # 独立识鸟窗口
+        birdid_gui_action = QAction("识鸟窗口（独立）...", self)
         birdid_gui_action.triggered.connect(self._open_birdid_gui)
         tools_menu.addAction(birdid_gui_action)
+
+        tools_menu.addSeparator()
 
         # 启动识鸟 API 服务
         self.birdid_server_action = QAction("启动识鸟 API 服务", self)
@@ -377,6 +444,21 @@ class SuperPickyMainWindow(QMainWindow):
 
         # 控制按钮
         self._create_button_section(main_layout)
+
+    def _setup_birdid_dock(self):
+        """设置识鸟停靠面板"""
+        from .birdid_dock import BirdIDDockWidget
+
+        self.birdid_dock = BirdIDDockWidget(self)
+        self.addDockWidget(Qt.RightDockWidgetArea, self.birdid_dock)
+
+        # 更新菜单动作的状态
+        self.birdid_dock.visibilityChanged.connect(self._on_birdid_dock_visibility_changed)
+
+    def _on_birdid_dock_visibility_changed(self, visible):
+        """识鸟面板可见性变化"""
+        if hasattr(self, 'birdid_dock_action'):
+            self.birdid_dock_action.setChecked(visible)
 
     def _create_header_section(self, parent_layout):
         """创建头部区域 - 品牌展示"""
@@ -1173,8 +1255,14 @@ class SuperPickyMainWindow(QMainWindow):
         dialog.exec()
 
     @Slot()
+    def _toggle_birdid_dock(self, checked):
+        """显示/隐藏识鸟停靠面板"""
+        if hasattr(self, 'birdid_dock'):
+            self.birdid_dock.setVisible(checked)
+
+    @Slot()
     def _open_birdid_gui(self):
-        """打开鸟类识别 GUI"""
+        """打开鸟类识别 GUI（独立窗口）"""
         try:
             from birdid_gui import BirdIDWindow
             self.birdid_window = BirdIDWindow()
@@ -1195,8 +1283,9 @@ class SuperPickyMainWindow(QMainWindow):
                 script_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'birdid_server.py')
                 self._birdid_server_process = subprocess.Popen(
                     [system_module.executable, script_path],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    start_new_session=True
                 )
                 self.birdid_server_action.setText("停止识鸟 API 服务")
                 self._log("识鸟 API 服务已启动 (端口 5156)", "success")
@@ -1207,11 +1296,51 @@ class SuperPickyMainWindow(QMainWindow):
             # 停止服务
             try:
                 self._birdid_server_process.terminate()
-                self._birdid_server_process = None
-                self.birdid_server_action.setText("启动识鸟 API 服务")
-                self._log("识鸟 API 服务已停止", "info")
-            except Exception as e:
-                self._log(f"停止服务时出错: {e}", "error")
+                self._birdid_server_process.wait(timeout=3)
+            except:
+                try:
+                    self._birdid_server_process.kill()
+                except:
+                    pass
+            self._birdid_server_process = None
+            self.birdid_server_action.setText("启动识鸟 API 服务")
+            self._log("识鸟 API 服务已停止", "info")
+
+    def _auto_start_birdid_server(self):
+        """自动启动识鸟 API 服务器"""
+        import subprocess
+        import sys as system_module
+
+        try:
+            script_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'birdid_server.py')
+            if not os.path.exists(script_path):
+                self._log("识鸟服务脚本不存在", "warning")
+                return
+
+            # 让 API 服务器的日志输出到主控制台（方便调试）
+            self._birdid_server_process = subprocess.Popen(
+                [system_module.executable, script_path, '--no-preload'],
+                stdout=None,  # 继承父进程的 stdout（显示在控制台）
+                stderr=None,  # 继承父进程的 stderr
+                start_new_session=True  # 在新会话中启动，避免信号传递问题
+            )
+            self.birdid_server_action.setText("停止识鸟 API 服务")
+            self._log("识鸟 API 服务已自动启动 (端口 5156)", "success")
+        except Exception as e:
+            self._log(f"自动启动识鸟服务失败: {e}", "warning")
+
+    def _stop_birdid_server(self):
+        """停止识鸟 API 服务器"""
+        if hasattr(self, '_birdid_server_process') and self._birdid_server_process is not None:
+            try:
+                self._birdid_server_process.terminate()
+                self._birdid_server_process.wait(timeout=3)
+            except:
+                try:
+                    self._birdid_server_process.kill()
+                except:
+                    pass
+            self._birdid_server_process = None
 
     # ========== 辅助方法 ==========
 
@@ -1386,10 +1515,12 @@ class SuperPickyMainWindow(QMainWindow):
             if reply == StyledMessageBox.No:  # 用户点击"是"退出
                 self.worker._stop_event.set()
                 self.worker._stop_caffeinate()  # V3.8.1: 确保终止 caffeinate 进程
+                self._stop_birdid_server()  # V4.0: 停止识鸟 API 服务
                 event.accept()
             else:
                 event.ignore()
         else:
+            self._stop_birdid_server()  # V4.0: 停止识鸟 API 服务
             event.accept()
 
     # ========== V3.9.5: 更新检测功能 ==========
@@ -1415,25 +1546,26 @@ class SuperPickyMainWindow(QMainWindow):
         """显示更新对话框"""
         from update_checker import UpdateChecker
         import webbrowser
-        
+
         version = update_info.get('version', 'Unknown')
         download_url = update_info.get('download_url') or update_info.get('release_url', '')
         platform_name = UpdateChecker.get_platform_name()
-        
+
         # 构建消息
         message = f"{self.i18n.t('update.new_version_available', version=version)}\n\n"
         message += f"{self.i18n.t('update.current_version', version='3.9.5')}\n"
-        message += f"{self.i18n.t('update.latest_version', version=version)}"
-        
+        message += f"{self.i18n.t('update.latest_version', version=version)}\n"
+        message += f"{self.i18n.t('update.platform', platform=platform_name)}"
+
         # 显示确认对话框
         reply = StyledMessageBox.question(
             self,
             self.i18n.t("update.title"),
             message,
-            yes_text=self.i18n.t("update.download_now"),
+            yes_text=self.i18n.t("update.download_for_platform", platform=platform_name),
             no_text=self.i18n.t("update.remind_later")
         )
-        
+
         if reply == StyledMessageBox.Yes:
             # 打开下载链接
             if download_url:
