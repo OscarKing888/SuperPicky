@@ -165,14 +165,14 @@ class WorkerThread(threading.Thread):
         )
 
         settings = ProcessingSettings(
-            ai_confidence=self.ui_settings[0],
-            sharpness_threshold=self.ui_settings[1],
-            nima_threshold=self.ui_settings[2],
-            save_crop=self.ui_settings[3] if len(self.ui_settings) > 3 else False,
-            normalization_mode=self.ui_settings[4] if len(self.ui_settings) > 4 else 'log_compression',
-            detect_flight=self.ui_settings[5] if len(self.ui_settings) > 5 else True,
-            detect_exposure=self.ui_settings[6] if len(self.ui_settings) > 6 else False,  # V3.8: 默认关闭
-            detect_burst=self.ui_settings[7] if len(self.ui_settings) > 7 else True  # V4.0: 默认开启
+            ai_confidence=self.ui_settings.ai_confidence,
+            sharpness_threshold=self.ui_settings.sharpness_threshold,
+            nima_threshold=self.ui_settings.nima_threshold,
+            save_crop=self.ui_settings.save_crop,
+            normalization_mode=self.ui_settings.normalization_mode,
+            detect_flight=self.ui_settings.detect_flight,
+            detect_exposure=self.ui_settings.detect_exposure,  # V3.8: 默认关闭
+            detect_burst=self.ui_settings.detect_burst  # V4.0: 默认开启
         )
 
         def log_callback(msg, level="info"):
@@ -186,9 +186,9 @@ class WorkerThread(threading.Thread):
             progress=progress_callback
         )
 
-        use_job_queue = self.ui_settings[8] if len(self.ui_settings) > 8 else False
+        use_job_workers = self.ui_settings.use_job_workers
         processor_cls = PhotoProcessor
-        if use_job_queue:
+        if use_job_workers:
             from core.job_queue_processor import JobQueuePhotoProcessor
             processor_cls = JobQueuePhotoProcessor
             if self.i18n:
@@ -543,21 +543,47 @@ class SuperPickyMainWindow(QMainWindow):
 
         header_layout.addLayout(exposure_layout)
 
-        # Job queue workflow toggle
-        job_queue_layout = QHBoxLayout()
-        job_queue_layout.setSpacing(10)
+        # oscar:并发处理队列开关[
+        job_workers_layout = QHBoxLayout()
+        job_workers_layout.setSpacing(10)
 
-        job_queue_label = QLabel(self.i18n.t("labels.job_queue"))
-        job_queue_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
-        job_queue_layout.addWidget(job_queue_label)
+        job_workers_label = QLabel(self.i18n.t("labels.job_workers"))
+        job_workers_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
+        job_workers_layout.addWidget(job_workers_label)
 
-        self.job_queue_check = QCheckBox()
-        self.job_queue_check.setChecked(True)
-        job_queue_layout.addWidget(self.job_queue_check)
+        self.job_workers_check = QCheckBox()
+        self.job_workers_check.setChecked(True)
+        self.job_workers_check.toolTip = QLabel(self.i18n.t("labels.job_workers.tooltip"))
+        job_workers_layout.addWidget(self.job_workers_check)
+        
+        # CPU推理开关
+        job_workers_cpu_label = QLabel(self.i18n.t("labels.cpu_workers"))
+        job_workers_cpu_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
+        job_workers_layout.addWidget(job_workers_cpu_label)
 
-        header_layout.addLayout(job_queue_layout)
+        self.job_workers_cpu_check = QCheckBox()
+        self.job_workers_cpu_check.setChecked(True)
+        self.job_workers_cpu_check.toolTip = QLabel(self.i18n.t("labels.cpu_workers.tooltip"))
+        job_workers_layout.addWidget(self.job_workers_cpu_check)
+        
+        # GPU推理开关
+        job_workers_gpu_label = QLabel(self.i18n.t("labels.gpu_workers"))
+        job_workers_gpu_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
+        job_workers_layout.addWidget(job_workers_gpu_label)
+
+        self.job_workers_gpu_check = QCheckBox()
+        self.job_workers_gpu_check.setChecked(True)
+        self.job_workers_gpu_check.toolTip = QLabel(self.i18n.t("labels.gpu_workers.tooltip"))
+        job_workers_layout.addWidget(self.job_workers_gpu_check)
+        
+        # 连接主开关信号，控制子开关的可交互状态
+        self.job_workers_check.toggled.connect(self._on_job_workers_toggled)
+        # 初始化子开关的状态（主开关默认选中，所以子开关应该可用）
+        self._on_job_workers_toggled(self.job_workers_check.isChecked())
+        # oscar:]
 
         params_layout.addLayout(header_layout)
+        params_layout.addLayout(job_workers_layout) # oscar
 
         # 隐藏变量
         self.ai_confidence = 50
@@ -734,6 +760,13 @@ class SuperPickyMainWindow(QMainWindow):
         value = self.nima_slider.value() / 10.0
         self.nima_value.setText(f"{value:.1f}")
 
+    @Slot(bool)
+    def _on_job_workers_toggled(self, checked: bool):
+        """作业队列主开关状态变化，控制子开关的可交互状态"""
+        # 当主开关选中时，子开关可用；未选中时，子开关禁用
+        self.job_workers_cpu_check.setEnabled(checked)
+        self.job_workers_gpu_check.setEnabled(checked)
+
     @Slot()
     def _on_path_entered(self):
         """路径输入回车或失焦"""
@@ -865,17 +898,20 @@ class SuperPickyMainWindow(QMainWindow):
         self._log(self.i18n.t("logs.processing_start"))
 
         # 准备 UI 设置
-        ui_settings = [
-            self.ai_confidence,
-            self.sharp_slider.value(),
-            self.nima_slider.value() / 10.0,
-            False,
-            self.norm_mode,
-            self.flight_check.isChecked(),
-            self.exposure_check.isChecked(),  # V3.8: 曝光检测开关
-            self.burst_check.isChecked(),     # V4.0: 连拍检测开关
-            self.job_queue_check.isChecked()
-        ]
+        from core.config_manager import UISettings
+        ui_settings = UISettings(
+            ai_confidence=self.ai_confidence,
+            sharpness_threshold=self.sharp_slider.value(),
+            nima_threshold=self.nima_slider.value() / 10.0,
+            save_crop=False,
+            normalization_mode=self.norm_mode,
+            detect_flight=self.flight_check.isChecked(),
+            detect_exposure=self.exposure_check.isChecked(),    # V3.8: 曝光检测开关
+            detect_burst=self.burst_check.isChecked(),          # V4.0: 连拍检测开关
+            use_job_workers=self.job_workers_check.isChecked(), # 并发处理
+            use_cpu_workers=self.job_workers_cpu_check.isChecked(), # 并发处理时用CPU
+            use_gpu_workers=self.job_workers_gpu_check.isChecked()  # 并发处理时用GPU
+        )
 
         # 创建信号
         self.worker_signals = WorkerSignals()

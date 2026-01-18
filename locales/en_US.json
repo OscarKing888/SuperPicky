@@ -62,7 +62,9 @@
     "exposure_detection": "Exposure Check",
     "burst": "Burst",
     "exposure": "Exposure",
-    "job_queue": "Concurrent Processing"
+    "job_workers": "Concurrent Processing",
+    "cpu_workers": "CPU Multi-threads",
+    "gpu_workers": "GPU Multi-threads"
   },
   "dialogs": {
     "file_organization_title": "File Organization",

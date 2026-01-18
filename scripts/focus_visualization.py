@@ -59,7 +59,14 @@ def visualize_focus_test(nef_path: str, output_path: str = None):
     # ============================================
     print("🤖 运行 YOLO 检测...")
     model = load_yolo_model()
-    ui_settings = [50, 400, 5.2, False, 'log_compression']  # 默认设置
+    from core.config_manager import UISettings
+    ui_settings = UISettings(
+        ai_confidence=50,
+        sharpness_threshold=400,
+        nima_threshold=5.2,
+        save_crop=False,
+        normalization_mode='log_compression'
+    )
     
     result = detect_and_draw_birds(temp_jpg, model, None, project_root, ui_settings, None, skip_nima=True)
     

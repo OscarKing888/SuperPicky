@@ -347,14 +347,18 @@ class PhotoProcessor:
         # 确定AI推理使用的路径
         inference_path = ai_inference_path if ai_inference_path else filepath
         
-        # UI设置转为列表格式
-        ui_settings = [
-            self.settings.ai_confidence,
-            self.settings.sharpness_threshold,
-            self.settings.nima_threshold,
-            self.settings.save_crop,
-            self.settings.normalization_mode
-        ]
+        # UI设置转为 UISettings 格式
+        from core.config_manager import UISettings
+        ui_settings = UISettings(
+            ai_confidence=self.settings.ai_confidence,
+            sharpness_threshold=self.settings.sharpness_threshold,
+            nima_threshold=self.settings.nima_threshold,
+            save_crop=self.settings.save_crop,
+            normalization_mode=self.settings.normalization_mode,
+            detect_flight=self.settings.detect_flight,
+            detect_exposure=self.settings.detect_exposure,
+            detect_burst=self.settings.detect_burst
+        )
         
         # Phase 1: YOLO检测
         try:
@@ -766,14 +770,18 @@ class PhotoProcessor:
         
         exiftool_mgr = get_exiftool_manager()
         
-        # UI设置转为列表格式
-        ui_settings = [
-            self.settings.ai_confidence,
-            self.settings.sharpness_threshold,
-            self.settings.nima_threshold,
-            self.settings.save_crop,
-            self.settings.normalization_mode
-        ]
+        # UI设置转为 UISettings 格式
+        from core.config_manager import UISettings
+        ui_settings = UISettings(
+            ai_confidence=self.settings.ai_confidence,
+            sharpness_threshold=self.settings.sharpness_threshold,
+            nima_threshold=self.settings.nima_threshold,
+            save_crop=self.settings.save_crop,
+            normalization_mode=self.settings.normalization_mode,
+            detect_flight=self.settings.detect_flight,
+            detect_exposure=self.settings.detect_exposure,
+            detect_burst=self.settings.detect_burst
+        )
         
         ai_total_start = time.time()
         

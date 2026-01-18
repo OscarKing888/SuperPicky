@@ -133,6 +133,7 @@ def cmd_burst(args):
 def cmd_process(args):
     """处理照片目录"""
     from cli_processor import CLIProcessor
+    from core.config_manager import UISettings
     
     print_banner()
     print(f"\n📁 目标目录: {args.directory}")
@@ -145,13 +146,20 @@ def cmd_process(args):
     print()
     
     # 创建处理器
-    ui_settings = [
-        args.confidence,      # ai_confidence
-        args.sharpness,       # sharpness_threshold
-        args.nima_threshold,  # nima_threshold
-        False,                # save_crop
-        'log_compression'     # norm_mode
-    ]
+    ui_settings = UISettings(
+        ai_confidence=args.confidence,
+        sharpness_threshold=args.sharpness,
+        nima_threshold=args.nima_threshold,
+        save_crop=False,
+        normalization_mode='log_compression',
+        detect_flight=args.flight,
+        detect_exposure=True,   # V3.9.4: 默认开启曝光检测，与 GUI 一致
+        detect_burst=args.burst,
+        use_job_workers=True,
+        use_cpu_workers=True,
+        use_gpu_workers=True
+        
+    )
     
     processor = CLIProcessor(
         dir_path=args.directory,

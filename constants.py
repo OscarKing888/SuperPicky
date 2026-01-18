@@ -23,10 +23,15 @@ RAW_EXTENSIONS = ['.nef', '.cr2', '.cr3', '.arw', '.raf', '.orf', '.rw2', '.pef'
 # 支持的 JPG 文件扩展名（小写）
 JPG_EXTENSIONS = ['.jpg', '.jpeg']
 
+# oscar:支持的HEIF文件扩展名
+HEIF_EXTENSIONS = ['.heic', '.heif', '.hif']
+
 # 所有支持的图片扩展名（用于文件查找，包含大小写）
 IMAGE_EXTENSIONS = (
     [ext.lower() for ext in RAW_EXTENSIONS] +
     [ext.upper() for ext in RAW_EXTENSIONS] +
     [ext.lower() for ext in JPG_EXTENSIONS] +
-    [ext.upper() for ext in JPG_EXTENSIONS]
+    [ext.upper() for ext in JPG_EXTENSIONS] +
+    [ext.lower() for ext in HEIF_EXTENSIONS] +
+    [ext.upper() for ext in HEIF_EXTENSIONS]
 )

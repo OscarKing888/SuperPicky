@@ -16,7 +16,7 @@ from core.job_base_cpu_convert_heif import JobBaseCPU_ConvertHEIF
 from core.job_base_cpu_rate import JobBaseCPU_Rate
 from core.job_base_gpu_rate import JobBaseGPU_Rate
 from core.job_base_cpu_write_exif import JobBaseCPU_WriteEXIF
-from core.rating_info import RatingInfo
+from core.rating_info import RatingInfo, RatingInfoQueue
 from core.photo_processor import PhotoProcessor
 
 from core.job_manager_worker_cpu import CPUJobWorker
@@ -82,8 +82,7 @@ class JobManager:
             self.gpu_executor = None
         
         # 评星信息队列（步骤4：评星完成后保存到这里）
-        self.rating_info_queue: queue.Queue[RatingInfo] = queue.Queue()
-        self.rating_info_lock = threading.Lock()
+        self.rating_info_queue: RatingInfoQueue = RatingInfoQueue()
         
         # 统计信息
         self.stats = {
@@ -210,8 +209,7 @@ class JobManager:
             exif_data=exif_data,
         )
         
-        with self.rating_info_lock:
-            self.rating_info_queue.put(rating_info)
+        self.rating_info_queue.put(rating_info)
 
     def run(self):
         """

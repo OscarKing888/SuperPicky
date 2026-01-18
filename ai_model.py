@@ -99,9 +99,17 @@ def detect_and_draw_birds(image_path, model, output_path, dir, ui_settings, i18n
         skip_nima: 如果为True，跳过NIMA计算（用于双眼不可见的情况）
     """
     # V3.1: 从 ui_settings 获取参数
-    ai_confidence = ui_settings[0] / 100  # AI置信度：50-100 -> 0.5-1.0（仅用于过滤）
-    sharpness_threshold = ui_settings[1]  # 锐度阈值：6000-9000
-    nima_threshold = ui_settings[2]       # NIMA美学阈值：5.0-6.0
+    from core.config_manager import UISettings
+    # 支持 UISettings 数据类和列表（向后兼容）
+    if isinstance(ui_settings, UISettings):
+        ai_confidence = ui_settings.ai_confidence / 100  # AI置信度：50-100 -> 0.5-1.0（仅用于过滤）
+        sharpness_threshold = ui_settings.sharpness_threshold  # 锐度阈值：6000-9000
+        nima_threshold = ui_settings.nima_threshold  # NIMA美学阈值：5.0-6.0
+    else:
+        # 向后兼容列表格式
+        ai_confidence = ui_settings[0] / 100  # AI置信度：50-100 -> 0.5-1.0（仅用于过滤）
+        sharpness_threshold = ui_settings[1]  # 锐度阈值：6000-9000
+        nima_threshold = ui_settings[2]       # NIMA美学阈值：5.0-6.0
 
     # V3.1: 不再保存Crop图片（移除预览功能）
     save_crop = False

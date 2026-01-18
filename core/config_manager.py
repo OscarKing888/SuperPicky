@@ -8,6 +8,20 @@ from typing import Dict, Any, List, Optional
 from config import config
 
 
+@dataclass
+class UISettings:
+    """UI设置数据类 - 使用命名属性替代列表索引"""
+    ai_confidence: int  # AI置信度：50-100
+    sharpness_threshold: int  # 锐度阈值：200-600
+    nima_threshold: float  # NIMA美学阈值：4.0-7.0
+    save_crop: bool = False  # 是否保存裁剪图片（已废弃）
+    normalization_mode: str = 'log_compression'  # 归一化模式
+    detect_flight: bool = True  # 是否检测飞鸟
+    detect_exposure: bool = False  # 是否检测曝光
+    detect_burst: bool = True  # 是否检测连拍
+    use_job_workers: bool = False  # 是否使用作业队列处理器
+
+
 class ConfigManager:
     """配置管理器，提供配置访问和验证功能"""
     
@@ -111,12 +125,23 @@ class ConfigManager:
         return self._config.csv.HEADERS.copy()
     
     # ============ 配置验证 ============
-    def validate_ui_settings(self, ui_settings: List[Any]) -> bool:
-        """验证UI设置参数的有效性"""
-        if len(ui_settings) != 3:
-            return False
+    def validate_ui_settings(self, ui_settings) -> bool:
+        """验证UI设置参数的有效性
         
-        confidence, area_percent, sharpness = ui_settings
+        Args:
+            ui_settings: UISettings 实例或列表（向后兼容，旧版本只使用前3个参数）
+        """
+        # 支持 UISettings 数据类
+        if isinstance(ui_settings, UISettings):
+            confidence = ui_settings.ai_confidence
+            area_percent = ui_settings.sharpness_threshold  # 注意：原逻辑中[1]是area_percent
+            sharpness = ui_settings.nima_threshold  # 注意：原逻辑中[2]是sharpness
+        elif isinstance(ui_settings, (list, tuple)):
+            if len(ui_settings) != 3:
+                return False
+            confidence, area_percent, sharpness = ui_settings
+        else:
+            return False
         
         # 验证置信度 (0.0 - 1.0 或 0-100百分比格式)
         if not isinstance(confidence, (int, float)):
@@ -135,20 +160,35 @@ class ConfigManager:
             
         return True
     
-    def get_processing_thresholds(self, ui_settings: List[Any]) -> Dict[str, float]:
-        """根据UI设置计算处理阈值"""
-        if not self.validate_ui_settings(ui_settings):
-            raise ValueError("Invalid UI settings provided")
-            
-        confidence = float(ui_settings[0])
+    def get_processing_thresholds(self, ui_settings) -> Dict[str, float]:
+        """根据UI设置计算处理阈值
+        
+        Args:
+            ui_settings: UISettings 实例或列表（向后兼容，旧版本只使用前3个参数）
+        """
+        # 支持 UISettings 数据类
+        if isinstance(ui_settings, UISettings):
+            confidence = float(ui_settings.ai_confidence)
+            area_percent = float(ui_settings.sharpness_threshold)  # 注意：原逻辑中[1]是area_percent
+            sharpness = float(ui_settings.nima_threshold)  # 注意：原逻辑中[2]是sharpness
+        elif isinstance(ui_settings, (list, tuple)):
+            # 向后兼容列表格式
+            if not self.validate_ui_settings(ui_settings):
+                raise ValueError("Invalid UI settings provided")
+            confidence = float(ui_settings[0])
+            area_percent = float(ui_settings[1])
+            sharpness = float(ui_settings[2])
+        else:
+            raise ValueError("Invalid UI settings type")
+        
         # 如果置信度>1，说明是百分比格式，需要转换为0-1范围
         if confidence > 1.0:
             confidence = confidence / 100.0
             
         return {
             'ai_confidence': confidence,
-            'area_threshold': float(ui_settings[1]) / 100.0,  # 转换为0-1范围
-            'sharpness_threshold': float(ui_settings[2])
+            'area_threshold': area_percent / 100.0,  # 转换为0-1范围
+            'sharpness_threshold': sharpness
         }
 
 
