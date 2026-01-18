@@ -314,15 +314,20 @@ class JobManager:
         self._log(f"✅ 评分完成: 成功 {self.stats['rate_success']}, 失败 {self.stats['rate_failed']}")
         
         # 步骤5：所有rate完成后，执行EXIF写入
-        self._log(f"📝 开始写入EXIF {self.rating_info_queue.qsize()} 个文件...")
-        exif_futures: List[Future] = []
-        
+        # 先保存所有 rating_info 用于后续文件移动
+        all_rating_infos: List[RatingInfo] = []
         while not self.rating_info_queue.empty():
             try:
                 rating_info = self.rating_info_queue.get_nowait()
+                all_rating_infos.append(rating_info)
             except queue.Empty:
                 break
-            
+        
+        self._log(f"📝 开始写入EXIF {len(all_rating_infos)} 个文件...")
+        exif_futures: List[Future] = []
+        
+        # 从保存的 rating_infos 中创建 EXIF 写入任务
+        for rating_info in all_rating_infos:
             # 创建EXIF写入任务
             exif_job = JobBaseCPU_WriteEXIF(
                 job_file_info=rating_info.job_file_info,
@@ -351,6 +356,20 @@ class JobManager:
         
         self._log(f"✅ EXIF写入完成: 成功 {self.stats['exif_success']}, 失败 {self.stats['exif_failed']}")
         
+        # 从 rating_infos 中提取 file_ratings 和 star_3_photos
+        file_ratings = {}
+        star_3_photos = []
+        for rating_info in all_rating_infos:
+            file_prefix = rating_info.job_file_info.file_prefix
+            rating = rating_info.rating
+            file_ratings[file_prefix] = rating
+            if rating == 3:
+                star_3_photos.append({
+                    'filename': rating_info.job_file_info.src_file_path,
+                    'file_prefix': file_prefix,
+                    'rating': rating,
+                })
+        
         # 步骤6：输出统计信息
         total_time = time.time() - start_time
         self._log(f"\n⏱️  总耗时: {total_time:.1f}秒")
@@ -364,6 +383,8 @@ class JobManager:
         return {
             'stats': self.stats.copy(),
             'total_time': total_time,
+            'file_ratings': file_ratings,
+            'star_3_photos': star_3_photos,
         }
 
     def get_stats(self) -> Dict[str, Any]:

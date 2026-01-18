@@ -62,11 +62,12 @@
     "exposure_detection": "曝光检测",
     "burst": "连拍",
     "exposure": "曝光",
-    "job_workers": "并发处理",
+    "job_performance": "处理效率",
+    "job_workers": "并发",
     "job_workers.tooltip": "开启并发处理后会最大化利用GPU/CPU性能，但要注意可能会非常耗电！",
-    "cpu_workers": "CPU多线程",
+    "cpu_workers": "CPU ",
     "cpu_workers.tooltip": "开启CPU多线程后会最大化利用CPU性能，但要注意可能会非常耗电！",
-    "gpu_workers": "GPU多线程",
+    "gpu_workers": "GPU ",
     "gpu_workers.tooltip": "开启GPU多线程后会最大化利用GPU性能，但要注意可能会非常耗电！"
   },
   "dialogs": {

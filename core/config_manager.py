@@ -20,6 +20,8 @@ class UISettings:
     detect_exposure: bool = False  # 是否检测曝光
     detect_burst: bool = True  # 是否检测连拍
     use_job_workers: bool = False  # 是否使用作业队列处理器
+    use_cpu_workers: bool = True  # 是否使用CPU工作线程
+    use_gpu_workers: bool = True  # 是否使用GPU工作线程
 
 
 class ConfigManager:

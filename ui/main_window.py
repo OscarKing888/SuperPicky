@@ -187,23 +187,84 @@ class WorkerThread(threading.Thread):
         )
 
         use_job_workers = self.ui_settings.use_job_workers
-        processor_cls = PhotoProcessor
+        
         if use_job_workers:
-            from core.job_queue_processor import JobQueuePhotoProcessor
-            processor_cls = JobQueuePhotoProcessor
+            # 使用新的 JobManager
+            from core.job_manager import JobManager
+            
+            # 创建 PhotoProcessor 实例（JobManager 需要它）
+            processor = PhotoProcessor(
+                dir_path=self.dir_path,
+                settings=settings,
+                callbacks=callbacks,
+            )
+            
+            # 根据 UI 设置决定是否启用 CPU/GPU workers
+            cpu_worker_count = None if self.ui_settings.use_cpu_workers else 0
+            gpu_worker_count = None if self.ui_settings.use_gpu_workers else 0
+            
+            # 创建 JobManager
+            job_manager = JobManager(
+                dir_path=self.dir_path,
+                photo_processor=processor,
+                cpu_worker_count=cpu_worker_count,
+                gpu_worker_count=gpu_worker_count,
+                log_callback=log_callback,
+            )
+            
+            # 运行 JobManager
+            job_result = job_manager.run()
+            
+            # 从 JobManager 结果中获取 file_ratings 和 star_3_photos
+            file_ratings = job_result.get('file_ratings', {})
+            star_3_photos = job_result.get('star_3_photos', [])
+            
+            # 处理文件移动（JobManager 不处理文件移动）
+            if file_ratings:
+                processor.file_ratings = file_ratings
+                processor.star_3_photos = star_3_photos
+                
+                # 扫描 raw_dict（用于文件移动）
+                import os
+                raw_dict = {}
+                for filename in os.listdir(self.dir_path):
+                    if filename.startswith('.'):
+                        continue
+                    file_prefix, file_ext = os.path.splitext(filename)
+                    ext_lower = file_ext.lower()
+                    if ext_lower in processor.RAW_EXTENSIONS:
+                        raw_dict[file_prefix] = file_ext
+                
+                # 移动文件到分类文件夹
+                processor._move_files_to_rating_folders(raw_dict)
+                
+                # 清理临时文件
+                processor._cleanup_temp_files([], raw_dict)
+            
+            # 创建兼容的 ProcessingResult
+            from core.photo_processor import ProcessingResult
+            result = ProcessingResult(
+                stats=job_result.get('stats', {}),
+                file_ratings=file_ratings,
+                star_3_photos=star_3_photos,
+                total_time=job_result.get('total_time', 0.0),
+                avg_time=0.0,
+            )
+            
             if self.i18n:
-                self.signals.log.emit("Job Queue workflow enabled.", "info")
+                self.signals.log.emit("Job Manager workflow enabled.", "info")
+        else:
+            # 使用传统的 PhotoProcessor
+            processor = PhotoProcessor(
+                dir_path=self.dir_path,
+                settings=settings,
+                callbacks=callbacks,
+            )
 
-        processor = processor_cls(
-            dir_path=self.dir_path,
-            settings=settings,
-            callbacks=callbacks,
-        )
-
-        result = processor.process(
-            organize_files=True,
-            cleanup_temp=True
-        )
+            result = processor.process(
+                organize_files=True,
+                cleanup_temp=True
+            )
 
         # V4.0: 连拍检测（处理完成后执行）
         if settings.detect_burst:
@@ -546,35 +607,51 @@ class SuperPickyMainWindow(QMainWindow):
         # oscar:并发处理队列开关[
         job_workers_layout = QHBoxLayout()
         job_workers_layout.setSpacing(10)
+        job_workers_title = QLabel(self.i18n.t("labels.job_performance"))
+        job_workers_title.setStyleSheet(f"color: {COLORS['text_primary']}; font-size: 13px; font-weight: 500;")
+        job_workers_layout.addWidget(job_workers_title)
+        job_workers_layout.addStretch()
 
+        job_workers_check_layout = QHBoxLayout()
+        job_workers_check_layout.setSpacing(10)
         job_workers_label = QLabel(self.i18n.t("labels.job_workers"))
         job_workers_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
-        job_workers_layout.addWidget(job_workers_label)
+        job_workers_check_layout.addWidget(job_workers_label)
 
         self.job_workers_check = QCheckBox()
         self.job_workers_check.setChecked(True)
         self.job_workers_check.toolTip = QLabel(self.i18n.t("labels.job_workers.tooltip"))
-        job_workers_layout.addWidget(self.job_workers_check)
+        job_workers_check_layout.addWidget(self.job_workers_check)
+
+        job_workers_layout.addLayout(job_workers_check_layout)
         
         # CPU推理开关
+        job_workers_cpu_layout = QHBoxLayout()
+        job_workers_cpu_layout.setSpacing(10)
         job_workers_cpu_label = QLabel(self.i18n.t("labels.cpu_workers"))
         job_workers_cpu_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
-        job_workers_layout.addWidget(job_workers_cpu_label)
+        job_workers_cpu_layout.addWidget(job_workers_cpu_label)
 
         self.job_workers_cpu_check = QCheckBox()
         self.job_workers_cpu_check.setChecked(True)
         self.job_workers_cpu_check.toolTip = QLabel(self.i18n.t("labels.cpu_workers.tooltip"))
-        job_workers_layout.addWidget(self.job_workers_cpu_check)
+        job_workers_cpu_layout.addWidget(self.job_workers_cpu_check)
+
+        job_workers_layout.addLayout(job_workers_cpu_layout)
         
         # GPU推理开关
+        job_workers_gpu_layout = QHBoxLayout()
+        job_workers_gpu_layout.setSpacing(10)
         job_workers_gpu_label = QLabel(self.i18n.t("labels.gpu_workers"))
         job_workers_gpu_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
-        job_workers_layout.addWidget(job_workers_gpu_label)
+        job_workers_gpu_layout.addWidget(job_workers_gpu_label)
 
         self.job_workers_gpu_check = QCheckBox()
         self.job_workers_gpu_check.setChecked(True)
         self.job_workers_gpu_check.toolTip = QLabel(self.i18n.t("labels.gpu_workers.tooltip"))
-        job_workers_layout.addWidget(self.job_workers_gpu_check)
+        job_workers_gpu_layout.addWidget(self.job_workers_gpu_check)
+
+        job_workers_layout.addLayout(job_workers_gpu_layout)
         
         # 连接主开关信号，控制子开关的可交互状态
         self.job_workers_check.toggled.connect(self._on_job_workers_toggled)
