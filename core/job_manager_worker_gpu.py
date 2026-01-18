@@ -1,37 +1,43 @@
 # -*- coding: utf-8 -*-
 
-import queue
-import time
 import threading
-import multiprocessing
-from concurrent.futures import ThreadPoolExecutor, as_completed, Future
-from typing import Optional, Callable, Any, Dict, List, Tuple
-from dataclasses import dataclass, field
+from typing import Optional, Callable, Any, Dict
 
-from core.job_manager_worker import JobWorker
+from core.job_base import JobFileInfo
+from core.job_base import JobBase
 from core.job_base_gpu_rate import JobBaseGPU_Rate
 
 
-class GPUJobWorker(JobWorker):
+class GPUJobWorker:
     """
-    GPU Job Worker（线程池封装）
+    GPU Job Worker（仅负责模型/设备创建和注入，不管理线程池）
 
-    - 负责GPU线程池调度（并发数由 JobManager 传入）
     - 负责GPU端模型/检测器/EXIF工具的创建与复用（线程本地）
-    - 负责执行 JobBaseGPU_Rate 评分任务
+    - 负责为 JobBaseGPU_Rate 评分任务注入设备/模型/检测器
+    - 线程调度由 JobManager 管理
     """
 
     def __init__(
         self,
-        max_workers: int,
         log_callback: Optional[Callable[[str, str], None]] = None,
         device: Optional[str] = None,
     ):
-        self.max_workers = max_workers
         self.log_callback = log_callback
         self.device = device or self._detect_best_device()
-        self._executor = ThreadPoolExecutor(max_workers=max_workers)
         self._local = threading.local()
+
+    def create_rate_job(
+        self,
+        job_file_info: JobFileInfo,
+        photo_processor,
+        raw_dict: Dict[str, str],
+    ) -> JobBaseGPU_Rate:
+        """创建GPU评分任务"""
+        return JobBaseGPU_Rate(
+            job_file_info=job_file_info,
+            photo_processor=photo_processor,
+            raw_dict=raw_dict,
+        )
 
     def _log(self, msg: str, level: str = "info"):
         if self.log_callback:
@@ -91,10 +97,16 @@ class GPUJobWorker(JobWorker):
 
         return ctx
 
-    def submit(self, job) -> Future:
-        return self._executor.submit(self._run_job, job)
-
-    def _run_job(self, job):
+    def run_job(self, job):
+        """
+        执行job（由JobManager的线程池调用）
+        
+        Args:
+            job: 待执行的job对象
+            
+        Returns:
+            job的执行结果
+        """
         if isinstance(job, JobBaseGPU_Rate):
             ctx = self._get_context(job.photo_processor)
             job.device = self.device
@@ -107,7 +119,4 @@ class GPUJobWorker(JobWorker):
         if hasattr(job, "get_result"):
             return job.get_result()
         return None
-
-    def shutdown(self, wait: bool = True):
-        self._executor.shutdown(wait=wait)
 

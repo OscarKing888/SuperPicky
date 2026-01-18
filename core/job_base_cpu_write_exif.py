@@ -4,32 +4,44 @@ import os
 import time
 from typing import Optional, Dict, Any
 
-from core.job_base import JobBase
+from core.job_base_cpu import JobBaseCPU
+from core.job_base import JobFileInfo
 
 
-class JobBaseCPU_WriteEXIF(JobBase):
+class JobBaseCPU_WriteEXIF(JobBaseCPU):
     """CPU EXIF写入任务"""
     
     def __init__(
         self,
-        job_id: str,
-        file_path: str,
+        job_file_info: JobFileInfo,
         exif_data: Dict[str, Any],
-        temp_jpg_path: Optional[str] = None
+        raw_dict: Dict[str, str],
+        dir_path: str,
     ):
         """
         初始化EXIF写入任务
         
         Args:
-            job_id: 任务ID
-            file_path: 目标文件路径（RAW优先）
+            job_file_info: 文件信息
             exif_data: EXIF数据字典，包含rating、pick、sharpness等
-            temp_jpg_path: 临时JPG路径（用于HEIF，可选）
+            raw_dict: RAW文件字典
+            dir_path: 工作目录
         """
-        super().__init__(job_id)
-        self.file_path = file_path
+        super().__init__(job_file_info)
         self.exif_data = exif_data
-        self.temp_jpg_path = temp_jpg_path
+        self.raw_dict = raw_dict
+        self.dir_path = dir_path
+        
+        # 确定目标文件路径（RAW优先）
+        file_prefix = job_file_info.file_prefix
+        if file_prefix in raw_dict:
+            raw_ext = raw_dict[file_prefix]
+            self.file_path = os.path.join(dir_path, file_prefix + raw_ext)
+        else:
+            self.file_path = job_file_info.src_file_path
+        
+        # 临时JPG路径（HEIF转换后的）
+        self.temp_jpg_path = job_file_info.tmp_file_path
 
     def do_job(self):
         """执行EXIF写入任务"""

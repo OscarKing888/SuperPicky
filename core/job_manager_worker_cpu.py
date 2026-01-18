@@ -1,39 +1,46 @@
 # -*- coding: utf-8 -*-
 
-import queue
-import time
 import threading
-import multiprocessing
-from concurrent.futures import ThreadPoolExecutor, as_completed, Future
-from typing import Optional, Callable, Any, Dict, List, Tuple
-from dataclasses import dataclass, field
+from typing import Optional, Callable, Any, Dict
 
-from core.job_base_cpu_convert_heif import JobBaseCPU_ConvertHEIF
+from core.job_base import JobFileInfo
+from core.job_base import JobBase
 from core.job_base_cpu_rate import JobBaseCPU_Rate
+from core.job_base_cpu_convert_heif import JobBaseCPU_ConvertHEIF
 from core.job_base_cpu_write_exif import JobBaseCPU_WriteEXIF
 
-from core.job_manager_worker import JobWorker
 
-class CPUJobWorker(JobWorker):
+class CPUJobWorker:
     """
-    CPU Job Worker（线程池封装）
+    CPU Job Worker（仅负责模型/设备创建和注入，不管理线程池）
 
-    - 负责CPU线程池调度
     - 负责CPU端模型/检测器/EXIF工具的创建与复用（线程本地）
-    - 负责执行 JobBaseCPU_Rate 评分任务以及其他纯CPU job（convert/exif等）
+    - 负责为 JobBaseCPU_Rate 评分任务注入设备/模型/检测器
+    - 线程调度由 JobManager 管理
     """
 
     def __init__(
         self,
-        max_workers: int,
         log_callback: Optional[Callable[[str, str], None]] = None,
         device: str = "cpu",
     ):
-        self.max_workers = max_workers
         self.device = device
         self.log_callback = log_callback
-        self._executor = ThreadPoolExecutor(max_workers=max_workers)
         self._local = threading.local()
+
+    
+    def create_rate_job(
+        self,
+        job_file_info: JobFileInfo,
+        photo_processor,
+        raw_dict: Dict[str, str],
+    ) -> JobBaseCPU_Rate:
+        """创建CPU评分任务"""
+        return JobBaseCPU_Rate(
+            job_file_info=job_file_info,
+            photo_processor=photo_processor,
+            raw_dict=raw_dict,
+        )
 
     def _log(self, msg: str, level: str = "info"):
         if self.log_callback:
@@ -83,10 +90,16 @@ class CPUJobWorker(JobWorker):
 
         return ctx
 
-    def submit(self, job) -> Future:
-        return self._executor.submit(self._run_job, job)
-
-    def _run_job(self, job):
+    def run_job(self, job):
+        """
+        执行job（由JobManager的线程池调用）
+        
+        Args:
+            job: 待执行的job对象
+            
+        Returns:
+            job的执行结果
+        """
         # 评分任务：由worker注入设备/模型/检测器/EXIF管理器
         if isinstance(job, JobBaseCPU_Rate):
             ctx = self._get_context(job.photo_processor)
@@ -100,6 +113,3 @@ class CPUJobWorker(JobWorker):
         if hasattr(job, "get_result"):
             return job.get_result()
         return None
-
-    def shutdown(self, wait: bool = True):
-        self._executor.shutdown(wait=wait)
