@@ -1,0 +1,25 @@
+# SuperPicky 依赖包 - Python 3.14 兼容版本
+# 注意：某些包在Python 3.14上可能不完全支持
+# 如果遇到问题，建议使用Python 3.12或3.13
+
+# 核心依赖
+ultralytics>=8.0.0
+opencv-python>=4.0.0
+# rawpy - 不支持Python 3.14，需要从源码编译或降级Python
+imageio>=2.0.0
+numpy>=1.20.0
+Pillow>=9.0.0
+pillow-heif>=0.13.0
+
+# AI 模型依赖
+torch>=2.0.0
+torchvision>=0.15.0
+timm>=0.9.0
+
+# UI 框架 (PySide6 分支)
+PySide6>=6.6.0
+
+# 说明：
+# - rawpy: Python 3.14不支持预编译版本，需要从源码编译
+#   如果编译失败，RAW转换功能将不可用，但其他功能正常
+# - 建议：生产环境使用Python 3.12或3.13
