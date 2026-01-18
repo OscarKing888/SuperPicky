@@ -39,6 +39,11 @@ all_datas = [
     (os.path.join(base_path, 'Resources'), 'Resources'),
     # Ultralytics 配置
     (os.path.join(ultralytics_base, 'ultralytics/cfg'), 'ultralytics/cfg'),
+    # V4.0.0: 鸟类识别模块数据
+    (os.path.join(base_path, 'birdid/data'), 'birdid/data'),
+    (os.path.join(base_path, 'birdid/models'), 'birdid/models'),
+    # V4.0.0: Lightroom 插件
+    (os.path.join(base_path, 'SuperBirdIDPlugin.lrplugin'), 'SuperBirdIDPlugin.lrplugin'),
 ]
 
 # 添加动态收集的数据
@@ -94,6 +99,15 @@ a = Analysis(
         'update_checker',
         'packaging',
         'packaging.version',
+        # V4.0.0: 鸟类识别模块
+        'birdid',
+        'birdid.bird_identifier',
+        'birdid.ebird_country_filter',
+        'birdid_server',
+        'flask',
+        'flask.json',
+        'cryptography',
+        'cryptography.fernet',
     ],
     hookspath=[],
     hooksconfig={},
