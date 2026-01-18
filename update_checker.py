@@ -55,6 +55,7 @@ class UpdateChecker:
         Returns:
             (has_update, update_info) - update_info 包含:
                 - version: 最新版本号
+                - current_version: 当前版本号
                 - download_url: 当前平台的下载链接
                 - release_notes: 发布说明
                 - release_url: GitHub Release 页面链接
@@ -77,7 +78,14 @@ class UpdateChecker:
             # 解析版本号
             latest_version = data.get('tag_name', '').lstrip('vV')
             if not latest_version:
-                return False, None
+                # 无法获取版本，返回当前版本信息
+                return False, {
+                    'version': self.current_version,
+                    'current_version': self.current_version,
+                    'download_url': None,
+                    'release_notes': '',
+                    'release_url': GITHUB_RELEASES_URL,
+                }
             
             # 比较版本
             try:
@@ -86,31 +94,30 @@ class UpdateChecker:
                 # 简单字符串比较作为回退
                 has_update = latest_version != self.current_version
             
-            if not has_update:
-                return False, None
-            
             # 获取当前平台的下载链接
             download_url = self._find_platform_download(data.get('assets', []))
             
+            # 始终返回版本信息
             update_info = {
                 'version': latest_version,
+                'current_version': self.current_version,
                 'download_url': download_url,
                 'release_notes': data.get('body', ''),
                 'release_url': data.get('html_url', GITHUB_RELEASES_URL),
                 'published_at': data.get('published_at', ''),
             }
             
-            return True, update_info
+            return has_update, update_info
             
         except urllib.error.URLError as e:
             print(f"⚠️ 检查更新失败 (网络错误): {e}")
-            return False, None
+            return False, {'version': '检查失败', 'current_version': self.current_version, 'error': str(e)}
         except json.JSONDecodeError as e:
             print(f"⚠️ 检查更新失败 (解析错误): {e}")
-            return False, None
+            return False, {'version': '检查失败', 'current_version': self.current_version, 'error': str(e)}
         except Exception as e:
             print(f"⚠️ 检查更新失败: {e}")
-            return False, None
+            return False, {'version': '检查失败', 'current_version': self.current_version, 'error': str(e)}
     
     def _find_platform_download(self, assets: list) -> Optional[str]:
         """

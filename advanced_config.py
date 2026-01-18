@@ -31,6 +31,9 @@ class AdvancedConfig:
         # 连拍检测设置 V3.9
         "burst_time_threshold": 250,  # 连拍时间阈值(ms) (150-500) - 相邻照片时间差小于此值视为连拍
         "burst_min_count": 4,         # 连拍最少张数 (3-10) - 至少此数量连续照片才算连拍组
+        
+        # 鸟种识别设置 V4.2
+        "birdid_confidence": 70,      # 识别置信度阈值 (50-95) - 低于此值不写入EXIF
 
         # 输出设置
         "save_csv": True,           # 是否保存CSV报告
@@ -120,6 +123,10 @@ class AdvancedConfig:
     @property
     def burst_min_count(self):
         return self.config.get("burst_min_count", 4)
+    
+    @property
+    def birdid_confidence(self):
+        return self.config.get("birdid_confidence", 70)
 
     @property
     def save_csv(self):
@@ -163,6 +170,10 @@ class AdvancedConfig:
     def set_burst_min_count(self, value):
         """设置连拍最少张数 (3-10)"""
         self.config["burst_min_count"] = max(3, min(10, int(value)))
+    
+    def set_birdid_confidence(self, value):
+        """设置鸟种识别置信度阈值 (50-95)"""
+        self.config["birdid_confidence"] = max(50, min(95, int(value)))
 
     def set_save_csv(self, value):
         """设置是否保存CSV"""

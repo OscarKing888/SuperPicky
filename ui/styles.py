@@ -496,6 +496,45 @@ QFrame[frameShape="5"] {{
     background-color: {COLORS['border_subtle']};
     max-width: 1px;
 }}
+
+/* ==================== Dock 停靠面板 ==================== */
+QDockWidget {{
+    color: {COLORS['text_primary']};
+    font-size: 13px;
+    font-weight: 500;
+    titlebar-close-icon: url(none);
+    titlebar-normal-icon: url(none);
+}}
+
+QDockWidget::title {{
+    background-color: {COLORS['bg_elevated']};
+    padding: 8px 12px;
+    text-align: left;
+    border-bottom: 1px solid {COLORS['border_subtle']};
+}}
+
+QDockWidget::close-button, QDockWidget::float-button {{
+    background: transparent;
+    border: none;
+    padding: 4px;
+    icon-size: 14px;
+}}
+
+QDockWidget::close-button:hover, QDockWidget::float-button:hover {{
+    background-color: {COLORS['bg_card']};
+    border-radius: 4px;
+}}
+
+/* 主窗口与 Dock 之间的分隔线 - 更柔和的颜色 */
+QMainWindow::separator {{
+    background-color: {COLORS['bg_void']};
+    width: 1px;
+    height: 1px;
+}}
+
+QMainWindow::separator:hover {{
+    background-color: {COLORS['border']};
+}}
 """
 
 # ==================== 组件特定样式 ====================

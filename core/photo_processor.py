@@ -54,7 +54,7 @@ class ProcessingSettings:
     birdid_use_ebird: bool = True     # 使用 eBird 过滤
     birdid_country_code: str = None   # eBird 国家代码
     birdid_region_code: str = None    # eBird 区域代码
-    birdid_confidence_threshold: float = 80.0  # 置信度阈值（80%+才写入）
+    birdid_confidence_threshold: float = 70.0  # 置信度阈值（70%+才写入）
 
 
 @dataclass
@@ -62,6 +62,7 @@ class ProcessingCallbacks:
     """回调函数（用于进度更新和日志输出）"""
     log: Optional[Callable[[str, str], None]] = None
     progress: Optional[Callable[[int], None]] = None
+    crop_preview: Optional[Callable[[any], None]] = None  # V4.2: 裁剪预览回调
 
 
 @dataclass
@@ -132,7 +133,9 @@ class PhotoProcessor:
             'star_0': 0,  # 普通照片（问题）
             'no_bird': 0,
             'flying': 0,  # V3.6: 飞鸟照片计数
+            'focus_precise': 0,  # V4.2: 精焦照片计数（红色标签）
             'exposure_issue': 0,  # V3.8: 曝光问题计数
+            'bird_species': [],  # V4.2: 识别的鸟种列表
             'start_time': 0,
             'end_time': 0,
             'total_time': 0,
@@ -757,7 +760,7 @@ class PhotoProcessor:
                         focus_point_crop = (fx_px, fy_px)
                 
                 try:
-                    self._save_debug_crop(
+                    debug_img = self._save_debug_crop(
                         filename,
                         bird_crop_bgr,
                         bird_crop_mask if 'bird_crop_mask' in dir() else None,
@@ -766,6 +769,9 @@ class PhotoProcessor:
                         focus_point_crop,
                         focus_status_en  # 使用英文标签
                     )
+                    # V4.2: 发送裁剪预览到 UI
+                    if debug_img is not None and self.callbacks.crop_preview:
+                        self.callbacks.crop_preview(debug_img)
                 except Exception as e:
                     pass  # 调试图生成失败不影响主流程
             
@@ -774,8 +780,9 @@ class PhotoProcessor:
             has_exposure_issue = is_overexposed or is_underexposed
             self._log_photo_result_simple(i, total_files, filename, rating_value, reason, photo_time_ms, is_flying, has_exposure_issue, focus_status)
             
-            # 记录统计
-            self._update_stats(rating_value, is_flying, has_exposure_issue)
+            # 记录统计（V4.2: 添加精焦判定）
+            is_focus_precise = focus_sharpness_weight > 1.0 if 'focus_sharpness_weight' in dir() else False
+            self._update_stats(rating_value, is_flying, has_exposure_issue, is_focus_precise)
             
             # V3.4: 确定要处理的目标文件（RAW 优先，没有则用 JPEG）
             target_file_path = None
@@ -830,45 +837,40 @@ class PhotoProcessor:
                     
                     caption = "\n".join(caption_lines)
                     
-                    # V4.2: 自动鸟种识别（仅在启用且锐度+美学双达标时执行）
+                    # V4.2: 自动鸟种识别（对2星及以上照片执行）
                     bird_title = None
-                    if self.settings.auto_identify:
-                        # 检查是否达到3星标准（锐度+美学双达标）
-                        adj_sharpness_val = adj_sharpness if 'adj_sharpness' in dir() else head_sharpness
-                        adj_topiq_val = adj_topiq if 'adj_topiq' in dir() else topiq
-                        
-                        sharpness_ok = adj_sharpness_val >= self.settings.sharpness_threshold
-                        topiq_ok = adj_topiq_val is not None and adj_topiq_val >= self.settings.nima_threshold
-                        
-                        if sharpness_ok and topiq_ok:
-                            try:
-                                from birdid.bird_identifier import identify_bird
+                    if self.settings.auto_identify and rating_value >= 2:
+                        try:
+                            from birdid.bird_identifier import identify_bird
+                            
+                            # 使用裁剪图片进行识别（如果可用）
+                            birdid_result = identify_bird(
+                                filepath,  # 原始文件路径
+                                use_yolo=True,
+                                use_gps=True,
+                                use_ebird=self.settings.birdid_use_ebird,
+                                country_code=self.settings.birdid_country_code,
+                                region_code=self.settings.birdid_region_code,
+                                top_k=1
+                            )
+                            
+                            if birdid_result.get('success') and birdid_result.get('results'):
+                                top_result = birdid_result['results'][0]
+                                confidence = top_result.get('confidence', 0)
                                 
-                                # 使用裁剪图片进行识别（如果可用）
-                                birdid_result = identify_bird(
-                                    filepath,  # 原始文件路径
-                                    use_yolo=True,
-                                    use_gps=True,
-                                    use_ebird=self.settings.birdid_use_ebird,
-                                    country_code=self.settings.birdid_country_code,
-                                    region_code=self.settings.birdid_region_code,
-                                    top_k=1
-                                )
-                                
-                                if birdid_result.get('success') and birdid_result.get('results'):
-                                    top_result = birdid_result['results'][0]
-                                    confidence = top_result.get('confidence', 0)
-                                    
-                                    # 置信度阈值检查（80%+）
-                                    if confidence >= self.settings.birdid_confidence_threshold:
-                                        cn_name = top_result.get('cn_name', '')
-                                        en_name = top_result.get('en_name', '')
-                                        bird_title = f"{cn_name} ({en_name})"
-                                        self._log(f"  🐦 识别: {cn_name} ({confidence:.0f}%)")
-                                    else:
-                                        self._log(f"  🐦 识别置信度不足: {top_result.get('cn_name', '?')} ({confidence:.0f}% < {self.settings.birdid_confidence_threshold}%)")
-                            except Exception as e:
-                                self._log(f"  ⚠️ 鸟种识别失败: {e}", "warning")
+                                # 置信度阈值检查（80%+）
+                                if confidence >= self.settings.birdid_confidence_threshold:
+                                    cn_name = top_result.get('cn_name', '')
+                                    en_name = top_result.get('en_name', '')
+                                    bird_title = f"{cn_name} ({en_name})"
+                                    self._log(f"  🐦 识别: {cn_name} ({confidence:.0f}%)")
+                                    # V4.2: 收集识别的鸟种名称
+                                    if cn_name and cn_name not in self.stats['bird_species']:
+                                        self.stats['bird_species'].append(cn_name)
+                                else:
+                                    self._log(f"  🐦 识别置信度不足: {top_result.get('cn_name', '?')} ({confidence:.0f}% < {self.settings.birdid_confidence_threshold}%)")
+                        except Exception as e:
+                            self._log(f"  ⚠️ 鸟种识别失败: {e}", "warning")
                     
                     single_batch = [{
                         'file': target_file_path,
@@ -1074,8 +1076,11 @@ class PhotoProcessor:
         file_prefix = os.path.splitext(filename)[0]
         debug_path = os.path.join(debug_dir, f"{file_prefix}_debug.jpg")
         cv2.imwrite(debug_path, debug_img, [cv2.IMWRITE_JPEG_QUALITY, 85])
+        
+        # V4.2: 返回标注后的图像，用于 UI 实时预览
+        return debug_img
     
-    def _update_stats(self, rating: int, is_flying: bool = False, has_exposure_issue: bool = False):
+    def _update_stats(self, rating: int, is_flying: bool = False, has_exposure_issue: bool = False, is_focus_precise: bool = False):
         """更新统计数据"""
         self.stats['total'] += 1
         if rating == 3:
@@ -1092,6 +1097,10 @@ class PhotoProcessor:
         # V3.6: 统计飞鸟照片
         if is_flying:
             self.stats['flying'] += 1
+        
+        # V4.2: 统计精焦照片（红色标签）
+        if is_focus_precise:
+            self.stats['focus_precise'] += 1
         
         # V3.8: 统计曝光问题照片
         if has_exposure_issue:

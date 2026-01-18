@@ -76,6 +76,8 @@ class WorkerSignals(QObject):
     log = Signal(str, str)  # message, tag
     finished = Signal(dict)
     error = Signal(str)
+    crop_preview = Signal(object)  # V4.2: 发送裁剪预览图像 (numpy array BGR)
+    update_check_done = Signal(bool, object)  # V4.2: 更新检测完成 (has_update, update_info)
 
 
 class WorkerThread(threading.Thread):
@@ -170,6 +172,10 @@ class WorkerThread(threading.Thread):
         birdid_country_code = None
         birdid_region_code = None
         
+        # V4.2: 从高级配置读取识别置信度阈值
+        from advanced_config import get_advanced_config
+        birdid_confidence_threshold = get_advanced_config().birdid_confidence
+        
         # 从设置文件读取国家/区域配置
         try:
             import json
@@ -212,7 +218,7 @@ class WorkerThread(threading.Thread):
                         match = re.search(r'\(([A-Z]{2}-[A-Z0-9]+)\)', selected_region)
                         if match:
                             birdid_region_code = match.group(1)
-            print(f"[DEBUG] BirdID 设置读取: auto_identify={birdid_auto_identify}, country={birdid_country_code}, region={birdid_region_code}")
+            print(f"[DEBUG] BirdID 设置读取: auto_identify={birdid_auto_identify}, country={birdid_country_code}, region={birdid_region_code}, confidence={birdid_confidence_threshold}%")
         except Exception as e:
             print(f"[DEBUG] BirdID 设置读取失败: {e}")
             pass  # BirdID 设置读取失败不影响主流程
@@ -231,6 +237,7 @@ class WorkerThread(threading.Thread):
             birdid_use_ebird=birdid_use_ebird,
             birdid_country_code=birdid_country_code,
             birdid_region_code=birdid_region_code,
+            birdid_confidence_threshold=float(birdid_confidence_threshold),  # V4.2
         )
 
         def log_callback(msg, level="info"):
@@ -239,9 +246,14 @@ class WorkerThread(threading.Thread):
         def progress_callback(value):
             self.signals.progress.emit(int(value))
 
+        # V4.2: 裁剪预览回调
+        def crop_preview_callback(debug_img):
+            self.signals.crop_preview.emit(debug_img)
+
         callbacks = ProcessingCallbacks(
             log=log_callback,
-            progress=progress_callback
+            progress=progress_callback,
+            crop_preview=crop_preview_callback
         )
 
         processor = PhotoProcessor(
@@ -337,16 +349,23 @@ class SuperPickyMainWindow(QMainWindow):
         self.reset_log_signal.connect(self._log)
         self.reset_complete_signal.connect(self._on_reset_complete)
         self.reset_error_signal.connect(self._on_reset_error)
+        
+        # V4.2: 更新检测信号
+        self._update_signals = WorkerSignals()
+        self._update_signals.update_check_done.connect(self._show_update_result_dialog)
 
         # V4.0: 自动启动识鸟 API 服务器
         self._birdid_server_process = None
         QTimer.singleShot(1000, self._auto_start_birdid_server)
 
-        # V4.0.0: 启动时检查更新（延迟2秒，避免阻塞UI）
-        QTimer.singleShot(2000, self._check_for_updates)
+        # V4.0.0: 启动时检查更新（延迟2秒，避免阻塞UI，没有更新时不弹窗）
+        QTimer.singleShot(2000, lambda: self._check_for_updates(silent=True))
         
         # V4.2: 启动时预加载所有模型（延迟3秒，后台加载不阻塞UI）
         QTimer.singleShot(3000, self._preload_all_models)
+        
+        # V4.2: 默认最大化窗口
+        self.showMaximized()
 
     def keyPressEvent(self, event):
         """全局键盘事件 - 粘贴图片自动识鸟"""
@@ -417,7 +436,7 @@ class SuperPickyMainWindow(QMainWindow):
         """设置窗口属性"""
         self.setWindowTitle(self.i18n.t("app.window_title"))
         self.setMinimumSize(680, 600)
-        self.resize(750, 720)
+        self.resize(850, 750)
 
         # 应用全局样式表
         self.setStyleSheet(GLOBAL_STYLE)
@@ -431,47 +450,65 @@ class SuperPickyMainWindow(QMainWindow):
         """设置菜单栏"""
         menubar = self.menuBar()
 
-        # 编辑菜单（粘贴功能）
-        edit_menu = menubar.addMenu("编辑")
+        # 识鸟菜单
+        birdid_menu = menubar.addMenu("识鸟")
         
+        # 粘贴图片识鸟
         paste_image_action = QAction("粘贴图片识鸟", self)
         paste_image_action.setShortcut("Ctrl+V")  # Mac 会自动转为 Cmd+V
         paste_image_action.triggered.connect(self._paste_image_for_birdid)
-        edit_menu.addAction(paste_image_action)
-
-        # 工具菜单
-        tools_menu = menubar.addMenu("工具")
+        birdid_menu.addAction(paste_image_action)
+        
+        birdid_menu.addSeparator()
 
         # 识鸟面板（可勾选显示/隐藏）
-        self.birdid_dock_action = QAction("识鸟面板", self)
+        self.birdid_dock_action = QAction("打开识鸟面板", self)
         self.birdid_dock_action.setCheckable(True)
         self.birdid_dock_action.setChecked(True)
         self.birdid_dock_action.triggered.connect(self._toggle_birdid_dock)
-        tools_menu.addAction(self.birdid_dock_action)
+        birdid_menu.addAction(self.birdid_dock_action)
 
-        # 独立识鸟窗口
-        birdid_gui_action = QAction("识鸟窗口（独立）...", self)
-        birdid_gui_action.triggered.connect(self._open_birdid_gui)
-        tools_menu.addAction(birdid_gui_action)
-
-        tools_menu.addSeparator()
-
-        # 启动识鸟 API 服务
-        self.birdid_server_action = QAction("启动识鸟 API 服务", self)
+        # 启动/停止识鸟 API 服务
+        self.birdid_server_action = QAction("启动识鸟服务器", self)
         self.birdid_server_action.triggered.connect(self._toggle_birdid_server)
-        tools_menu.addAction(self.birdid_server_action)
-
-        tools_menu.addSeparator()
-
-        # 设置菜单
-        settings_menu = menubar.addMenu(self.i18n.t("menu.settings"))
-        advanced_action = QAction(self.i18n.t("menu.advanced_settings"), self)
-        advanced_action.triggered.connect(self._show_advanced_settings)
-        settings_menu.addAction(advanced_action)
+        birdid_menu.addAction(self.birdid_server_action)
 
         # 帮助菜单
         help_menu = menubar.addMenu(self.i18n.t("menu.help"))
-        about_action = QAction(self.i18n.t("menu.about"), self)
+        
+        # 参数设置
+        settings_action = QAction("参数设置...", self)
+        settings_action.triggered.connect(self._show_advanced_settings)
+        help_menu.addAction(settings_action)
+        
+        # 界面语言子菜单
+        lang_menu = help_menu.addMenu("界面语言")
+        
+        # 简体中文
+        zh_action = QAction("简体中文", self)
+        zh_action.setCheckable(True)
+        zh_action.setChecked(self.config.language == "zh_CN")
+        zh_action.triggered.connect(lambda: self._change_language("zh_CN"))
+        lang_menu.addAction(zh_action)
+        
+        # English
+        en_action = QAction("English", self)
+        en_action.setCheckable(True)
+        en_action.setChecked(self.config.language == "en")
+        en_action.triggered.connect(lambda: self._change_language("en"))
+        lang_menu.addAction(en_action)
+        
+        self.lang_actions = {"zh_CN": zh_action, "en": en_action}
+        
+        help_menu.addSeparator()
+        
+        # 检查更新
+        update_action = QAction("检查更新...", self)
+        update_action.triggered.connect(self._check_for_updates)
+        help_menu.addAction(update_action)
+        
+        # 关于
+        about_action = QAction("关于慧眼选鸟", self)
         about_action.triggered.connect(self._show_about)
         help_menu.addAction(about_action)
 
@@ -502,7 +539,7 @@ class SuperPickyMainWindow(QMainWindow):
 
         # 进度区域
         self._create_progress_section(main_layout)
-        main_layout.addSpacing(20)
+        main_layout.addSpacing(8)
 
         # 控制按钮
         self._create_button_section(main_layout)
@@ -513,6 +550,11 @@ class SuperPickyMainWindow(QMainWindow):
 
         self.birdid_dock = BirdIDDockWidget(self)
         self.addDockWidget(Qt.RightDockWidgetArea, self.birdid_dock)
+        
+        # 设置 dock 初始宽度为最小值，让主区域更宽
+        self.birdid_dock.setFixedWidth(280)
+        # 延迟解除固定宽度限制，让用户可以调整
+        QTimer.singleShot(100, lambda: self.birdid_dock.setFixedWidth(16777215))  # QWIDGETSIZE_MAX
 
         # 更新菜单动作的状态
         self.birdid_dock.visibilityChanged.connect(self._on_birdid_dock_visibility_changed)
@@ -521,6 +563,7 @@ class SuperPickyMainWindow(QMainWindow):
         """识鸟面板可见性变化"""
         if hasattr(self, 'birdid_dock_action'):
             self.birdid_dock_action.setChecked(visible)
+            self.birdid_dock_action.setText("关闭识鸟面板" if visible else "打开识鸟面板")
     
     def _on_birdid_check_changed(self, state):
         """识鸟开关状态变化 - 同步到 BirdID Dock 设置"""
@@ -855,18 +898,19 @@ class SuperPickyMainWindow(QMainWindow):
 
     def _create_progress_section(self, parent_layout):
         """创建进度区域"""
-        # 进度条
+        # 进度条 - 直接添加到父布局
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
         self.progress_bar.setTextVisible(False)
-        self.progress_bar.setFixedHeight(3)
+        self.progress_bar.setFixedHeight(4)
         parent_layout.addWidget(self.progress_bar)
-
-        parent_layout.addSpacing(8)
+        
+        parent_layout.addSpacing(6)
 
         # 进度信息
         progress_info_layout = QHBoxLayout()
+        progress_info_layout.setContentsMargins(0, 0, 0, 0)
 
         self.progress_info_label = QLabel("")
         self.progress_info_label.setStyleSheet(PROGRESS_INFO_STYLE)
@@ -1041,11 +1085,26 @@ class SuperPickyMainWindow(QMainWindow):
             )
             return
 
-        # 确认弹窗
+        # 确认弹窗 - 动态构建消息
+        base_msg = self.i18n.t("dialogs.file_organization_msg")
+        
+        # V4.2: 根据选中的功能动态添加说明
+        extra_notes = []
+        if self.flight_check.isChecked():
+            extra_notes.append("🟢 飞鸟照片将标记绿色标签（锐度×1.2加成）")
+        if self.birdid_check.isChecked():
+            extra_notes.append("🐦 2星+照片将自动识别鸟种，写入EXIF Title")
+        if self.burst_check.isChecked():
+            extra_notes.append("📸 连拍照片将分组保存到 burst_xxx/ 子目录")
+        
+        if extra_notes:
+            notes_text = "\n".join(extra_notes)
+            base_msg = base_msg.replace("\n\n如需恢复", f"\n\n{notes_text}\n\n如需恢复")
+        
         reply = StyledMessageBox.question(
             self,
             self.i18n.t("dialogs.file_organization_title"),
-            self.i18n.t("dialogs.file_organization_msg"),
+            base_msg,
             yes_text=self.i18n.t("labels.yes"),
             no_text=self.i18n.t("labels.no")
         )
@@ -1081,6 +1140,9 @@ class SuperPickyMainWindow(QMainWindow):
         self.worker_signals.log.connect(self._on_log)
         self.worker_signals.finished.connect(self._on_finished)
         self.worker_signals.error.connect(self._on_error)
+        # V4.2: 裁剪预览信号连接到 BirdID Dock
+        if hasattr(self, 'birdid_dock') and self.birdid_dock:
+            self.worker_signals.crop_preview.connect(self.birdid_dock.update_crop_preview)
 
         # 禁用按钮
         self.start_btn.setEnabled(False)
@@ -1124,6 +1186,11 @@ class SuperPickyMainWindow(QMainWindow):
 
         # 显示 Lightroom 指南
         self._show_lightroom_guide()
+
+        # V4.2: 通知 BirdIDDock 显示完成信息
+        if hasattr(self, 'birdid_dock') and self.birdid_dock:
+            debug_dir = os.path.join(self.directory_path, ".superpicky", "debug_crops")
+            self.birdid_dock.show_completion_message(debug_dir)
 
         # 播放完成音效
         self._play_completion_sound()
@@ -1373,6 +1440,23 @@ class SuperPickyMainWindow(QMainWindow):
         dialog = AdvancedSettingsDialog(self)
         dialog.exec()
 
+    def _change_language(self, lang_code):
+        """切换界面语言"""
+        from ui.custom_dialogs import StyledMessageBox
+        
+        # 更新菜单选中状态
+        for code, action in self.lang_actions.items():
+            action.setChecked(code == lang_code)
+        
+        # 保存设置
+        self.config.set_language(lang_code)
+        if self.config.save():
+            StyledMessageBox.information(
+                self,
+                "语言已更改",
+                "界面语言已更改，重启应用后生效。"
+            )
+
     @Slot()
     def _show_about(self):
         """显示关于对话框"""
@@ -1413,7 +1497,7 @@ class SuperPickyMainWindow(QMainWindow):
                     stderr=subprocess.DEVNULL,
                     start_new_session=True
                 )
-                self.birdid_server_action.setText("停止识鸟 API 服务")
+                self.birdid_server_action.setText("停止识鸟服务器")
                 self._log("识鸟 API 服务已启动 (端口 5156)", "success")
             except Exception as e:
                 from PySide6.QtWidgets import QMessageBox
@@ -1429,7 +1513,7 @@ class SuperPickyMainWindow(QMainWindow):
                 except:
                     pass
             self._birdid_server_process = None
-            self.birdid_server_action.setText("启动识鸟 API 服务")
+            self.birdid_server_action.setText("启动识鸟服务器")
             self._log("识鸟 API 服务已停止", "info")
 
     def _auto_start_birdid_server(self):
@@ -1575,6 +1659,16 @@ class SuperPickyMainWindow(QMainWindow):
 
             if flying > 0:
                 report += f"{t('help.rule_flying')}: {flying}\n"
+            
+            # V4.2: 精焦统计（红色标签）
+            focus_precise = stats.get('focus_precise', 0)
+            if focus_precise > 0:
+                report += f"{t('help.rule_focus')}: {focus_precise}\n"
+            
+            # V4.2: 识别鸟种统计
+            bird_species = stats.get('bird_species', [])
+            if bird_species:
+                report += f"\n🦜 识别到 {len(bird_species)} 种鸟: {', '.join(bird_species)}"
 
         report += "\n" + "━" * 50
         return report
@@ -1692,48 +1786,207 @@ class SuperPickyMainWindow(QMainWindow):
 
     # ========== V4.0.0: 更新检测功能 ==========
 
-    def _check_for_updates(self):
-        """后台检查更新（不阻塞UI）"""
-        try:
-            from update_checker import check_update_async, CURRENT_VERSION
-            check_update_async(self._on_update_check_complete, CURRENT_VERSION)
-        except ImportError as e:
-            print(f"⚠️ 更新检测模块加载失败: {e}")
-
-    @Slot(bool, object)
-    def _on_update_check_complete(self, has_update: bool, update_info):
-        """更新检测完成的回调（在主线程中调用）"""
-        if not has_update or update_info is None:
-            return
+    def _check_for_updates(self, silent=False):
+        """检查更新
         
-        # 使用 QTimer 确保在主线程中显示对话框
-        QTimer.singleShot(0, lambda: self._show_update_dialog(update_info))
+        Args:
+            silent: 如果为 True，只在有更新时显示弹窗（用于启动时自动检查）
+        """
+        import threading
+        
+        if not silent:
+            self._log("正在检查更新...", "info")
+        
+        def _do_check():
+            try:
+                from update_checker import UpdateChecker
+                checker = UpdateChecker("4.0.0")  # 使用测试版本号
+                has_update, update_info = checker.check_for_updates()
+                print(f"[DEBUG] 更新检查完成: has_update={has_update}, silent={silent}")
+                
+                # 静默模式下，只有有更新时才弹窗
+                if silent and not has_update:
+                    print("[DEBUG] 静默模式，无更新，跳过弹窗")
+                    return
+                    
+                # 使用信号发送到主线程
+                self._update_signals.update_check_done.emit(has_update, update_info)
+            except Exception as e:
+                import traceback
+                print(f"⚠️ 更新检测失败: {e}")
+                traceback.print_exc()
+                # 静默模式下不显示错误
+                if not silent:
+                    error_info = {'error': str(e), 'current_version': '4.0.0', 'version': '检查失败'}
+                    self._update_signals.update_check_done.emit(False, error_info)
+        
+        # 在后台线程执行
+        thread = threading.Thread(target=_do_check, daemon=True)
+        thread.start()
 
-    def _show_update_dialog(self, update_info: dict):
-        """显示更新对话框"""
-        from update_checker import UpdateChecker
-        import webbrowser
-
-        version = update_info.get('version', 'Unknown')
-        download_url = update_info.get('download_url') or update_info.get('release_url', '')
-        platform_name = UpdateChecker.get_platform_name()
-
-        # 构建消息
-        message = f"{self.i18n.t('update.new_version_available', version=version)}\n\n"
-        message += f"{self.i18n.t('update.current_version', version='3.9.5')}\n"
-        message += f"{self.i18n.t('update.latest_version', version=version)}\n"
-        message += f"{self.i18n.t('update.platform', platform=platform_name)}"
-
-        # 显示确认对话框
-        reply = StyledMessageBox.question(
-            self,
-            self.i18n.t("update.title"),
-            message,
-            yes_text=self.i18n.t("update.download_for_platform", platform=platform_name),
-            no_text=self.i18n.t("update.remind_later")
-        )
-
-        if reply == StyledMessageBox.Yes:
-            # 打开下载链接
-            if download_url:
-                webbrowser.open(download_url)
+    def _show_update_result_dialog(self, has_update: bool, update_info):
+        """显示更新检测结果对话框"""
+        try:
+            print("[DEBUG] _show_update_result_dialog 开始执行")
+            from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton
+            import webbrowser
+            
+            dialog = QDialog(self)
+            dialog.setWindowTitle("检查更新")
+            dialog.setMinimumWidth(420)
+            dialog.setStyleSheet(f"""
+                QDialog {{
+                    background-color: {COLORS['bg_primary']};
+                }}
+                QLabel {{
+                    color: {COLORS['text_primary']};
+                    font-size: 13px;
+                }}
+            """)
+            
+            layout = QVBoxLayout(dialog)
+            layout.setContentsMargins(24, 24, 24, 24)
+            layout.setSpacing(12)
+            
+            # 获取版本信息
+            current_version = update_info.get('current_version', '4.0.0') if update_info else '4.0.0'
+            latest_version = update_info.get('version', '未知') if update_info else '未知'
+            has_error = update_info.get('error') if update_info else None
+            
+            if has_error:
+                title = QLabel("⚠️ 检查更新失败")
+                title.setStyleSheet(f"color: {COLORS['warning']}; font-size: 18px; font-weight: 600;")
+            elif has_update:
+                title = QLabel("🎉 发现新版本！")
+                title.setStyleSheet(f"color: {COLORS['accent']}; font-size: 18px; font-weight: 600;")
+            else:
+                title = QLabel("✅ 已是最新版本")
+                title.setStyleSheet(f"color: {COLORS['success']}; font-size: 18px; font-weight: 600;")
+            layout.addWidget(title)
+            
+            layout.addSpacing(4)
+            
+            # 版本信息区域
+            version_frame = QFrame()
+            version_frame.setStyleSheet(f"background-color: {COLORS['bg_elevated']}; border-radius: 8px;")
+            version_layout = QVBoxLayout(version_frame)
+            version_layout.setContentsMargins(16, 12, 16, 12)
+            version_layout.setSpacing(8)
+            
+            # 当前版本
+            current_row = QHBoxLayout()
+            current_label = QLabel("当前版本:")
+            current_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 13px;")
+            current_row.addWidget(current_label)
+            current_row.addStretch()
+            current_value = QLabel(f"V{current_version}")
+            current_value.setStyleSheet(f"color: {COLORS['text_primary']}; font-size: 13px; font-weight: 500;")
+            current_row.addWidget(current_value)
+            version_layout.addLayout(current_row)
+            
+            # 发布版本
+            latest_row = QHBoxLayout()
+            latest_label = QLabel("发布版本:")
+            latest_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 13px;")
+            latest_row.addWidget(latest_label)
+            latest_row.addStretch()
+            latest_value = QLabel(f"V{latest_version}")
+            if has_update:
+                latest_value.setStyleSheet(f"color: {COLORS['accent']}; font-size: 13px; font-weight: 600;")
+            else:
+                latest_value.setStyleSheet(f"color: {COLORS['text_primary']}; font-size: 13px; font-weight: 500;")
+            latest_row.addWidget(latest_value)
+            version_layout.addLayout(latest_row)
+            
+            layout.addWidget(version_frame)
+            
+            # 提示和下载按钮
+            if not has_error:
+                msg = QLabel("如需下载，请前往官网：")
+                msg.setStyleSheet(f"color: {COLORS['text_tertiary']}; font-size: 12px;")
+                layout.addWidget(msg)
+                
+                layout.addSpacing(8)
+                
+                download_url = "https://superpicky.jamesphotography.com.au/#download"
+                
+                # 下载按钮区域
+                btn_frame = QFrame()
+                btn_frame.setStyleSheet(f"background-color: {COLORS['bg_elevated']}; border-radius: 8px;")
+                btn_layout = QHBoxLayout(btn_frame)
+                btn_layout.setContentsMargins(16, 12, 16, 12)
+                btn_layout.setSpacing(12)
+                
+                mac_btn = QPushButton("⌘ Mac 版")
+                mac_btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: {COLORS['accent']};
+                        color: {COLORS['bg_void']};
+                        border: none;
+                        border-radius: 6px;
+                        padding: 10px 16px;
+                        font-size: 13px;
+                        font-weight: 500;
+                    }}
+                    QPushButton:hover {{
+                        background-color: #00e6b8;
+                    }}
+                """)
+                mac_btn.clicked.connect(lambda: webbrowser.open(download_url))
+                btn_layout.addWidget(mac_btn)
+                
+                win_btn = QPushButton("⊞ Windows 版")
+                win_btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: {COLORS['bg_card']};
+                        border: 1px solid {COLORS['border']};
+                        color: {COLORS['text_secondary']};
+                        border-radius: 6px;
+                        padding: 10px 16px;
+                        font-size: 13px;
+                        font-weight: 500;
+                    }}
+                    QPushButton:hover {{
+                        border-color: {COLORS['text_muted']};
+                        color: {COLORS['text_primary']};
+                    }}
+                """)
+                win_btn.clicked.connect(lambda: webbrowser.open(download_url))
+                btn_layout.addWidget(win_btn)
+                
+                layout.addWidget(btn_frame)
+            
+            layout.addSpacing(8)
+            
+            # 关闭按钮
+            close_layout = QHBoxLayout()
+            close_layout.addStretch()
+            
+            close_btn = QPushButton("关闭")
+            close_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {COLORS['bg_card']};
+                    border: 1px solid {COLORS['border']};
+                    color: {COLORS['text_secondary']};
+                    border-radius: 6px;
+                    padding: 8px 24px;
+                    font-size: 13px;
+                }}
+                QPushButton:hover {{
+                    border-color: {COLORS['text_muted']};
+                    color: {COLORS['text_primary']};
+                }}
+            """)
+            close_btn.clicked.connect(dialog.accept)
+            close_layout.addWidget(close_btn)
+            
+            layout.addLayout(close_layout)
+            
+            print("[DEBUG] 即将显示弹窗")
+            dialog.exec()
+            print("[DEBUG] 弹窗已关闭")
+            
+        except Exception as e:
+            import traceback
+            print(f"[ERROR] 显示更新弹窗失败: {e}")
+            traceback.print_exc()

@@ -11,7 +11,7 @@ import sys
 from PySide6.QtWidgets import (
     QDockWidget, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QFrame, QScrollArea, QFileDialog,
-    QProgressBar, QSizePolicy, QComboBox, QCheckBox
+    QProgressBar, QSizePolicy, QComboBox, QCheckBox, QSlider
 )
 import json
 from PySide6.QtCore import Qt, Signal, QThread, QTimer
@@ -285,19 +285,8 @@ class BirdIDDockWidget(QDockWidget):
         self.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
         self.setMinimumWidth(280)
 
-        # 设置 Dock 标题栏样式
-        self.setStyleSheet(f"""
-            QDockWidget {{
-                color: {COLORS['text_primary']};
-                font-size: 13px;
-                font-weight: 500;
-            }}
-            QDockWidget::title {{
-                background-color: {COLORS['bg_elevated']};
-                padding: 8px;
-                text-align: left;
-            }}
-        """)
+        # 使用自定义标题栏以控制按钮位置
+        self._setup_title_bar()
 
         self.worker = None
         self.current_image_path = None
@@ -310,6 +299,77 @@ class BirdIDDockWidget(QDockWidget):
 
         self._setup_ui()
         self._apply_settings()
+    
+    def _setup_title_bar(self):
+        """创建自定义标题栏 - 标题靠左，按钮靠右"""
+        title_bar = QWidget()
+        title_bar.setStyleSheet(f"""
+            QWidget {{
+                background-color: {COLORS['bg_elevated']};
+            }}
+        """)
+        
+        layout = QHBoxLayout(title_bar)
+        layout.setContentsMargins(12, 6, 8, 6)
+        layout.setSpacing(8)
+        
+        # 标题文字（靠左）
+        title_label = QLabel("鸟类识别")
+        title_label.setStyleSheet(f"""
+            color: {COLORS['text_primary']};
+            font-size: 13px;
+            font-weight: 500;
+            background: transparent;
+        """)
+        layout.addWidget(title_label)
+        
+        layout.addStretch()
+        
+        # 浮动按钮（靠右）
+        float_btn = QPushButton("⛶")
+        float_btn.setFixedSize(24, 24)
+        float_btn.setToolTip("浮动/停靠")
+        float_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent;
+                border: none;
+                color: {COLORS['text_tertiary']};
+                font-size: 14px;
+                border-radius: 4px;
+            }}
+            QPushButton:hover {{
+                background-color: {COLORS['bg_card']};
+                color: {COLORS['text_secondary']};
+            }}
+        """)
+        float_btn.clicked.connect(self._toggle_floating)
+        layout.addWidget(float_btn)
+        
+        # 关闭按钮（最右）
+        close_btn = QPushButton("✕")
+        close_btn.setFixedSize(24, 24)
+        close_btn.setToolTip("关闭面板")
+        close_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent;
+                border: none;
+                color: {COLORS['text_tertiary']};
+                font-size: 12px;
+                border-radius: 4px;
+            }}
+            QPushButton:hover {{
+                background-color: {COLORS['error']};
+                color: {COLORS['text_primary']};
+            }}
+        """)
+        close_btn.clicked.connect(self.close)
+        layout.addWidget(close_btn)
+        
+        self.setTitleBarWidget(title_bar)
+    
+    def _toggle_floating(self):
+        """切换浮动/停靠状态"""
+        self.setFloating(not self.isFloating())
     
     def _load_regions_data(self) -> dict:
         """加载 eBird 区域数据"""
@@ -771,14 +831,9 @@ class BirdIDDockWidget(QDockWidget):
 
         layout.addLayout(btn_layout)
 
-        # 状态标签
-        self.status_label = QLabel("准备就绪")
-        self.status_label.setStyleSheet(f"""
-            font-size: 11px;
-            color: {COLORS['text_muted']};
-        """)
-        self.status_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(self.status_label)
+        # 状态标签（隐藏，保留变量用于内部状态追踪）
+        self.status_label = QLabel("")
+        self.status_label.hide()
 
         layout.addStretch()
         self.setWidget(container)
@@ -1016,6 +1071,60 @@ class BirdIDDockWidget(QDockWidget):
         super().resizeEvent(event)
         if self._current_pixmap is not None and self.preview_label.isVisible():
             self._scale_preview()
+
+    def update_crop_preview(self, debug_img):
+        """
+        V4.2: 接收选片过程中的裁剪预览图像并显示
+        Args:
+            debug_img: BGR numpy 数组 (带标注的鸟类裁剪图)
+        """
+        try:
+            import cv2
+            from PySide6.QtGui import QImage
+            
+            # BGR -> RGB
+            rgb_img = cv2.cvtColor(debug_img, cv2.COLOR_BGR2RGB)
+            h, w, ch = rgb_img.shape
+            bytes_per_line = ch * w
+            
+            # numpy -> QImage -> QPixmap
+            q_img = QImage(rgb_img.data, w, h, bytes_per_line, QImage.Format_RGB888)
+            pixmap = QPixmap.fromImage(q_img)
+            
+            # 保存并显示
+            self._current_pixmap = pixmap
+            self.preview_label.show()
+            self._scale_preview()
+            
+        except Exception as e:
+            print(f"[BirdIDDock] 预览更新失败: {e}")
+
+    def show_completion_message(self, debug_dir: str):
+        """
+        V4.2: 处理完成后显示目录路径，隐藏预览图
+        Args:
+            debug_dir: debug_crops 目录路径
+        """
+        # 隐藏预览图
+        self.preview_label.hide()
+        self._current_pixmap = None
+        
+        # 清空结果并显示完成信息
+        self.clear_results()
+        
+        # 创建完成信息标签
+        from PySide6.QtWidgets import QLabel
+        
+        info_label = QLabel(f"✅ 分析完成\n\n📁 调试图目录:\n{debug_dir}")
+        info_label.setStyleSheet(f"""
+            color: {COLORS['text_secondary']};
+            font-size: 12px;
+            padding: 16px;
+            background-color: {COLORS['bg_elevated']};
+            border-radius: 8px;
+        """)
+        info_label.setWordWrap(True)
+        self.results_layout.addWidget(info_label)
 
     def clear_results(self):
         """清空结果区域"""
