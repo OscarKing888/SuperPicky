@@ -1,0 +1,7 @@
+## job manager的工作流程
+1、扫描处理目录文件生成列表
+2、将这些文件列表生成JobFileInfo，判定use_tmp_file为True时创建一个JobBaseCPU_ConvertHEIF, 并从当前空闲的CPU workers中挑一个用于执行JobBaseCPU_ConvertHEIF
+3、如果use_tmp_file为False，并从当前空闲的CPU workers中挑一个，并用其create_rate_job来执行评星（这里worker 会自动根据是CPU还是GPU worker创建JobBaseCPU_Rate或JobBaseGPU_Rate）
+4、评星任务完成后通知Job Manger进行保存相应的评星信息队列（需要封装一个类来保存）
+5、当所有的rate任务都完成后，循环挑选空闲的CPU worker并，从评星信息队列获取一个来创建JobBaseCPU_WriteEXIF并执行，直到评星信息队列为空进入下一流程
+6、输出打印相应的统计信息，并释放所有的workers
