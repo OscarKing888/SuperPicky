@@ -10,6 +10,8 @@ import threading
 import subprocess
 from pathlib import Path
 from typing import Dict, Any
+from constants import RAW_EXTENSIONS, JPG_EXTENSIONS, HEIF_EXTENSIONS
+
 
 
 def get_resource_path(relative_path):
@@ -232,7 +234,7 @@ class WorkerThread(threading.Thread):
                         continue
                     file_prefix, file_ext = os.path.splitext(filename)
                     ext_lower = file_ext.lower()
-                    if ext_lower in processor.RAW_EXTENSIONS:
+                    if ext_lower in RAW_EXTENSIONS:
                         raw_dict[file_prefix] = file_ext
                 
                 # 移动文件到分类文件夹
