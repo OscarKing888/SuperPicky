@@ -401,9 +401,20 @@ class FocusPointDetector:
         else:
             idx = 0
         
-        # Canon 坐标从中心偏移，需要 +imageWidth/2
+        # Canon 坐标从中心偏移
+        # X: 正值向右，负值向左 → 正常相加
+        # Y: 取决于相机类型：
+        #   - 紧凑型相机（PowerShot/IXUS）: yDirection = 1（正常方向）
+        #   - EOS 系列（DSLR/无反）: yDirection = -1（Y轴反转）
+        # 参考: Focus-Points 项目 CanonDelegates.lua
+        
+        # 检测是否为紧凑型相机
+        model = str(common_data.get('Model', '')).upper()
+        is_compact = 'POWERSHOT' in model or 'IXUS' in model or 'ELPH' in model
+        y_direction = 1 if is_compact else -1  # 紧凑型: +1, EOS: -1
+        
         raw_x = img_w // 2 + x_list[idx]
-        raw_y = img_h // 2 + y_list[idx]
+        raw_y = img_h // 2 + (y_list[idx] * y_direction)
         
         # 归一化坐标
         norm_x = raw_x / img_w if img_w > 0 else 0.5
