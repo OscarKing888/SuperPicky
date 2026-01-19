@@ -980,8 +980,8 @@ class SuperPickyMainWindow(QMainWindow):
         
         params_layout.addLayout(header_layout)
 
-        # 隐藏变量
-        self.ai_confidence = 50
+        # 隐藏变量（从高级配置读取，避免硬编码）
+        self.ai_confidence = int(self.config.min_confidence * 100)  # V4.2: 读取用户设置的检测敏感度
         self.norm_mode = "log_compression"
 
         # 滑块区域
@@ -1618,7 +1618,20 @@ class SuperPickyMainWindow(QMainWindow):
         """显示高级设置"""
         from .advanced_settings_dialog import AdvancedSettingsDialog
         dialog = AdvancedSettingsDialog(self)
-        dialog.exec()
+        result = dialog.exec()
+        
+        # V4.2: 如果用户保存了设置，更新主窗口的变量并显示新配置
+        if result:
+            # 重新加载配置
+            self.config = get_advanced_config()
+            # 更新 ai_confidence 变量
+            self.ai_confidence = int(self.config.min_confidence * 100)
+            # 在控制台显示更新后的设置
+            self._log(f"✅ 参数设置已更新:")
+            self._log(f"   检测敏感度: {self.ai_confidence}%")
+            self._log(f"   最低锐度: {self.config.min_sharpness}")
+            self._log(f"   最低美学: {self.config.min_nima}")
+            self._log(f"   识别确信度: {self.config.birdid_confidence}%")
 
     def _change_language(self, lang_code):
         """切换界面语言"""

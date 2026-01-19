@@ -125,6 +125,13 @@ echo "正在配置 慧眼选鸟 SuperPicky V4.0.0..."
 
 APP_PATH="/Applications/慧眼选鸟.app"
 
+# 获取真实用户（而非 root）
+REAL_USER=$(stat -f '%Su' /dev/console)
+REAL_HOME=$(eval echo ~$REAL_USER)
+
+echo "安装用户: $REAL_USER"
+echo "用户主目录: $REAL_HOME"
+
 # 1. 设置应用权限
 chmod -R 755 "$APP_PATH"
 echo "✓ 应用权限已设置"
@@ -142,55 +149,150 @@ if [ -d "$LIB_DIR" ]; then
     chmod -R 755 "$LIB_DIR"
 fi
 
-# 4. 安装 Lightroom 插件到所有检测到的版本
-echo "正在安装 Lightroom 插件..."
-PLUGIN_SOURCE="$APP_PATH/Contents/MacOS/SuperBirdIDPlugin.lrplugin"
+# 4. 安装 Lightroom 插件
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "正在检测 Lightroom 版本..."
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-# 定义所有可能的 Lightroom 插件目录
-LR_DIRS=(
-    "$HOME/Library/Application Support/Adobe/Lightroom/Modules"
-    "$HOME/Library/Application Support/Adobe/Lightroom Classic/Modules"
-    "$HOME/Library/Application Support/Adobe/Lightroom Classic CC/Modules"
-)
+PLUGIN_SOURCE="$APP_PATH/Contents/Resources/SuperBirdIDPlugin.lrplugin"
 
-INSTALLED_COUNT=0
-INSTALLED_PATHS=""
+# 检测可用的 Lightroom 版本
+declare -a LR_OPTIONS
+declare -a LR_PATHS
+declare -a LR_NAMES
 
-if [ -d "$PLUGIN_SOURCE" ]; then
-    for LR_DIR in "${LR_DIRS[@]}"; do
-        # 检查 Lightroom 目录是否存在（父目录存在说明用户安装了该版本）
-        LR_PARENT=$(dirname "$LR_DIR")
-        if [ -d "$LR_PARENT" ]; then
-            mkdir -p "$LR_DIR"
-            
-            # 删除旧版本
-            if [ -d "$LR_DIR/SuperBirdIDPlugin.lrplugin" ]; then
-                rm -rf "$LR_DIR/SuperBirdIDPlugin.lrplugin"
-            fi
-            
-            # 复制新版本
-            cp -R "$PLUGIN_SOURCE" "$LR_DIR/"
-            echo "  ✓ 已安装到: $LR_DIR"
-            INSTALLED_COUNT=$((INSTALLED_COUNT + 1))
-            INSTALLED_PATHS="$INSTALLED_PATHS\n  - $LR_DIR"
+# 用户 Modules 目录（推荐）
+USER_MODULES="$REAL_HOME/Library/Application Support/Adobe/Lightroom/Modules"
+if [ -d "$REAL_HOME/Library/Application Support/Adobe/Lightroom" ]; then
+    LR_OPTIONS+=("Lightroom 用户模块 (推荐)")
+    LR_PATHS+=("$USER_MODULES")
+    LR_NAMES+=("Lightroom 用户模块")
+    echo "  ✓ 发现: Lightroom 用户模块目录"
+fi
+
+# Lightroom Classic 应用内 PlugIns（需要 admin）
+LR_CLASSIC_PLUGINS="/Applications/Adobe Lightroom Classic/Adobe Lightroom Classic.app/Contents/PlugIns"
+if [ -d "$LR_CLASSIC_PLUGINS" ]; then
+    LR_OPTIONS+=("Lightroom Classic 应用内 (需重启LR)")
+    LR_PATHS+=("$LR_CLASSIC_PLUGINS")
+    LR_NAMES+=("Lightroom Classic 应用内")
+    echo "  ✓ 发现: Lightroom Classic 应用"
+fi
+
+# 检测其他可能的 Lightroom 安装
+for lr_app in /Applications/Adobe\ Lightroom*/Adobe\ Lightroom*.app/Contents/PlugIns; do
+    if [ -d "$lr_app" ] && [[ "$lr_app" != "$LR_CLASSIC_PLUGINS" ]]; then
+        app_name=$(basename "$(dirname "$(dirname "$lr_app")")" | sed 's/Adobe //')
+        LR_OPTIONS+=("$app_name 应用内")
+        LR_PATHS+=("$lr_app")
+        LR_NAMES+=("$app_name")
+        echo "  ✓ 发现: $app_name"
+    fi
+done
+
+# 如果没有检测到任何 Lightroom
+if [ ${#LR_OPTIONS[@]} -eq 0 ]; then
+    echo "⚠ 未检测到 Lightroom 安装"
+    echo "插件已保存在应用包内，您可以稍后手动安装"
+    echo "插件位置: $PLUGIN_SOURCE"
+else
+    echo ""
+    echo "检测到 ${#LR_OPTIONS[@]} 个可用安装位置"
+    
+    # 构建 osascript 选项列表
+    OPTIONS_STR=""
+    for opt in "${LR_OPTIONS[@]}"; do
+        if [ -z "$OPTIONS_STR" ]; then
+            OPTIONS_STR="\"$opt\""
+        else
+            OPTIONS_STR="$OPTIONS_STR, \"$opt\""
         fi
     done
     
-    if [ $INSTALLED_COUNT -eq 0 ]; then
-        # 如果没有检测到任何 Lightroom，安装到默认目录
-        DEFAULT_DIR="$HOME/Library/Application Support/Adobe/Lightroom/Modules"
-        mkdir -p "$DEFAULT_DIR"
-        cp -R "$PLUGIN_SOURCE" "$DEFAULT_DIR/"
-        echo "  ✓ 已安装到默认目录: $DEFAULT_DIR"
-        INSTALLED_PATHS="  - $DEFAULT_DIR"
-    fi
+    # 使用 osascript 弹出多选对话框
+    echo "正在显示安装选择对话框..."
     
-    echo "✓ Lightroom 插件安装完成 (共 $INSTALLED_COUNT 个版本)"
-else
-    echo "⚠ 未找到 Lightroom 插件源文件"
+    SELECTED=$(osascript -e "
+        set theChoices to {$OPTIONS_STR}
+        set selectedItems to choose from list theChoices with title \"慧眼选鸟 - Lightroom 插件安装\" with prompt \"请选择要安装插件的 Lightroom 版本：
+        
+(可按住 Command 键多选)\" default items {item 1 of theChoices} with multiple selections allowed
+        if selectedItems is false then
+            return \"CANCELLED\"
+        else
+            set AppleScript's text item delimiters to \"|||\"
+            return selectedItems as text
+        end if
+    " 2>/dev/null)
+    
+    if [ "$SELECTED" = "CANCELLED" ] || [ -z "$SELECTED" ]; then
+        echo "用户取消了插件安装"
+        echo "您可以稍后从应用包内手动复制插件"
+    else
+        echo "用户选择: $SELECTED"
+        echo ""
+        
+        INSTALLED_COUNT=0
+        
+        # 解析用户选择并安装
+        IFS='|||' read -ra SELECTED_ITEMS <<< "$SELECTED"
+        for selection in "${SELECTED_ITEMS[@]}"; do
+            # 查找对应的路径
+            for i in "${!LR_OPTIONS[@]}"; do
+                if [ "${LR_OPTIONS[$i]}" = "$selection" ]; then
+                    TARGET_PATH="${LR_PATHS[$i]}"
+                    TARGET_NAME="${LR_NAMES[$i]}"
+                    
+                    echo "正在安装到: $TARGET_NAME..."
+                    
+                    # 创建目录（如果不存在）
+                    mkdir -p "$TARGET_PATH"
+                    
+                    # 删除旧版本
+                    if [ -d "$TARGET_PATH/SuperBirdIDPlugin.lrplugin" ]; then
+                        rm -rf "$TARGET_PATH/SuperBirdIDPlugin.lrplugin"
+                    fi
+                    
+                    # 复制插件
+                    if cp -R "$PLUGIN_SOURCE" "$TARGET_PATH/"; then
+                        # 设置正确的所有者（用户目录需要）
+                        if [[ "$TARGET_PATH" == "$REAL_HOME"* ]]; then
+                            chown -R "$REAL_USER" "$TARGET_PATH/SuperBirdIDPlugin.lrplugin"
+                        fi
+                        echo "  ✓ 已安装到: $TARGET_NAME"
+                        INSTALLED_COUNT=$((INSTALLED_COUNT + 1))
+                    else
+                        echo "  ✗ 安装失败: $TARGET_NAME"
+                    fi
+                    break
+                fi
+            done
+        done
+        
+        echo ""
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "✓ Lightroom 插件安装完成 (共 $INSTALLED_COUNT 个位置)"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    fi
 fi
 
-# 5. 清除隔离标记
+# 6. 安装 Lightroom 导出预设
+echo ""
+echo "正在安装 Lightroom 导出预设..."
+PRESET_SOURCE="$APP_PATH/Contents/Resources/SuperBirdIDPlugin.lrplugin/慧眼选鸟.lrtemplate"
+PRESET_DIR="$REAL_HOME/Library/Application Support/Adobe/Lightroom/Export Presets/User Presets"
+
+if [ -f "$PRESET_SOURCE" ]; then
+    mkdir -p "$PRESET_DIR"
+    cp "$PRESET_SOURCE" "$PRESET_DIR/"
+    chown "$REAL_USER" "$PRESET_DIR/慧眼选鸟.lrtemplate"
+    echo "✓ 导出预设已安装到: $PRESET_DIR"
+else
+    echo "⚠ 未找到导出预设文件，跳过"
+fi
+
+# 7. 清除隔离标记
 xattr -cr "$APP_PATH" 2>/dev/null || true
 echo "✓ 隔离标记已清除"
 
@@ -200,7 +302,6 @@ echo "✅ 慧眼选鸟 SuperPicky V4.0.0 安装完成！"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 echo "📍 应用位置: /Applications/慧眼选鸟.app"
-echo "📍 Lightroom 插件已安装到检测到的所有版本"
 echo ""
 
 exit 0
@@ -208,10 +309,34 @@ POSTINSTALL_EOF
 
 chmod +x pkg_scripts/postinstall
 
+# 创建组件 plist 禁用 relocation（防止应用被安装到错误位置）
+log_info "创建组件 plist (禁用 relocation)..."
+cat > pkg_components.plist << 'COMPONENT_PLIST_EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<array>
+    <dict>
+        <key>BundleHasStrictIdentifier</key>
+        <true/>
+        <key>BundleIsRelocatable</key>
+        <false/>
+        <key>BundleIsVersionChecked</key>
+        <false/>
+        <key>BundleOverwriteAction</key>
+        <string>upgrade</string>
+        <key>RootRelativeBundlePath</key>
+        <string>Applications/慧眼选鸟.app</string>
+    </dict>
+</array>
+</plist>
+COMPONENT_PLIST_EOF
+
 # 构建组件包
 log_info "构建 PKG 组件包..."
 pkgbuild --root pkg_root \
     --scripts pkg_scripts \
+    --component-plist pkg_components.plist \
     --identifier "${BUNDLE_ID}" \
     --version "${VERSION}" \
     --install-location "/" \
@@ -231,13 +356,30 @@ cat > welcome.html << 'WELCOME_EOF'
 <head>
     <meta charset="utf-8">
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; padding: 20px; line-height: 1.6; background: #fff; color: #000; }
+        /* 支持深色和浅色模式 - 使用透明背景避免白底问题 */
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; 
+            padding: 20px; 
+            line-height: 1.6; 
+            background: transparent; 
+            color: #1a1a1a; 
+        }
+        @media (prefers-color-scheme: dark) {
+            body { background: transparent; color: #e0e0e0; }
+            h1 { color: #f1f5f9; }
+            .version { color: #94a3b8; }
+            h2, h3 { color: #94a3b8; }
+            .highlight { color: #60a5fa; }
+            li { color: #d1d5db; }
+            p { color: #d1d5db; }
+            strong { color: #f1f5f9; }
+        }
         h1 { color: #2c3e50; margin-bottom: 5px; }
         .version { color: #7f8c8d; font-size: 0.9em; margin-bottom: 20px; }
         h2, h3 { color: #34495e; }
         .highlight { color: #3498db; font-weight: bold; }
         ul { padding-left: 20px; }
-        li { margin: 8px 0; }
+        li { margin: 8px 0; color: #374151; }
         .new-badge { background: #e74c3c; color: white; padding: 2px 8px; border-radius: 10px; font-size: 0.8em; }
     </style>
 </head>
@@ -273,13 +415,40 @@ cat > conclusion.html << 'CONCLUSION_EOF'
 <head>
     <meta charset="utf-8">
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; padding: 20px; line-height: 1.6; background: #fff; color: #000; }
+        /* 支持深色和浅色模式 - 使用透明背景避免白底问题 */
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; 
+            padding: 20px; 
+            line-height: 1.6; 
+            background: transparent; 
+            color: #1a1a1a; 
+        }
+        @media (prefers-color-scheme: dark) {
+            body { background: transparent; color: #e0e0e0; }
+            h1 { color: #4ade80; }
+            h2 { color: #94a3b8; }
+            .success { background: transparent; border-color: #22c55e; color: #4ade80; }
+            .success strong { color: #4ade80; }
+            .info-box { background: transparent; border-color: #3b82f6; color: #bfdbfe; }
+            .info-box strong { color: #60a5fa; }
+            .info-box p { color: #d1d5db; }
+            .warning { background: transparent; border-color: #f59e0b; color: #fbbf24; }
+            .warning strong { color: #fbbf24; }
+            .warning p { color: #d1d5db; }
+            a { color: #60a5fa; }
+            li { color: #d1d5db; }
+            p { color: #d1d5db; }
+        }
         h1 { color: #27ae60; }
         h2 { color: #34495e; }
-        .success { background: #d4edda; border: 1px solid #c3e6cb; padding: 15px; border-radius: 5px; margin: 20px 0; color: #155724; }
-        .info-box { background: #f8f9fa; border-left: 4px solid #3498db; padding: 15px; margin: 15px 0; }
-        .warning { background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 15px 0; color: #856404; }
+        .success { background: transparent; border: 2px solid #27ae60; padding: 15px; border-radius: 5px; margin: 20px 0; color: #27ae60; }
+        .info-box { background: transparent; border-left: 4px solid #3498db; padding: 15px; margin: 15px 0; color: #1a1a1a; }
+        .warning { background: transparent; border-left: 4px solid #f59e0b; padding: 15px; margin: 15px 0; color: #856404; }
         a { color: #3498db; text-decoration: none; }
+        li { color: #374151; }
+        @media (prefers-color-scheme: dark) {
+            li { color: #d1d5db; }
+        }
     </style>
 </head>
 <body>
@@ -310,14 +479,15 @@ cat > conclusion.html << 'CONCLUSION_EOF'
     </div>
 
     <div class="warning">
-        <p><strong>⚠️ 首次启动:</strong></p>
+        <p><strong>⚠️ 首次使用注意:</strong></p>
         <ul>
             <li>首次运行可能需要 10-30 秒加载 AI 模型</li>
             <li>使用 Lightroom 插件前需先启动主应用</li>
+            <li><strong>Lightroom 插件需手动启用:</strong> 文件 → 增效工具管理器 → 找到「慧眼选鸟」→ 点击「启用」</li>
         </ul>
     </div>
 
-    <p style="margin-top: 30px; color: #7f8c8d; font-size: 0.9em;">
+    <p style="margin-top: 30px; font-size: 0.9em;">
         感谢使用慧眼选鸟！如有问题请访问 <a href="https://github.com/jamesphotography/SuperPicky">GitHub</a>
     </p>
 </body>
@@ -520,7 +690,7 @@ fi
 log_step "清理临时文件"
 
 rm -rf pkg_root pkg_scripts
-rm -f "${APP_NAME}-component.pkg" distribution.xml welcome.html conclusion.html
+rm -f "${APP_NAME}-component.pkg" distribution.xml welcome.html conclusion.html pkg_components.plist
 
 log_success "清理完成"
 

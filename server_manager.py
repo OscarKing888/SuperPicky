@@ -3,6 +3,8 @@
 SuperPicky BirdID 服务器管理器
 管理 API 服务器的生命周期：启动、停止、状态检查
 支持守护进程模式，使服务器可以独立于 GUI 运行
+
+V4.0.0 修复：打包模式下使用线程方式启动，避免重复启动整个应用
 """
 
 import os
@@ -12,6 +14,7 @@ import socket
 import subprocess
 import time
 import json
+import threading
 
 # PID 文件位置
 def get_pid_file_path():
@@ -121,9 +124,83 @@ def get_server_status(port=5156):
     }
 
 
+# 全局变量：跟踪线程模式的服务器
+_server_thread = None
+_server_instance = None
+
+
+def start_server_thread(port=5156, log_callback=None):
+    """
+    在线程中启动服务器（用于打包模式）
+    
+    Args:
+        port: 监听端口
+        log_callback: 日志回调函数
+        
+    Returns:
+        tuple: (success: bool, message: str, thread: Thread or None)
+    """
+    global _server_thread, _server_instance
+    
+    def log(msg):
+        if log_callback:
+            log_callback(msg)
+        print(msg)
+    
+    # 检查是否已经运行
+    if check_server_health(port):
+        log(f"✅ 服务器已在端口 {port} 运行")
+        return True, "服务器已运行", _server_thread
+    
+    try:
+        # 导入服务器模块
+        from birdid_server import app, ensure_models_loaded
+        from werkzeug.serving import make_server
+        
+        log("🔧 打包模式：使用线程方式启动 API 服务器...")
+        
+        def run_server():
+            global _server_instance
+            try:
+                # 预加载模型
+                log("📦 正在加载 AI 模型...")
+                ensure_models_loaded()
+                log("✅ AI 模型加载完成")
+                
+                # 创建并运行服务器
+                _server_instance = make_server('127.0.0.1', port, app, threaded=True)
+                log(f"🚀 API 服务器已启动: http://127.0.0.1:{port}")
+                _server_instance.serve_forever()
+            except Exception as e:
+                log(f"❌ 服务器线程错误: {e}")
+        
+        # 创建并启动守护线程
+        _server_thread = threading.Thread(target=run_server, daemon=True, name="BirdID-API-Server")
+        _server_thread.start()
+        
+        # 等待服务器启动（最多 30 秒，因为模型加载需要时间）
+        for i in range(60):
+            time.sleep(0.5)
+            if check_server_health(port):
+                log(f"✅ 服务器健康检查通过，端口 {port}")
+                return True, "服务器启动成功", _server_thread
+        
+        log("⚠️ 服务器启动超时，但线程仍在运行")
+        return True, "服务器启动中", _server_thread
+        
+    except Exception as e:
+        log(f"❌ 线程启动失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return False, str(e), None
+
+
 def start_server_daemon(port=5156, log_callback=None):
     """
-    以守护进程模式启动服务器
+    启动服务器
+    
+    打包模式下使用线程方式启动（避免重复启动整个应用）
+    开发模式下使用子进程方式启动
     
     Args:
         port: 监听端口
@@ -149,33 +226,51 @@ def start_server_daemon(port=5156, log_callback=None):
         stop_server()
         time.sleep(1)
     
-    # 获取脚本路径
+    # 检测运行模式
+    is_frozen = getattr(sys, 'frozen', False)
+    
+    if is_frozen:
+        # 打包模式：使用线程方式启动
+        log("📦 检测到打包模式，使用线程方式启动服务器")
+        success, message, thread = start_server_thread(port, log_callback)
+        # 线程模式没有独立 PID，返回主进程 PID
+        return success, message, os.getpid() if success else None
+    else:
+        # 开发模式：使用子进程方式启动
+        log("🛠️ 开发模式，使用子进程方式启动服务器")
+        return _start_server_subprocess(port, log_callback)
+
+
+def _start_server_subprocess(port=5156, log_callback=None):
+    """
+    以子进程方式启动服务器（仅开发模式使用）
+    """
+    def log(msg):
+        if log_callback:
+            log_callback(msg)
+        print(msg)
+    
+    python_exe = sys.executable
     server_script = get_server_script_path()
+    
     if not os.path.exists(server_script):
         return False, f"服务器脚本不存在: {server_script}", None
     
-    # 获取 Python 解释器路径
-    python_exe = sys.executable
-    
-    # 构建启动命令
     cmd = [python_exe, server_script, '--port', str(port)]
-    
     log(f"🚀 启动守护进程: {' '.join(cmd)}")
     
     try:
         # 以守护进程方式启动（分离子进程）
         if sys.platform == 'darwin':
-            # macOS: 使用 start_new_session 分离进程
             process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 stdin=subprocess.DEVNULL,
-                start_new_session=True,  # 创建新会话，脱离父进程
+                start_new_session=True,
                 close_fds=True
             )
         else:
-            # Windows/Linux
             process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.DEVNULL,
@@ -185,18 +280,16 @@ def start_server_daemon(port=5156, log_callback=None):
                 start_new_session=True if sys.platform != 'win32' else False
             )
         
-        # 记录 PID
         write_pid(process.pid)
         log(f"📝 服务器 PID: {process.pid}")
         
         # 等待服务器启动
-        for i in range(10):  # 最多等待 5 秒
+        for i in range(10):
             time.sleep(0.5)
             if check_server_health(port):
                 log(f"✅ 服务器已启动，端口 {port}")
                 return True, "服务器启动成功", process.pid
         
-        # 检查进程是否还在
         if is_process_running(process.pid):
             log("⚠️ 服务器进程已启动，但健康检查未通过")
             return True, "服务器启动中", process.pid

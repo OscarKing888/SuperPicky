@@ -138,12 +138,12 @@ class RatingEngine:
                 reason="未检测到鸟类"
             )
         
-        # 第二步：置信度检查（低于 50% 给 0星）
+        # 第二步：置信度检查（低于阈值给 0星）
         if confidence < self.min_confidence:
             return RatingResult(
                 rating=0,
                 pick=0,
-                reason=f"置信度低({confidence:.0%})"
+                reason=f"置信度{confidence:.0%}<{self.min_confidence:.0%}"
             )
         # 第三步：关键点可见性检查（V4.0: 先判定眼睛）
         # 如果看不到眼睛/嘴巴，直接给 1 星，不再判断美学
@@ -193,14 +193,15 @@ class RatingEngine:
                 adjusted_topiq = adjusted_topiq * 1.1
         
         # 设置对焦状态后缀（精焦/合焦/失焦/脱焦 - 全部显示）
+        # V4.2: 阈值与 photo_processor.py 保持一致
         focus_suffix = ""
         if focus_sharpness_weight > 1.0:
             focus_suffix = "，精焦"
-        elif focus_sharpness_weight >= 1.0:
+        elif focus_sharpness_weight >= 0.9:  # 修复: 0.9 以上为合焦（鸟身对焦）
             focus_suffix = "，合焦"
         elif focus_sharpness_weight >= 0.7:
             focus_suffix = "，失焦"
-        else:  # 0.5
+        else:  # < 0.7
             focus_suffix = "，脱焦"
         
         # 第五步：基础星级判定（锐度 >= 阈值 AND/OR TOPIQ >= 阈值）

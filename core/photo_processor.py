@@ -370,7 +370,9 @@ class PhotoProcessor:
             detected, _, confidence, sharpness, _, bird_bbox, img_dims, bird_mask = result
             
             # V4.1: 早期退出 - 无鸟或置信度低，跳过所有后续检测
-            if not detected or (detected and confidence < 0.5):
+            # V4.2: 使用用户设置的 ai_confidence 阈值（百分比转小数）
+            confidence_threshold = self.settings.ai_confidence / 100.0
+            if not detected or (detected and confidence < confidence_threshold):
                 photo_time_ms = (time.time() - photo_start_time) * 1000
                 
                 if not detected:
@@ -378,7 +380,8 @@ class PhotoProcessor:
                     reason = "未检测到鸟类"
                 else:
                     rating_value = 0
-                    reason = f"置信度低({confidence:.0%})"
+                    # V4.2: 显示实际置信度和阈值
+                    reason = f"置信度{confidence:.0%}<{self.settings.ai_confidence}%"
                 
                 # 简化日志
                 self._log_photo_result_simple(i, total_files, filename, rating_value, reason, photo_time_ms, False, False, None)
