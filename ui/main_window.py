@@ -705,26 +705,7 @@ class SuperPickyMainWindow(QMainWindow):
         
         # 退出应用
         QApplication.quit()
-    
-    def closeEvent(self, event):
-        """V4.0: 正常关闭窗口时退出应用"""
-        # 后台模式：不停止服务器
-        if not getattr(self, '_background_mode', False):
-            # 正常退出时停止服务器
-            try:
-                from server_manager import stop_server
-                stop_server()
-                print("✅ 服务器已停止")
-            except Exception as e:
-                print(f"⚠️ 停止服务器失败: {e}")
-        else:
-            print("✅ 后台模式：服务器继续运行")
-        
-        # 隐藏托盘图标
-        if hasattr(self, 'tray_icon') and self.tray_icon:
-            self.tray_icon.hide()
-        event.accept()
-    
+
     def _minimize_to_tray(self):
         """V4.0: 进入后台模式（服务器继续运行，GUI 完全退出）"""
         from server_manager import get_server_status, start_server_daemon
@@ -1922,6 +1903,14 @@ class SuperPickyMainWindow(QMainWindow):
 
     def closeEvent(self, event):
         """窗口关闭事件"""
+        # V4.0: 后台模式不停止服务器
+        if getattr(self, '_background_mode', False):
+            print("✅ 后台模式：服务器继续运行")
+            if hasattr(self, 'tray_icon') and self.tray_icon:
+                self.tray_icon.hide()
+            event.accept()
+            return
+        
         if self.worker and self.worker.is_alive():
             reply = StyledMessageBox.question(
                 self,
