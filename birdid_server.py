@@ -89,6 +89,63 @@ def get_gui_settings():
     return settings
 
 
+def update_gui_settings_from_gps(region_code: str, region_name: str = None):
+    """
+    将 GPS 检测到的区域同步到 GUI 设置文件
+    这样主界面的国家/地区选择会自动更新
+    
+    Args:
+        region_code: eBird 区域代码（如 "AU-SA" 或 "AU"）
+        region_name: 区域名称（可选，用于显示）
+    """
+    import json
+    settings_path = os.path.expanduser('~/Documents/SuperPicky_Data/birdid_dock_settings.json')
+    
+    try:
+        # 读取现有设置
+        settings = {}
+        if os.path.exists(settings_path):
+            with open(settings_path, 'r', encoding='utf-8') as f:
+                settings = json.load(f)
+        
+        # 解析区域代码
+        if '-' in region_code:
+            # 格式: "AU-SA" -> 国家 AU, 区域 SA
+            country_code = region_code.split('-')[0]
+        else:
+            # 只有国家代码
+            country_code = region_code
+        
+        # 国家代码到显示名称的映射
+        country_display_map = {
+            'AU': '澳大利亚', 'US': '美国', 'GB': '英国', 'CN': '中国',
+            'HK': '香港', 'TW': '台湾', 'JP': '日本', 'NZ': 'New Zealand'
+        }
+        
+        # 更新国家选择
+        country_display = country_display_map.get(country_code, country_code)
+        settings['selected_country'] = country_display
+        
+        # 如果有具体区域，更新区域选择
+        if '-' in region_code and region_name:
+            settings['selected_region'] = f"{region_name} ({region_code})"
+        else:
+            settings['selected_region'] = '整个国家'
+        
+        # 确保目录存在
+        os.makedirs(os.path.dirname(settings_path), exist_ok=True)
+        
+        # 保存设置
+        with open(settings_path, 'w', encoding='utf-8') as f:
+            json.dump(settings, f, ensure_ascii=False, indent=2)
+        
+        print(f"[API] 📍 已同步 GPS 检测区域到 GUI: {country_display}" + 
+              (f" / {region_name}" if region_name else ""))
+        
+    except Exception as e:
+        print(f"[API] ⚠️ 同步 GPS 区域到 GUI 失败: {e}")
+
+
 def ensure_models_loaded():
     """确保模型已加载"""
     print("正在加载模型...")
@@ -255,7 +312,8 @@ def recognize_bird():
                 'en_name': r.get('en_name', ''),
                 'scientific_name': r.get('scientific_name', ''),
                 'confidence': float(r.get('confidence', 0)),
-                'ebird_match': r.get('ebird_match', False)
+                'ebird_match': r.get('ebird_match', False),
+                'description': r.get('description', '')
             })
         
         # 智能候选筛选：根据置信度差距决定返回多少个候选
@@ -309,6 +367,35 @@ def recognize_bird():
             'gps_info': result.get('gps_info'),
             'ebird_info': result.get('ebird_info')
         }
+
+        # 如果照片有 GPS 信息，同步检测到的区域到主界面设置
+        gps_info = result.get('gps_info')
+        if gps_info and gps_info.get('latitude') and gps_info.get('longitude'):
+            # 使用 GPS 坐标检测区域
+            try:
+                from birdid.ebird_country_filter import eBirdCountryFilter
+                ebird_filter = eBirdCountryFilter("", cache_dir="ebird_cache", offline_dir="offline_ebird_data")
+                detected_region, region_name_raw = ebird_filter.get_region_code_from_gps(
+                    gps_info['latitude'], gps_info['longitude']
+                )
+                if detected_region:
+                    # 州/省代码到完整名称的映射
+                    state_name_map = {
+                        # 澳大利亚
+                        'AU-WA': 'Western Australia',
+                        'AU-SA': 'South Australia',
+                        'AU-NSW': 'New South Wales',
+                        'AU-VIC': 'Victoria',
+                        'AU-QLD': 'Queensland',
+                        'AU-TAS': 'Tasmania',
+                        'AU-NT': 'Northern Territory',
+                        'AU-ACT': 'Australian Capital Territory',
+                        # 可以继续添加其他国家的州/省
+                    }
+                    region_name = state_name_map.get(detected_region, region_name_raw)
+                    update_gui_settings_from_gps(detected_region, region_name)
+            except Exception as e:
+                print(f"[API] ⚠️ GPS 区域检测失败: {e}")
 
         return jsonify(response)
 

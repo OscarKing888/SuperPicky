@@ -461,6 +461,9 @@ class BirdIDDockWidget(QDockWidget):
     
     def _apply_settings(self):
         """应用保存的设置"""
+        # 设置标志，防止在应用设置时触发保存
+        self._applying_settings = True
+        
         self.ebird_checkbox.setChecked(self.settings.get('use_ebird', True))
         self.auto_identify_checkbox.setChecked(self.settings.get('auto_identify', False))
         
@@ -469,10 +472,19 @@ class BirdIDDockWidget(QDockWidget):
         if idx >= 0:
             self.country_combo.setCurrentIndex(idx)
         
+        # 等待 _on_country_changed 填充区域列表后再设置区域
+        # 使用 QTimer 延迟设置
         saved_region = self.settings.get('selected_region', '整个国家')
+        QTimer.singleShot(100, lambda: self._apply_saved_region(saved_region))
+    
+    def _apply_saved_region(self, saved_region: str):
+        """延迟应用保存的区域设置"""
         idx = self.region_combo.findText(saved_region)
         if idx >= 0:
             self.region_combo.setCurrentIndex(idx)
+        # 设置完成后解除标志
+        self._applying_settings = False
+
     
     def _on_country_changed(self, country_display: str):
         """国家选择变化时更新区域列表"""
@@ -501,15 +513,17 @@ class BirdIDDockWidget(QDockWidget):
                     break
         
         self._updating_regions = False
-        self._save_settings()
+        # 只有当不是在应用设置时才保存
+        if not getattr(self, '_applying_settings', False):
+            self._save_settings()
         
         # 如果已有图片，重新识别（应用新的国家/地区过滤）
         self._reidentify_if_needed()
 
     def _on_region_changed(self, region_display: str):
         """区域选择变化时保存设置并重新识别"""
-        # 如果正在更新区域列表，不触发重新识别
-        if getattr(self, '_updating_regions', False):
+        # 如果正在更新区域列表或正在应用设置，不触发保存
+        if getattr(self, '_updating_regions', False) or getattr(self, '_applying_settings', False):
             return
         
         self._save_settings()
