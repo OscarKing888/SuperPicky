@@ -210,16 +210,29 @@ local function recognizeSinglePhoto(photo, apiUrl, topK, useYolo, useGps)
 end
 
 -- 保存识别结果到照片元数据
--- 只写入 Title，格式：中文名 (英文名)，与批量处理一致
+-- 写入 Title (鸟名) 和 Caption (学名 + 描述)
 local function saveRecognitionResult(photo, species, enName, scientificName, description)
     local catalog = import('LrApplication').activeCatalog()
 
     -- 构建 Title 内容：中文名 (英文名)
     local title = species .. " (" .. enName .. ")"
 
+    -- 构建 Caption 内容：学名 + 描述
+    local caption = scientificName or ""
+    if description and description ~= "" then
+        if caption ~= "" then
+            caption = caption .. "\n\n" .. description
+        else
+            caption = description
+        end
+    end
+
     catalog:withWriteAccessDo("保存鸟类识别结果", function()
         photo:setRawMetadata("title", title)
-        -- 不修改 Caption，与批量处理一致
+        -- 写入 Caption (学名 + 描述)
+        if caption ~= "" then
+            photo:setRawMetadata("caption", caption)
+        end
     end)
 end
 

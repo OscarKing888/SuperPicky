@@ -581,6 +581,7 @@ def predict_bird(
         en_name = None
         scientific_name = None
         ebird_code = None
+        description = None
 
         # 优先从数据库获取
         if db_manager:
@@ -590,6 +591,8 @@ def predict_bird(
                 en_name = info.get('english_name')
                 scientific_name = info.get('scientific_name')
                 ebird_code = info.get('ebird_code')
+                # 优先使用短描述，没有则使用完整描述
+                description = info.get('short_description_zh') or info.get('full_description_zh')
 
         # 回退到 bird_data
         if not cn_name and class_id < len(bird_data) and len(bird_data[class_id]) >= 2:
@@ -621,7 +624,8 @@ def predict_bird(
             'scientific_name': scientific_name,
             'confidence': confidence,
             'ebird_code': ebird_code,
-            'ebird_match': ebird_match
+            'ebird_match': ebird_match,
+            'description': description or ''
         })
 
         if len(results) >= top_k:
@@ -708,16 +712,11 @@ def identify_bird(
                 # 确定要使用的区域
                 effective_region = None
                 data_source = None
+                gps_detected_region = None
+                gps_region_name = None
                 
-                # 优先级：region_code > country_code > GPS 自动检测
-                if region_code:
-                    effective_region = region_code
-                    data_source = f"手动选择: {region_code}"
-                elif country_code:
-                    effective_region = country_code
-                    data_source = f"手动选择: {country_code}"
-                elif use_gps:
-                    # 尝试从 EXIF 提取 GPS 并自动检测区域
+                # 如果启用 GPS，先尝试从 EXIF 提取 GPS 并检测区域
+                if use_gps:
                     lat, lon, gps_msg = extract_gps_from_exif(image_path)
                     if lat and lon:
                         result['gps_info'] = {
@@ -725,12 +724,24 @@ def identify_bird(
                             'longitude': lon,
                             'info': gps_msg
                         }
-                        # 只用 GPS 判定国家/区域代码（不调用 eBird API）
-                        detected_region, region_name = ebird_filter.get_region_code_from_gps(lat, lon)
-                        if detected_region:
-                            effective_region = detected_region
-                            data_source = f"GPS自动检测: {detected_region}"
-                            print(f"[GPS] 自动检测区域: {detected_region} ({region_name})")
+                        # 用 GPS 判定国家/区域代码
+                        gps_detected_region, gps_region_name = ebird_filter.get_region_code_from_gps(lat, lon)
+                        if gps_detected_region:
+                            print(f"[GPS] 自动检测区域: {gps_detected_region} ({gps_region_name})")
+                
+                # 优先级：
+                # 1. 手动选择的 region_code（如 AU-SA）
+                # 2. GPS 检测的区域（优先于手动选择的国家，因为更精确）
+                # 3. 手动选择的 country_code
+                if region_code:
+                    effective_region = region_code
+                    data_source = f"手动选择: {region_code}"
+                elif gps_detected_region:
+                    effective_region = gps_detected_region
+                    data_source = f"GPS自动检测: {gps_detected_region}"
+                elif country_code:
+                    effective_region = country_code
+                    data_source = f"手动选择: {country_code}"
                 
                 # 使用区域代码获取物种列表（优先离线数据）
                 if effective_region:
