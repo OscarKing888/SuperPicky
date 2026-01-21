@@ -55,7 +55,7 @@ class BirdDatabaseManager:
         # class_id对应数据库中的model_class_id字段
         query = """
         SELECT id, english_name, chinese_simplified, chinese_traditional,
-               scientific_name, ebird_code, short_description_zh, full_description_zh
+               scientific_name, ebird_code, short_description_zh
         FROM BirdCountInfo
         WHERE model_class_id = ?
         """
@@ -74,8 +74,7 @@ class BirdDatabaseManager:
                         'chinese_traditional': result[3],
                         'scientific_name': result[4],
                         'ebird_code': result[5],
-                        'short_description_zh': result[6],
-                        'full_description_zh': result[7]
+                        'short_description_zh': result[6]
                     }
                 return None
         except Exception as e:

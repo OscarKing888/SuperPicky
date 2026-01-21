@@ -591,8 +591,7 @@ def predict_bird(
                 en_name = info.get('english_name')
                 scientific_name = info.get('scientific_name')
                 ebird_code = info.get('ebird_code')
-                # 优先使用短描述，没有则使用完整描述
-                description = info.get('short_description_zh') or info.get('full_description_zh')
+                description = info.get('short_description_zh')
 
         # 回退到 bird_data
         if not cn_name and class_id < len(bird_data) and len(bird_data[class_id]) >= 2:
