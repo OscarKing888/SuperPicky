@@ -217,15 +217,8 @@ local function saveRecognitionResult(photo, species, enName, scientificName, des
     -- 构建 Title 内容：中文名 (英文名)
     local title = species .. " (" .. enName .. ")"
 
-    -- 构建 Caption 内容：学名 + 描述
-    local caption = scientificName or ""
-    if description and description ~= "" then
-        if caption ~= "" then
-            caption = caption .. "\n\n" .. description
-        else
-            caption = description
-        end
-    end
+    -- 构建 Caption 内容：只写入简介
+    local caption = description or ""
 
     catalog:withWriteAccessDo("保存鸟类识别结果", function()
         photo:setRawMetadata("title", title)
