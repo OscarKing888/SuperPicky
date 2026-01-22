@@ -98,6 +98,13 @@
                         <span class="lang-en">Advanced Settings</span>
                     </span>
                 </a>
+                <a href="#part7" class="toc-item toc-item-new">
+                    <span class="toc-num">07 <span class="beta-badge">V4</span></span>
+                    <span class="toc-title">
+                        <span class="lang-cn">AI 鸟种识别</span>
+                        <span class="lang-en">AI Bird Identification</span>
+                    </span>
+                </a>
             </div>
         </div>
     </section>
@@ -882,6 +889,168 @@
                 </div>
                 <div class="step-image">
                     <img src="img/V_3_9_4/显示隐藏文件-更好的了解选鸟算法.png" alt="隐藏文件">
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Part 7: AI Bird Identification (V4.0.0) -->
+    <section class="tutorial-part" id="part7">
+        <div class="container">
+            <div class="part-header">
+                <span class="part-num">07 <span class="beta-badge">V4</span></span>
+                <h2>
+                    <span class="lang-cn">AI 鸟种识别</span>
+                    <span class="lang-en">AI Bird Identification</span>
+                </h2>
+                <p class="part-desc">
+                    <span class="lang-cn">V4.0.0 新功能：自动识别 11,000+ 鸟种并写入元数据</span>
+                    <span class="lang-en">V4.0.0 Feature: Automatically identify 11,000+ bird species</span>
+                </p>
+            </div>
+
+            <!-- Step 7.1 -->
+            <div class="tutorial-step">
+                <div class="step-content">
+                    <div class="step-number">1</div>
+                    <div class="step-text">
+                        <h3>
+                            <span class="lang-cn">启用鸟种识别</span>
+                            <span class="lang-en">Enable Bird Identification</span>
+                        </h3>
+                        <p>
+                            <span class="lang-cn">在主界面右侧找到「鸟种识别」面板，勾选<strong>「启用鸟种识别」</strong>复选框。识别结果将自动写入照片的 IPTC
+                                关键字和标题元数据。</span>
+                            <span class="lang-en">Find the "Bird ID" panel on the right side. Check <strong>"Enable Bird
+                                    Identification"</strong>. Results will be written to IPTC keywords and title
+                                metadata.</span>
+                        </p>
+                        <div class="step-tip">
+                            <span class="tip-icon">🐦</span>
+                            <span class="lang-cn">支持全球 11,000+ 鸟种识别，每种鸟类附带中英文名称和中文百科简介。</span>
+                            <span class="lang-en">Supports 11,000+ bird species worldwide with Chinese/English names and
+                                descriptions.</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="step-image compact">
+                    <img src="img/V_3_9_4/软件启动界面.png" alt="鸟种识别面板">
+                </div>
+            </div>
+
+            <!-- Step 7.2 -->
+            <div class="tutorial-step reverse">
+                <div class="step-content">
+                    <div class="step-number">2</div>
+                    <div class="step-text">
+                        <h3>
+                            <span class="lang-cn">配置 eBird 地区过滤</span>
+                            <span class="lang-en">Configure eBird Region Filter</span>
+                        </h3>
+                        <p>
+                            <span class="lang-cn">选择拍摄地点的国家和地区，AI 将根据 eBird 数据库过滤该地区不可能出现的鸟种，大幅提高识别准确率。</span>
+                            <span class="lang-en">Select the country and region of your shooting location. AI will
+                                filter out impossible species based on eBird data, greatly improving accuracy.</span>
+                        </p>
+                        <ul class="step-list">
+                            <li>
+                                <span class="lang-cn"><strong>国家/地区</strong>：选择拍摄所在国家</span>
+                                <span class="lang-en"><strong>Country</strong>: Select shooting country</span>
+                            </li>
+                            <li>
+                                <span class="lang-cn"><strong>省/州</strong>：选择具体省份或州（可选）</span>
+                                <span class="lang-en"><strong>State/Province</strong>: Select province/state
+                                    (optional)</span>
+                            </li>
+                            <li>
+                                <span class="lang-cn"><strong>使用 GPS</strong>：如果照片包含 GPS 信息，可自动检测位置</span>
+                                <span class="lang-en"><strong>Use GPS</strong>: Auto-detect location if photos have GPS
+                                    data</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="step-image compact">
+                    <img src="img/V_3_9_4/设置界面.png" alt="eBird 过滤器">
+                </div>
+            </div>
+
+            <!-- Step 7.3 -->
+            <div class="tutorial-step">
+                <div class="step-content">
+                    <div class="step-number">3</div>
+                    <div class="step-text">
+                        <h3>
+                            <span class="lang-cn">Lightroom 插件使用</span>
+                            <span class="lang-en">Lightroom Plugin Usage</span>
+                        </h3>
+                        <p>
+                            <span class="lang-cn">V4.0.0 内置 Lightroom Classic 插件，安装后无需离开 Lightroom 即可识别鸟种：</span>
+                            <span class="lang-en">V4.0.0 includes a Lightroom Classic plugin for seamless bird
+                                identification:</span>
+                        </p>
+                        <ul class="step-list">
+                            <li>
+                                <span class="lang-cn">打开 Lightroom，选择<strong>「文件」→「增效工具管理器」</strong></span>
+                                <span class="lang-en">Open Lightroom, go to <strong>"File" → "Plug-in
+                                        Manager"</strong></span>
+                            </li>
+                            <li>
+                                <span class="lang-cn">点击「添加」，选择
+                                    <code>~/Library/Application Support/Adobe/Lightroom/Modules/SuperBirdID.lrplugin</code></span>
+                                <span class="lang-en">Click "Add", select plugin from the Modules folder</span>
+                            </li>
+                            <li>
+                                <span class="lang-cn">选中照片后，使用<strong>「文件」→「增效工具附加功能」→「Identify Bird」</strong></span>
+                                <span class="lang-en">Select photos, use <strong>"File" → "Plug-in Extras" → "Identify
+                                        Bird"</strong></span>
+                            </li>
+                        </ul>
+                        <div class="step-tip">
+                            <span class="tip-icon">💡</span>
+                            <span class="lang-cn">首次使用需确保 SuperPicky 应用正在运行。识别结果会自动写入 Lightroom 的关键字和标题字段。</span>
+                            <span class="lang-en">Ensure SuperPicky app is running. Results are written to Lightroom
+                                keywords and title fields automatically.</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="step-image">
+                    <img src="img/V_3_9_4/选鸟处理结果.png" alt="Lightroom 插件">
+                </div>
+            </div>
+
+            <!-- Step 7.4 -->
+            <div class="tutorial-step reverse">
+                <div class="step-content">
+                    <div class="step-number">4</div>
+                    <div class="step-text">
+                        <h3>
+                            <span class="lang-cn">查看识别结果</span>
+                            <span class="lang-en">View Identification Results</span>
+                        </h3>
+                        <p>
+                            <span class="lang-cn">处理完成后，识别结果会写入以下元数据字段：</span>
+                            <span class="lang-en">After processing, results are written to these metadata fields:</span>
+                        </p>
+                        <ul class="step-list">
+                            <li>
+                                <span class="lang-cn"><strong>标题</strong>：中文名 / 英文名 / 学名</span>
+                                <span class="lang-en"><strong>Title</strong>: Chinese / English / Scientific name</span>
+                            </li>
+                            <li>
+                                <span class="lang-cn"><strong>关键字</strong>：包含科目、属名等分类信息</span>
+                                <span class="lang-en"><strong>Keywords</strong>: Contains family, genus taxonomy</span>
+                            </li>
+                            <li>
+                                <span class="lang-cn"><strong>题注</strong>：中文百科简介（维基百科翻译）</span>
+                                <span class="lang-en"><strong>Caption</strong>: Chinese description (Wikipedia
+                                    translation)</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="step-image compact">
+                    <img src="img/V_3_9_4/题注=选鸟打分的算法.png" alt="识别结果">
                 </div>
             </div>
         </div>

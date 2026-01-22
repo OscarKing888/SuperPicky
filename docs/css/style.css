@@ -264,6 +264,23 @@ header {
     border-color: var(--text-tertiary);
 }
 
+.btn-beta {
+    animation: beta-pulse 2s ease-in-out infinite;
+    box-shadow: 0 0 20px var(--accent-glow);
+}
+
+@keyframes beta-pulse {
+
+    0%,
+    100% {
+        box-shadow: 0 0 15px var(--accent-glow);
+    }
+
+    50% {
+        box-shadow: 0 0 30px var(--accent-glow);
+    }
+}
+
 /* === Hero Preview (Software Interface) === */
 .hero-preview {
     margin-top: var(--space-xl);
@@ -383,6 +400,11 @@ header {
     font-size: 13px;
     color: var(--text-secondary);
     line-height: 1.5;
+}
+
+.feature-card.featured-feature {
+    border-color: var(--accent);
+    background: linear-gradient(135deg, var(--bg-elevated), #1a2a1a);
 }
 
 /* === Rating Section === */
@@ -887,6 +909,61 @@ header {
     margin-top: var(--space-lg);
     font-size: 12px;
     color: var(--text-muted);
+}
+
+/* === V4.0.0 Beta Styles === */
+.beta-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    background: linear-gradient(135deg, #ff6b35, #f7931a);
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    color: white;
+    margin-left: var(--space-sm);
+    animation: pulse-glow 2s infinite;
+}
+
+@keyframes pulse-glow {
+
+    0%,
+    100% {
+        box-shadow: 0 0 5px rgba(247, 147, 26, 0.5);
+    }
+
+    50% {
+        box-shadow: 0 0 15px rgba(247, 147, 26, 0.8);
+    }
+}
+
+.download-card.featured {
+    background: linear-gradient(135deg, var(--bg-elevated), #1a2a1a);
+    border: 2px solid var(--accent);
+    position: relative;
+}
+
+.download-card.featured::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at top right, var(--accent-glow) 0%, transparent 50%);
+    pointer-events: none;
+    border-radius: var(--radius-md);
+}
+
+.new-features-mini {
+    margin-top: var(--space-sm);
+    font-size: 12px;
+    color: var(--accent);
+    font-weight: 500;
+}
+
+.stable-divider {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 12px;
+    padding: var(--space-md) 0;
+    font-family: var(--font-mono);
 }
 
 /* === Team Section === */
