@@ -23,7 +23,7 @@ from post_adjustment_engine import PostAdjustmentEngine, safe_int, safe_float
 from exiftool_manager import get_exiftool_manager
 from advanced_config import get_advanced_config
 from i18n import get_i18n
-from constants import RATING_FOLDER_NAMES
+from constants import RATING_FOLDER_NAMES, get_rating_folder_name
 from ui.styles import COLORS, FONTS, VALUE_STYLE
 from ui.custom_dialogs import StyledMessageBox
 
@@ -635,7 +635,7 @@ class PostAdjustmentDialog(QDialog):
             if not file_path:
                 continue
 
-            target_folder = RATING_FOLDER_NAMES.get(new_rating, "0星_放弃")
+            target_folder = get_rating_folder_name(new_rating)
             target_dir = os.path.join(self.directory, target_folder)
             actual_filename = os.path.basename(file_path)
             target_path = os.path.join(target_dir, actual_filename)

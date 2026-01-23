@@ -34,7 +34,7 @@ from core.flight_detector import FlightDetector, get_flight_detector, FlightResu
 from core.exposure_detector import ExposureDetector, get_exposure_detector, ExposureResult
 from core.focus_point_detector import get_focus_detector, verify_focus_in_bbox
 
-from constants import RATING_FOLDER_NAMES, RAW_EXTENSIONS, JPG_EXTENSIONS
+from constants import RATING_FOLDER_NAMES, RAW_EXTENSIONS, JPG_EXTENSIONS, get_rating_folder_name, get_rating_folder_names
 
 # 国际化
 from i18n import get_i18n
@@ -1321,18 +1321,19 @@ class PhotoProcessor:
         files_to_move = []
         for prefix, rating in self.file_ratings.items():
             if rating in [-1, 0, 1, 2, 3]:
-                base_folder = RATING_FOLDER_NAMES.get(rating, "0星_放弃")
+                base_folder = get_rating_folder_name(rating)
                 
-                # V4.0: 2星和3星按鸟种分子目录
+                # V4.0: 2-star and 3-star photos go to bird species subdirectories
                 if rating >= 2 and prefix in self.file_bird_species:
-                    # 有识别结果的照片
+                    # Photo with species identification
                     bird_name = self.file_bird_species[prefix]
                     folder = os.path.join(base_folder, bird_name)
                 elif rating >= 2:
-                    # 2星/3星但未识别的照片，放入"其他鸟类"
-                    folder = os.path.join(base_folder, "其他鸟类")
+                    # 2-star/3-star without species ID, put in "Other Birds"
+                    other_birds = "Other_Birds" if self.i18n.current_lang.startswith('en') else "其他鸟类"
+                    folder = os.path.join(base_folder, other_birds)
                 else:
-                    # 0星、1星、-1星直接放入星级目录
+                    # 0-star, 1-star, -1-star go directly to rating folder
                     folder = base_folder
                 
                 if prefix in raw_dict:
@@ -1410,7 +1411,7 @@ class PhotoProcessor:
             "created": datetime.now().isoformat(),
             "app_version": "V4.0.0",
             "original_dir": self.dir_path,
-            "folder_structure": RATING_FOLDER_NAMES,
+            "folder_structure": get_rating_folder_names(),
             "bird_species_dirs": True,  # V4.0: 标记使用了鸟种分目录
             "files": files_to_move,
             "temp_jpegs": list(self.temp_converted_jpegs),  # V4.0: 记录临时转换的 JPEG，Reset 时需删除

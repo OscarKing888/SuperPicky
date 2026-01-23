@@ -95,7 +95,7 @@ def cmd_burst(args):
         exiftool_mgr = ExifToolManager()
         total_stats = {'groups_processed': 0, 'photos_moved': 0, 'best_marked': 0}
         
-        rating_dirs = ['3星_优选', '2星_良好']
+        rating_dirs = ['3star_excellent', '2star_good', '3星_优选', '2星_良好']  # Support both languages
         for rating_dir in rating_dirs:
             subdir = os.path.join(args.directory, rating_dir)
             if not os.path.exists(subdir):
@@ -200,7 +200,7 @@ def cmd_process(args):
         print("\n📷 正在执行连拍检测...")
         detector = BurstDetector(use_phash=True)
         
-        rating_dirs = ['3星_优选', '2星_良好']
+        rating_dirs = ['3star_excellent', '2star_good', '3星_优选', '2星_良好']  # Support both languages
         total_groups = 0
         total_moved = 0
         
@@ -260,7 +260,8 @@ def cmd_reset(args):
     
     # V4.0: 先处理 burst_XXX 子目录（将文件移回评分目录）
     print("\n📂 步骤0: 清理连拍子目录...")
-    rating_dirs = ['3星_优选', '2星_良好', '1星_普通', '0星_放弃']
+    rating_dirs = ['3star_excellent', '2star_good', '1star_average', '0star_reject',
+                   '3星_优选', '2星_良好', '1星_普通', '0星_放弃']  # Support both languages
     burst_stats = {'dirs_removed': 0, 'files_restored': 0}
     
     for rating_dir in rating_dirs:
@@ -359,7 +360,8 @@ def cmd_restar(args):
     
     # V4.0: 先清理 burst 子目录（将文件移回评分目录）
     print("\n📂 步骤0: 清理连拍子目录...")
-    rating_dirs = ['3星_优选', '2星_良好', '1星_普通', '0星_放弃']
+    rating_dirs = ['3star_excellent', '2star_good', '1star_average', '0star_reject',
+                   '3星_优选', '2星_良好', '1星_普通', '0星_放弃']  # Support both languages
     burst_stats = {'dirs_removed': 0, 'files_restored': 0}
     
     for rating_dir in rating_dirs:
@@ -500,14 +502,7 @@ def cmd_restar(args):
     
     # 文件重分配
     if args.organize:
-        print("\n📂 重新分配文件目录...")
-        RATING_FOLDER_NAMES = {
-            3: "3星_优选",
-            2: "2星_良好",
-            1: "1星_普通",
-            0: "0星_放弃",
-            -1: "0星_放弃"
-        }
+        from constants import get_rating_folder_name
         
         moved_count = 0
         for photo in changed_photos:
@@ -517,7 +512,7 @@ def cmd_restar(args):
                 continue
             
             new_rating = photo.get('新星级', 0)
-            target_folder = RATING_FOLDER_NAMES.get(new_rating, "0星_放弃")
+            target_folder = get_rating_folder_name(new_rating)
             target_dir = os.path.join(args.directory, target_folder)
             target_path = os.path.join(target_dir, os.path.basename(file_path))
             
@@ -552,7 +547,7 @@ def _run_burst_detection_restar(directory: str):
     print("\n📷 正在执行连拍检测...")
     detector = BurstDetector(use_phash=True)
     
-    rating_dirs = ['3星_优选', '2星_良好']
+    rating_dirs = ['3star_excellent', '2star_good', '3星_优选', '2星_良好']  # Support both languages
     total_groups = 0
     total_moved = 0
     
@@ -633,7 +628,8 @@ def cmd_info(args):
         print("  ℹ️  manifest 文件不存在")
     
     # 检查分类文件夹
-    folders = ['3星_优选', '2星_良好', '1星_普通', '0星_放弃']
+    folders = ['3star_excellent', '2star_good', '1star_average', '0star_reject',
+               '3星_优选', '2星_良好', '1星_普通', '0星_放弃']  # Support both languages
     existing_folders = []
     for folder in folders:
         folder_path = os.path.join(args.directory, folder)
