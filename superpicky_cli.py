@@ -197,7 +197,7 @@ def cmd_process(args):
         from core.burst_detector import BurstDetector
         from exiftool_manager import get_exiftool_manager
         
-        print("\n📷 正在执行连拍检测...")
+        print("\n📷 Executing burst detection...")
         detector = BurstDetector(use_phash=True)
         
         rating_dirs = ['3star_excellent', '2star_good', '3星_优选', '2星_良好']  # Support both languages
@@ -236,7 +236,7 @@ def cmd_process(args):
         if total_groups > 0:
             print(f"  ✅ 连拍检测完成: {total_groups} 组, 移动 {total_moved} 张照片")
         else:
-            print("  ℹ️  未检测到连拍组")
+            print("  ℹ️  No burst groups detected")
     
     print("\n✅ 处理完成!")
     return 0

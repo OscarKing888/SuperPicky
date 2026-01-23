@@ -273,7 +273,7 @@ class WorkerThread(threading.Thread):
             from core.burst_detector import BurstDetector
             from exiftool_manager import get_exiftool_manager
             
-            log_callback("📷 正在执行连拍检测...", "info")
+            log_callback(self.i18n.t("logs.burst_detecting"), "info")
             
             detector = BurstDetector(use_phash=True)
             rating_dirs = ['3星_优选', '2星_良好']
@@ -335,9 +335,9 @@ class WorkerThread(threading.Thread):
                     total_moved += burst_stats['photos_moved']
             
             if total_groups > 0:
-                log_callback(f"✅ 连拍检测完成: {total_groups} 组, 移动 {total_moved} 张照片", "success")
+                log_callback(self.i18n.t("logs.burst_complete", groups=total_groups, moved=total_moved), "success")
             else:
-                log_callback("ℹ️ 未检测到连拍组", "info")
+                log_callback(self.i18n.t("logs.burst_none_detected"), "info")
 
         self.stats = result.stats
 
@@ -637,21 +637,21 @@ class SuperPickyMainWindow(QMainWindow):
         tray_menu = QMenu()
         
         # 显示/隐藏主窗口
-        show_action = QAction("显示主窗口", self)
+        show_action = QAction(self.i18n.t("server.tray_show_window"), self)
         show_action.triggered.connect(self._show_main_window)
         tray_menu.addAction(show_action)
         
         tray_menu.addSeparator()
         
         # 服务器状态（只读显示）
-        self.tray_server_status = QAction("🟢 识鸟服务: 运行中", self)
+        self.tray_server_status = QAction(self.i18n.t("server.tray_server_running"), self)
         self.tray_server_status.setEnabled(False)
         tray_menu.addAction(self.tray_server_status)
         
         tray_menu.addSeparator()
         
         # 完全退出
-        quit_action = QAction("完全退出", self)
+        quit_action = QAction(self.i18n.t("server.tray_quit"), self)
         quit_action.triggered.connect(self._quit_app)
         tray_menu.addAction(quit_action)
         
@@ -661,7 +661,7 @@ class SuperPickyMainWindow(QMainWindow):
         self.tray_icon.activated.connect(self._on_tray_activated)
         
         # 设置提示文字
-        self.tray_icon.setToolTip("慧眼选鸟 - 识鸟服务运行中")
+        self.tray_icon.setToolTip(self.i18n.t("server.tray_tooltip"))
         
         # 显示托盘图标
         self.tray_icon.show()
@@ -1275,9 +1275,6 @@ class SuperPickyMainWindow(QMainWindow):
             return
 
         # 确认弹窗 - 动态构建消息
-        base_msg = self.i18n.t("dialogs.file_organization_msg")
-        
-        # V4.2: 根据选中的功能动态添加说明
         extra_notes = []
         if self.flight_check.isChecked():
             extra_notes.append(self.i18n.t("dialogs.note_flight"))
@@ -1286,9 +1283,11 @@ class SuperPickyMainWindow(QMainWindow):
         if self.burst_check.isChecked():
             extra_notes.append(self.i18n.t("dialogs.note_burst"))
         
+        notes_block = ""
         if extra_notes:
-            notes_text = "\n".join(extra_notes)
-            base_msg = base_msg.replace("\n\n如需恢复", f"\n\n{notes_text}\n\n如需恢复")
+            notes_block = "\n" + "\n".join(extra_notes) + "\n"
+
+        base_msg = self.i18n.t("dialogs.file_organization_msg", extra_notes=notes_block)
         
         reply = StyledMessageBox.question(
             self,
@@ -1400,7 +1399,7 @@ class SuperPickyMainWindow(QMainWindow):
     def _on_error(self, error_msg):
         """处理错误"""
         self._log(f"Error: {error_msg}", "error")
-        self._update_status("Error", COLORS['error'])
+        self._update_status(self.i18n.t("errors.error_title"), COLORS['error'])
         self.start_btn.setEnabled(True)
         self.reset_btn.setEnabled(True)
 
@@ -1454,7 +1453,7 @@ class SuperPickyMainWindow(QMainWindow):
                 exiftool_mgr = get_exiftool_manager()
                 
                 # V3.9: 先清理 burst_XXX 子目录
-                emit_log("步骤0: 清理连拍子目录...")
+                emit_log(i18n.t("logs.reset_step0"))
                 rating_dirs = ['3星_优选', '2星_良好', '1星_普通', '0星_放弃']
                 burst_stats = {'dirs_removed': 0, 'files_restored': 0}
                 
@@ -1478,7 +1477,7 @@ class SuperPickyMainWindow(QMainWindow):
                                             shutil.move(src, dst)
                                             burst_stats['files_restored'] += 1
                                         except Exception as e:
-                                            emit_log(self.i18n.t("logs.move_failed", filename=filename, error=e))
+                                            emit_log(i18n.t("logs.move_failed", filename=filename, error=e))
                                 
                                 # 删除空的 burst 目录
                                 try:
@@ -1488,16 +1487,16 @@ class SuperPickyMainWindow(QMainWindow):
                                         shutil.rmtree(burst_path)
                                     burst_stats['dirs_removed'] += 1
                                 except Exception as e:
-                                    emit_log(self.i18n.t("logs.burst_clean_failed", entry=entry, error=e))
+                                    emit_log(i18n.t("logs.burst_clean_failed", entry=entry, error=e))
                 
                 if burst_stats['dirs_removed'] > 0:
-                    emit_log(self.i18n.t("logs.burst_cleaned", dirs=burst_stats['dirs_removed'], files=burst_stats['files_restored']))
+                    emit_log(i18n.t("logs.burst_cleaned", dirs=burst_stats['dirs_removed'], files=burst_stats['files_restored']))
                 else:
-                    emit_log(self.i18n.t("logs.burst_no_clean"))
+                    emit_log(i18n.t("logs.burst_no_clean"))
 
                 emit_log(i18n.t("logs.reset_step1"))
                 restore_stats = exiftool_mgr.restore_files_from_manifest(
-                    directory_path, log_callback=emit_log
+                    directory_path, log_callback=emit_log, i18n=i18n
                 )
 
                 restored_count = restore_stats.get('restored', 0)
@@ -1510,7 +1509,7 @@ class SuperPickyMainWindow(QMainWindow):
                 success = reset(directory_path, log_callback=emit_log, i18n=i18n)
                 
                 # V3.9: 删除空的评分目录
-                emit_log("\n步骤3: 清理空目录...")
+                emit_log(i18n.t("logs.reset_step3"))
                 deleted_dirs = 0
                 for rating_dir in rating_dirs:
                     rating_path = os.path.join(directory_path, rating_dir)
@@ -1520,15 +1519,15 @@ class SuperPickyMainWindow(QMainWindow):
                         if len(contents) == 0:
                             try:
                                 shutil.rmtree(rating_path)
-                                emit_log(f"  🗑️ 已删除空目录: {rating_dir}")
+                                emit_log(i18n.t("logs.empty_dir_deleted", dir=rating_dir))
                                 deleted_dirs += 1
                             except Exception as e:
-                                emit_log(f"  ⚠️ 删除目录失败: {rating_dir}: {e}")
+                                emit_log(i18n.t("logs.empty_dir_delete_failed", dir=rating_dir, error=e))
                 
                 if deleted_dirs > 0:
-                    emit_log(f"  ✅ 已清理 {deleted_dirs} 个空评分目录")
+                    emit_log(i18n.t("logs.empty_dirs_cleaned", count=deleted_dirs))
                 else:
-                    emit_log("  ℹ️ 无空目录需要清理")
+                    emit_log(i18n.t("logs.no_empty_dirs"))
 
                 emit_log("\n" + i18n.t("logs.reset_complete"))
                 complete_signal.emit(success, restore_stats, exif_stats)
@@ -1873,10 +1872,25 @@ class SuperPickyMainWindow(QMainWindow):
             if focus_precise > 0:
                 report += f"{t('help.rule_focus')}: {focus_precise}\n"
             
-            # V4.2: 识别鸟种统计
+            # V4.2: 识别鸟种统计 (language-aware)
             bird_species = stats.get('bird_species', [])
             if bird_species:
-                report += f"\n🦜 识别到 {len(bird_species)} 种鸟: {', '.join(bird_species)}"
+                # Pick the correct language name based on current locale
+                is_chinese = self.i18n.current_lang.startswith('zh')
+                species_names = []
+                for sp in bird_species:
+                    if isinstance(sp, dict):
+                        name = sp.get('cn_name', '') if is_chinese else sp.get('en_name', '')
+                        # Fallback to the other language if preferred is empty
+                        if not name:
+                            name = sp.get('en_name', '') if is_chinese else sp.get('cn_name', '')
+                        if name:
+                            species_names.append(name)
+                    else:
+                        # Legacy support: if it's still a string (old format)
+                        species_names.append(str(sp))
+                if species_names:
+                    report += "\n" + t("logs.bird_species_identified", count=len(species_names), species=', '.join(species_names))
 
         report += "\n" + "━" * 50
         return report

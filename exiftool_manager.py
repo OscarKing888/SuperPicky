@@ -571,7 +571,7 @@ class ExifToolManager:
             log(f"\n✅ 批量重置完成: {stats['success']} 成功, {stats['failed']} 失败")
         return stats
 
-    def restore_files_from_manifest(self, dir_path: str, log_callback=None) -> Dict[str, int]:
+    def restore_files_from_manifest(self, dir_path: str, log_callback=None, i18n=None) -> Dict[str, int]:
         """
         V3.3: 根据 manifest 将文件恢复到原始位置
         V3.3.1: 增强版 - 也处理不在 manifest 中的文件
@@ -580,6 +580,7 @@ class ExifToolManager:
         Args:
             dir_path: str, 原始目录路径
             log_callback: callable, 日志回调函数
+            i18n: I18n instance for internationalization (optional)
         
         Returns:
             dict: {'restored': int, 'failed': int, 'not_found': int}
@@ -593,6 +594,12 @@ class ExifToolManager:
             else:
                 print(msg)
         
+        def t(key, **kwargs):
+            """Get translation or fallback to key"""
+            if i18n:
+                return i18n.t(key, **kwargs)
+            return key  # Fallback
+        
         stats = {'restored': 0, 'failed': 0, 'not_found': 0}
         manifest_path = os.path.join(dir_path, ".superpicky_manifest.json")
         folders_to_check = set()
@@ -605,7 +612,7 @@ class ExifToolManager:
                 
                 files = manifest.get('files', [])
                 if files:
-                    log(f"\n📂 从 manifest 恢复 {len(files)} 个文件...")
+                    log(t("logs.manifest_restoring", count=len(files)))
                     
                     for file_info in files:
                         filename = file_info['filename']
@@ -627,7 +634,7 @@ class ExifToolManager:
                         
                         if os.path.exists(dst_path):
                             stats['failed'] += 1
-                            log(f"  ⚠️  目标已存在，跳过: {filename}")
+                            log(t("logs.restore_skipped_exists", filename=filename))
                             continue
                         
                         try:
@@ -635,12 +642,12 @@ class ExifToolManager:
                             stats['restored'] += 1
                         except Exception as e:
                             stats['failed'] += 1
-                            log(f"  ❌ 恢复失败: {filename} - {e}")
+                            log(t("logs.restore_failed", filename=filename, error=e))
                 
                 # V4.0: 删除临时转换的 JPEG 文件
                 temp_jpegs = manifest.get('temp_jpegs', [])
                 if temp_jpegs:
-                    log(f"\n🗑️  清理 {len(temp_jpegs)} 个临时转换的 JPEG...")
+                    log(t("logs.temp_jpeg_cleanup", count=len(temp_jpegs)))
                     deleted_temp = 0
                     for jpeg_filename in temp_jpegs:
                         # 临时 JPEG 可能在根目录或子目录中
@@ -650,24 +657,24 @@ class ExifToolManager:
                                 os.remove(jpeg_path)
                                 deleted_temp += 1
                             except Exception as e:
-                                log(f"  ⚠️  删除失败: {jpeg_filename} - {e}")
+                                log(t("logs.temp_jpeg_delete_failed", filename=jpeg_filename, error=e))
                     if deleted_temp > 0:
-                        log(f"  ✅ 已删除 {deleted_temp} 个临时 JPEG")
+                        log(t("logs.temp_jpeg_deleted", count=deleted_temp))
                 
                 # 删除 manifest 文件
                 try:
                     os.remove(manifest_path)
-                    log("  🗑️  已删除 manifest 文件")
+                    log(t("logs.manifest_deleted"))
                 except Exception as e:
-                    log(f"  ⚠️  删除 manifest 失败: {e}")
+                    log(t("logs.manifest_delete_failed", error=e))
                     
             except Exception as e:
-                log(f"⚠️  读取 manifest 失败: {e}")
+                log(t("logs.manifest_read_failed", error=e))
         else:
-            log("ℹ️  未找到 manifest 文件")
+            log(t("logs.manifest_not_found"))
         
         # 第二步：递归扫描评分子目录，恢复任何剩余文件（V4.0: 支持多层）
-        log("\n📂 扫描评分子目录...")
+        log(t("logs.scan_subdirs"))
         
         # V3.3: 添加旧版目录到扫描列表（兼容旧版本）
         legacy_folders = ["2星_良好_锐度", "2星_良好_美学"]
@@ -692,17 +699,17 @@ class ExifToolManager:
                     dst_path = os.path.join(dir_path, entry)
                     
                     if os.path.exists(dst_path):
-                        log(f"  ⚠️  目标已存在，跳过: {entry}")
+                        log(t("logs.restore_skipped_exists", filename=entry))
                         continue
                     
                     try:
                         shutil.move(entry_path, dst_path)
                         stats['restored'] += 1
                         display_path = os.path.join(relative_path, entry) if relative_path else entry
-                        log(f"  ✅ 恢复: {os.path.basename(folder_path)}/{entry}")
+                        log(t("logs.restore_success", folder=os.path.basename(folder_path), filename=entry))
                     except Exception as e:
                         stats['failed'] += 1
-                        log(f"  ❌ 恢复失败: {entry} - {e}")
+                        log(t("logs.restore_failed", filename=entry, error=e))
         
         for folder_name in set(all_folders):  # 使用 set 去重
             folder_path = os.path.join(dir_path, folder_name)
@@ -718,15 +725,15 @@ class ExifToolManager:
                     if not os.listdir(folder_path):
                         os.rmdir(folder_path)
                         folder_name = os.path.relpath(folder_path, dir_path)
-                        log(f"  🗑️  删除空文件夹: {folder_name}/")
+                        log(t("logs.empty_folder_deleted", folder=folder_name))
                 except Exception as e:
-                    log(f"  ⚠️  删除文件夹失败: {e}")
+                    log(t("logs.folder_delete_failed", error=e))
         
-        log(f"\n✅ 文件恢复完成: 已恢复 {stats['restored']} 张")
+        log(t("logs.restore_complete", count=stats['restored']))
         if stats['not_found'] > 0:
-            log(f"⚠️  {stats['not_found']} 张文件未找到")
+            log(t("logs.restore_not_found", count=stats['not_found']))
         if stats['failed'] > 0:
-            log(f"❌ {stats['failed']} 张恢复失败")
+            log(t("logs.restore_failed_count", count=stats['failed']))
         
         return stats
 

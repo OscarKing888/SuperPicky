@@ -144,7 +144,7 @@ class PhotoProcessor:
             'flying': 0,  # V3.6: 飞鸟照片计数
             'focus_precise': 0,  # V4.2: 精焦照片计数（红色标签）
             'exposure_issue': 0,  # V3.8: 曝光问题计数
-            'bird_species': [],  # V4.2: 识别的鸟种列表
+            'bird_species': [],  # V4.2: 识别的鸟种列表 [{'cn_name': '...', 'en_name': '...'}]
             'start_time': 0,
             'end_time': 0,
             'total_time': 0,
@@ -841,33 +841,34 @@ class PhotoProcessor:
                     caption_lines = []
                     
                     # 最终评分
-                    caption_lines.append(f"最终评分: {rating_value}星 | {reason}")
+                    caption_lines.append(self.i18n.t("logs.caption_final", rating=rating_value, reason=reason))
                     
                     # 原始数据
-                    sharpness_str = f"{head_sharpness:.2f}" if head_sharpness else "无法计算"
-                    topiq_str = f"{topiq:.2f}" if topiq else "未计算"
-                    caption_lines.append(f"[原始检测数据] AI置信度: {confidence:.0%} | 头部锐度: {sharpness_str} | TOPIQ美学: {topiq_str} | 眼睛可见度: {best_eye_visibility:.0%}")
+                    sharpness_str = f"{head_sharpness:.2f}" if head_sharpness else "N/A"
+                    topiq_str = f"{topiq:.2f}" if topiq else "N/A"
+                    caption_lines.append(self.i18n.t("logs.caption_data", conf=confidence, sharp=sharpness_str, nima=topiq_str, vis=best_eye_visibility))
                     
                     # Adjustment factors
-                    flying_str = "Yes (Sharp×1.2, Aes×1.1)" if is_flying else "No"
-                    caption_lines.append(f"[Factors] Focus Sharp Weight: {focus_sharpness_weight:.2f} | Focus Aes Weight: {focus_topiq_weight:.2f} | Flying: {flying_str}")
+                    flying_str = self.i18n.t("logs.flying_yes") if is_flying else self.i18n.t("logs.flying_no")
+                    caption_lines.append(self.i18n.t("logs.caption_factors", sharp_w=focus_sharpness_weight, aes_w=focus_topiq_weight, flying=flying_str))
                     
                     # Adjusted values
                     adj_sharpness = head_sharpness * focus_sharpness_weight if head_sharpness else 0
                     if is_flying and head_sharpness:
                         adj_sharpness = adj_sharpness * 1.2
-                    adj_line = f"[Adjusted] Sharpness: {adj_sharpness:.2f} (threshold 400)"
+                    
+                    adj_topiq_val = 0.0
                     if topiq:
-                        adj_topiq = topiq * focus_topiq_weight
+                        adj_topiq_val = topiq * focus_topiq_weight
                         if is_flying:
-                            adj_topiq = adj_topiq * 1.1
-                        adj_line += f" | Aesthetics: {adj_topiq:.2f} (threshold 5.0)"
-                    caption_lines.append(adj_line)
+                            adj_topiq_val = adj_topiq_val * 1.1
+                            
+                    caption_lines.append(self.i18n.t("logs.caption_adjusted", sharp=adj_sharpness, nima=adj_topiq_val))
                     
                     # Visibility weight
                     visibility_weight = max(0.5, min(1.0, best_eye_visibility * 2))
                     if visibility_weight < 1.0:
-                        caption_lines.append(f"[Visibility] Weight: {visibility_weight:.2f}")
+                        caption_lines.append(self.i18n.t("logs.caption_vis_weight", weight=visibility_weight))
                     
                     caption = "\n".join(caption_lines)
                     
@@ -896,11 +897,27 @@ class PhotoProcessor:
                                 if confidence >= self.settings.birdid_confidence_threshold:
                                     cn_name = top_result.get('cn_name', '')
                                     en_name = top_result.get('en_name', '')
-                                    bird_title = f"{cn_name} ({en_name})"
-                                    self._log(f"  🐦 Bird ID: {cn_name} ({confidence:.0f}%)")
-                                    # V4.2: 收集识别的鸟种名称
-                                    if cn_name and cn_name not in self.stats['bird_species']:
-                                        self.stats['bird_species'].append(cn_name)
+                                    
+                                    # V4.2: Localize EXIF Title (pure Chinese or English)
+                                    if self.i18n.current_lang.startswith('en'):
+                                        bird_title = en_name
+                                    else:
+                                        bird_title = cn_name
+                                        
+                                    # Fallback if preferred name is empty
+                                    if not bird_title:
+                                        bird_title = cn_name or en_name
+                                        
+                                    # V4.2: Display bird name in current locale language
+                                    if self.i18n.current_lang.startswith('en'):
+                                        bird_log = en_name or cn_name
+                                    else:
+                                        bird_log = cn_name or en_name
+                                    self._log(f"  🐦 Bird ID: {bird_log} ({confidence:.0f}%)")
+                                    # V4.2: 收集识别的鸟种名称 (both languages)
+                                    species_entry = {'cn_name': cn_name, 'en_name': en_name}
+                                    if not any(s.get('cn_name') == cn_name for s in self.stats['bird_species']):
+                                        self.stats['bird_species'].append(species_entry)
                                     # V4.0: Record file's bird species for folder organization
                                     if cn_name:
                                         self.file_bird_species[file_prefix] = {
@@ -995,18 +1012,30 @@ class PhotoProcessor:
                                 if birdid_confidence >= self.settings.birdid_confidence_threshold:
                                     cn_name = top_result.get('cn_name', '')
                                     en_name = top_result.get('en_name', '')
-                                    self._log(f"  🐦 Bird ID: {cn_name} ({birdid_confidence:.0f}%)")
+                                    # V4.2: Display bird name in current locale language
+                                    if self.i18n.current_lang.startswith('en'):
+                                        bird_log = en_name or cn_name
+                                    else:
+                                        bird_log = cn_name or en_name
+                                    self._log(f"  🐦 Bird ID: {bird_log} ({birdid_confidence:.0f}%)")
                                     
-                                    if cn_name and cn_name not in self.stats['bird_species']:
-                                        self.stats['bird_species'].append(cn_name)
+                                    species_entry = {'cn_name': cn_name, 'en_name': en_name}
+                                    if not any(s.get('cn_name') == cn_name for s in self.stats['bird_species']):
+                                        self.stats['bird_species'].append(species_entry)
                                     if cn_name:
                                         self.file_bird_species[file_prefix] = {
                                             'cn_name': cn_name,
                                             'en_name': en_name
                                         }
                                     
-                                    # V4.0.1: 对纯 JPG 文件也写入鸟种名称到 EXIF
-                                    bird_title = f"{cn_name} ({en_name})"
+                                    # V4.0.1: Localize EXIF Title for pure JPEG
+                                    if self.i18n.current_lang.startswith('en'):
+                                        bird_title = en_name
+                                    else:
+                                        bird_title = cn_name
+                                        
+                                    if not bird_title:
+                                        bird_title = cn_name or en_name
                                     exiftool_mgr.batch_set_metadata([{'file': target_file_path, 'title': bird_title}])
                                 else:
                                     self._log(f"  🐦 Low confidence: {top_result.get('cn_name', '?')} ({birdid_confidence:.0f}% < {self.settings.birdid_confidence_threshold}%)")
@@ -1344,7 +1373,7 @@ class PhotoProcessor:
                     folder = os.path.join(base_folder, bird_name)
                 elif rating >= 2:
                     # 2-star/3-star without species ID, put in "Other Birds"
-                    other_birds = "Other_Birds" if self.i18n.current_lang.startswith('en') else "其他鸟类"
+                    other_birds = self.i18n.t("logs.folder_other_birds")
                     folder = os.path.join(base_folder, other_birds)
                 else:
                     # 0-star, 1-star, -1-star go directly to rating folder
