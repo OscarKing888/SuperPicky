@@ -155,8 +155,8 @@ class PhotoProcessor:
         self.file_ratings = {}
         self.star2_reasons = {}  # 记录2星原因: 'sharpness' 或 'nima'
         self.star_3_photos = []
-        self.temp_converted_jpegs = set()  # V4.0: 跟踪从 RAW 转换的临时 JPEG，避免误删用户原始 JPEG
-        self.file_bird_species = {}  # V4.0: 跟踪每个文件识别出的鸟种（中文名），用于按鸟种分目录
+        self.temp_converted_jpegs = set()  # V4.0: Track temp-converted JPEGs to avoid deleting user originals
+        self.file_bird_species = {}  # V4.0: Track bird species per file: {'cn_name': '...', 'en_name': '...'}
     
     def _log(self, msg: str, level: str = "info"):
         """内部日志方法"""
@@ -901,9 +901,12 @@ class PhotoProcessor:
                                     # V4.2: 收集识别的鸟种名称
                                     if cn_name and cn_name not in self.stats['bird_species']:
                                         self.stats['bird_species'].append(cn_name)
-                                    # V4.0: 记录文件对应的鸟种（用于按鸟种分目录）
+                                    # V4.0: Record file's bird species for folder organization
                                     if cn_name:
-                                        self.file_bird_species[file_prefix] = cn_name
+                                        self.file_bird_species[file_prefix] = {
+                                            'cn_name': cn_name,
+                                            'en_name': en_name
+                                        }
                                 else:
                                     self._log(f"  🐦 Low confidence: {top_result.get('cn_name', '?')} ({confidence:.0f}% < {self.settings.birdid_confidence_threshold}%)")
                         except Exception as e:
@@ -997,7 +1000,10 @@ class PhotoProcessor:
                                     if cn_name and cn_name not in self.stats['bird_species']:
                                         self.stats['bird_species'].append(cn_name)
                                     if cn_name:
-                                        self.file_bird_species[file_prefix] = cn_name
+                                        self.file_bird_species[file_prefix] = {
+                                            'cn_name': cn_name,
+                                            'en_name': en_name
+                                        }
                                     
                                     # V4.0.1: 对纯 JPG 文件也写入鸟种名称到 EXIF
                                     bird_title = f"{cn_name} ({en_name})"
@@ -1326,7 +1332,15 @@ class PhotoProcessor:
                 # V4.0: 2-star and 3-star photos go to bird species subdirectories
                 if rating >= 2 and prefix in self.file_bird_species:
                     # Photo with species identification
-                    bird_name = self.file_bird_species[prefix]
+                    bird_info = self.file_bird_species[prefix]
+                    if self.i18n.current_lang.startswith('en'):
+                        # English mode: use en_name with spaces replaced by underscores
+                        bird_name = bird_info.get('en_name', '').replace(' ', '_')
+                    else:
+                        # Chinese mode: use cn_name
+                        bird_name = bird_info.get('cn_name', '')
+                    if not bird_name:
+                        bird_name = bird_info.get('cn_name', '') or bird_info.get('en_name', '').replace(' ', '_') or 'Unknown'
                     folder = os.path.join(base_folder, bird_name)
                 elif rating >= 2:
                     # 2-star/3-star without species ID, put in "Other Birds"
