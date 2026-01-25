@@ -195,7 +195,7 @@ def cmd_process(args):
     # V4.0: 连拍检测（处理完成后执行）
     if args.burst and args.organize:
         from core.burst_detector import BurstDetector
-        from exiftool_manager import get_exiftool_manager
+        from tools.exiftool_manager import get_exiftool_manager
         
         print("\n📷 Executing burst detection...")
         detector = BurstDetector(use_phash=True)
@@ -244,9 +244,9 @@ def cmd_process(args):
 
 def cmd_reset(args):
     """重置目录"""
-    from find_bird_util import reset
-    from exiftool_manager import get_exiftool_manager
-    from i18n import get_i18n
+    from tools.find_bird_util import reset
+    from tools.exiftool_manager import get_exiftool_manager
+    from tools.i18n import get_i18n
     import shutil
     
     print_banner()
@@ -348,7 +348,7 @@ def cmd_reset(args):
 def cmd_restar(args):
     """重新评星"""
     from post_adjustment_engine import PostAdjustmentEngine
-    from exiftool_manager import get_exiftool_manager
+    from tools.exiftool_manager import get_exiftool_manager
     from advanced_config import get_advanced_config
     import shutil
     
@@ -542,7 +542,7 @@ def cmd_restar(args):
 def _run_burst_detection_restar(directory: str):
     """Restar 后运行连拍检测"""
     from core.burst_detector import BurstDetector
-    from exiftool_manager import get_exiftool_manager
+    from tools.exiftool_manager import get_exiftool_manager
     
     print("\n📷 正在执行连拍检测...")
     detector = BurstDetector(use_phash=True)

@@ -85,7 +85,7 @@ def display_result(result: dict, verbose: bool = True):
 
 def write_exif(image_path: str, result: dict, threshold: float = 70.0) -> bool:
     """将识别结果写入 EXIF"""
-    from exiftool_manager import get_exiftool_manager
+    from tools.exiftool_manager import get_exiftool_manager
     
     results = result.get('results', [])
     if not results:
@@ -263,7 +263,7 @@ def cmd_organize(args):
     import shutil
     import json
     from birdid.bird_identifier import identify_bird
-    from exiftool_manager import get_exiftool_manager
+    from tools.exiftool_manager import get_exiftool_manager
     
     print_banner()
     
