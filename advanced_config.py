@@ -40,7 +40,7 @@ class AdvancedConfig:
         "log_level": "detailed",    # 日志详细程度: "simple" | "detailed"
 
         # 语言设置（后续实现）
-        "language": "zh_CN",        # zh_CN | en_US
+        "language": None,           # zh_CN | en_US | None (Auto)
     }
 
     def __init__(self, config_file=None):
@@ -186,6 +186,10 @@ class AdvancedConfig:
 
     def set_language(self, value):
         """设置语言"""
+        # 兼容性处理：如果传入 'en'，自动转换为 'en_US'
+        if value == 'en':
+            value = 'en_US'
+            
         if value in ["zh_CN", "en_US"]:
             self.config["language"] = value
 
