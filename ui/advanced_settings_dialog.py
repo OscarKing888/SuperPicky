@@ -263,6 +263,38 @@ class AdvancedSettingsDialog(QDialog):
             format_func=lambda v: f"{v}%"
         )
 
+        layout.addSpacing(12)
+
+        # GPU Worker 数量调整
+        self.vars["gpu_worker_count_adjust"] = self._create_slider_setting(
+            layout,
+            self.i18n.t("settings.gpu_worker_count_adjust"),
+            min_val=-10, max_val=10, default=0,
+            step=1,
+            format_func=lambda v: f"{v:+d}" if v != 0 else "0"
+        )
+
+        layout.addSpacing(12)
+
+        # CPU Worker 数量调整
+        self.vars["cpu_worker_count_adjust"] = self._create_slider_setting(
+            layout,
+            self.i18n.t("settings.cpu_worker_count_adjust"),
+            min_val=-10, max_val=10, default=0,
+            step=1,
+            format_func=lambda v: f"{v:+d}" if v != 0 else "0"
+        )
+
+        layout.addSpacing(12)
+
+        # CPU Worker 最大数量
+        self.vars["max_cpu_worker_count"] = self._create_slider_setting(
+            layout,
+            self.i18n.t("settings.max_cpu_worker_count"),
+            min_val=1, max_val=128, default=64,
+            step=1
+        )
+
         layout.addSpacing(20)
 
         # 语言设置
@@ -392,6 +424,11 @@ class AdvancedSettingsDialog(QDialog):
         self.vars["picked_top_percentage"].setValue(int(self.config.picked_top_percentage))
         # V3.8: 加载曝光阈值
         self.vars["exposure_threshold"].setValue(int(self.config.exposure_threshold * 100))
+        # 加载 GPU Worker 数量调整
+        self.vars["gpu_worker_count_adjust"].setValue(int(self.config.gpu_worker_count_adjust))
+        # 加载 CPU Worker 数量调整和最大数量
+        self.vars["cpu_worker_count_adjust"].setValue(int(self.config.cpu_worker_count_adjust))
+        self.vars["max_cpu_worker_count"].setValue(int(self.config.max_cpu_worker_count))
 
     @Slot()
     def _reset_to_default(self):
@@ -422,12 +459,20 @@ class AdvancedSettingsDialog(QDialog):
         picked_percentage = self.vars["picked_top_percentage"].value()
         # V3.8: 获取曝光阈值
         exposure_threshold = self.vars["exposure_threshold"].value() / 100.0
+        # 获取 GPU Worker 数量调整
+        gpu_worker_count_adjust = self.vars["gpu_worker_count_adjust"].value()
+        # 获取 CPU Worker 数量调整和最大数量
+        cpu_worker_count_adjust = self.vars["cpu_worker_count_adjust"].value()
+        max_cpu_worker_count = self.vars["max_cpu_worker_count"].value()
 
         self.config.set_min_confidence(min_confidence)
         self.config.set_min_sharpness(min_sharpness)
         self.config.set_min_nima(min_nima)
         self.config.set_picked_top_percentage(picked_percentage)
         self.config.set_exposure_threshold(exposure_threshold)
+        self.config.set_gpu_worker_count_adjust(gpu_worker_count_adjust)
+        self.config.set_cpu_worker_count_adjust(cpu_worker_count_adjust)
+        self.config.set_max_cpu_worker_count(max_cpu_worker_count)
         self.config.set_save_csv(True)
 
         selected_name = self.lang_combo.currentText()

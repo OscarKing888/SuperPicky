@@ -8,6 +8,7 @@ ExifTool管理器
 import os
 import subprocess
 import sys
+import threading
 from typing import Optional, List, Dict
 from pathlib import Path
 from constants import RATING_FOLDER_NAMES
@@ -295,21 +296,79 @@ class ExifToolManager:
                 creationflags=creationflags
             )
 
-            if result.returncode == 0:
-                stats['success'] = len(files_metadata) - stats['failed']
-                # V3.1.2: 只在处理多个文件时显示完成消息
+            # 解析 ExifTool 输出，识别成功和失败的文件
+            # ExifTool 使用 -execute 时，即使部分文件失败也可能返回非零退出代码
+            # 需要解析 stderr 来确定哪些文件成功，哪些失败
+            if result.stderr:
+                # 分析 stderr 输出，识别失败的文件
+                stderr_lines = result.stderr.strip().split('\n')
+                failed_files = set()
+                
+                for line in stderr_lines:
+                    # ExifTool 错误格式通常是: "Error: <message> - <filepath>"
+                    # 或 "Warning: <message> - <filepath>"
+                    if 'Error:' in line or 'Warning:' in line:
+                        # 尝试提取文件路径
+                        for item in files_metadata:
+                            file_path = item.get('file', '')
+                            if file_path and file_path in line:
+                                failed_files.add(file_path)
+                                # 记录具体错误
+                                error_msg = line.strip()
+                                if 'Not a valid JPG' in error_msg or 'not a valid JPEG' in error_msg:
+                                    print(f"⚠️  跳过无效JPG文件: {os.path.basename(file_path)}")
+                                else:
+                                    print(f"⚠️  EXIF写入失败: {os.path.basename(file_path)} - {error_msg}")
+                
+                # 计算成功和失败的数量
+                total_files = len(files_metadata)
+                failed_count = len(failed_files) + stats.get('failed', 0)  # 加上之前跳过的文件
+                success_count = total_files - failed_count
+                
+                stats['success'] = max(0, success_count)
+                stats['failed'] = failed_count
+                
+                # 只在有失败时才显示详细错误
+                if result.returncode != 0 and failed_count > 0:
+                    if len(files_metadata) > 1:
+                        print(f"⚠️  批量处理部分失败: {stats['success']} 成功, {stats['failed']} 失败")
+                    # 不打印完整的 stderr，因为已经解析过了
+                elif result.returncode == 0:
+                    stats['success'] = len(files_metadata) - stats.get('failed', 0)
+                    if len(files_metadata) > 1:
+                        print(f"✅ 批量处理完成: {stats['success']} 成功, {stats['failed']} 失败")
+            else:
+                # 没有错误输出，认为全部成功
+                stats['success'] = len(files_metadata) - stats.get('failed', 0)
                 if len(files_metadata) > 1:
                     print(f"✅ 批量处理完成: {stats['success']} 成功, {stats['failed']} 失败")
-                
-                # V3.9.2: 为 RAF/ORF 文件创建 XMP 侧车文件
-                # Lightroom 无法读取嵌入在这些格式中的 XMP，需要侧车文件
+            
+            # V3.9.2: 为 RAF/ORF 文件创建 XMP 侧车文件（只对成功的文件）
+            # Lightroom 无法读取嵌入在这些格式中的 XMP，需要侧车文件
+            if stats.get('success', 0) > 0:
                 self._create_xmp_sidecars_for_raf(files_metadata)
-            else:
-                print(f"❌ 批量处理失败: {result.stderr}")
-                stats['failed'] = len(files_metadata)
 
+        except subprocess.TimeoutExpired:
+            print(f"❌ 批量处理超时（超过5分钟）")
+            stats['failed'] = len(files_metadata)
         except Exception as e:
-            print(f"❌ 批量处理异常: {e}")
+            import traceback
+            error_detail = f"{type(e).__name__}: {str(e)}"
+            print(f"❌ 批量处理异常: {error_detail}")
+            # 记录详细错误到日志
+            try:
+                log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".superpicky")
+                os.makedirs(log_dir, exist_ok=True)
+                error_log_file = os.path.join(log_dir, "exiftool_errors.txt")
+                from datetime import datetime
+                with open(error_log_file, 'a', encoding='utf-8') as f:
+                    f.write(f"\n[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 批量处理异常\n")
+                    f.write(f"错误: {error_detail}\n")
+                    f.write(f"处理的文件数: {len(files_metadata)}\n")
+                    f.write(f"堆栈跟踪:\n{traceback.format_exc()}\n")
+                    f.write("="*80 + "\n")
+            except Exception:
+                pass
             stats['failed'] = len(files_metadata)
 
         return stats
@@ -685,13 +744,17 @@ class ExifToolManager:
 
 # 全局实例
 exiftool_manager = None
+_exiftool_manager_lock = threading.Lock()
 
 
 def get_exiftool_manager() -> ExifToolManager:
     """获取ExifTool管理器单例"""
     global exiftool_manager
-    if exiftool_manager is None:
-        exiftool_manager = ExifToolManager()
+    if exiftool_manager is not None:
+        return exiftool_manager
+    with _exiftool_manager_lock:
+        if exiftool_manager is None:
+            exiftool_manager = ExifToolManager()
     return exiftool_manager
 
 

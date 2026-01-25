@@ -32,9 +32,35 @@ class AdvancedConfig:
         "burst_time_threshold": 250,  # 连拍时间阈值(ms) (150-500) - 相邻照片时间差小于此值视为连拍
         "burst_min_count": 4,         # 连拍最少张数 (3-10) - 至少此数量连续照片才算连拍组
 
+        # GPU Worker 设置
+        "gpu_worker_count_adjust": 0,   # GPU Worker 数量调整 (-10 到 +10) - 在自动计算的基础上增加或减少的数量
+        "max_gpu_worker_count": 1,      # GPU Worker 最大数量限制(1-8) - 避免显存占用过高导致崩溃
+        "gpu_single_thread_mode": True, # GPU 评分单线程队列模式 - 避免并发导致显存崩溃
+
+        # GPU Batch 设置
+        "gpu_batch_size": 2,             # GPU 批量大小 (0=自动)
+        "gpu_batch_min_size": 1,         # GPU 批量最小值
+        "gpu_batch_max_size": 8,         # GPU 批量最大值
+        "gpu_batch_mem_per_item_gb": 1.0,   # 单张批量显存基准(GB)，用于自动计算
+        "gpu_batch_mem_overhead_gb": 2.0,   # 固定显存开销(GB)，用于自动计算
+        "gpu_batch_max_wait_ms": 0,      # GPU 批量凑批等待时间(ms)，0表示不等待
+
+        # 模型设备控制
+        "force_cpu_for_iqa": True,            # IQA/TOPIQ 强制使用 CPU（避免与 YOLO 争抢显存）
+        "force_cpu_for_flight_detector": True,  # FlightDetector 强制使用 CPU
+
+        # CPU Worker 设置
+        "cpu_worker_count_adjust": 0,    # CPU Worker 数量调整 (-10 到 +10) - 在自动计算的基础上增加或减少的数量
+        "max_cpu_worker_count": 8,       # CPU Worker 最大数量限制 (1-128) - 自动计算时不会超过此值
+        "cpu_rate_worker_count": 0,      # CPU 评分线程数 (0=自动) - GPU可用时作为辅助评分
+        "cpu_io_worker_count": 2,        # CPU IO线程数 - HEIF转换/EXIF写入使用
+        "cpu_rate_backlog_threshold": 1, # 评分队列积压阈值 - 超过后允许CPU评分辅助
+        "cpu_rate_assist_enabled": True, # 是否允许CPU参与评分（GPU可用时）
+
         # 输出设置
         "save_csv": True,           # 是否保存CSV报告
         "log_level": "detailed",    # 日志详细程度: "simple" | "detailed"
+        "debug_log": True,          # 是否启用调试日志 (True/False) - 用于排查问题
 
         # 语言设置（后续实现）
         "language": "zh_CN",        # zh_CN | en_US
@@ -122,12 +148,84 @@ class AdvancedConfig:
         return self.config.get("burst_min_count", 4)
 
     @property
+    def gpu_worker_count_adjust(self):
+        return self.config.get("gpu_worker_count_adjust", 0)
+
+    @property
+    def max_gpu_worker_count(self):
+        return self.config.get("max_gpu_worker_count", 1)
+
+    @property
+    def gpu_single_thread_mode(self):
+        return self.config.get("gpu_single_thread_mode", True)
+
+    @property
+    def gpu_batch_size(self):
+        return self.config.get("gpu_batch_size", 0)
+
+    @property
+    def gpu_batch_min_size(self):
+        return self.config.get("gpu_batch_min_size", 1)
+
+    @property
+    def gpu_batch_max_size(self):
+        return self.config.get("gpu_batch_max_size", 8)
+
+    @property
+    def gpu_batch_mem_per_item_gb(self):
+        return self.config.get("gpu_batch_mem_per_item_gb", 1.0)
+
+    @property
+    def gpu_batch_mem_overhead_gb(self):
+        return self.config.get("gpu_batch_mem_overhead_gb", 2.0)
+
+    @property
+    def gpu_batch_max_wait_ms(self):
+        return self.config.get("gpu_batch_max_wait_ms", 0)
+
+    @property
+    def force_cpu_for_iqa(self):
+        return self.config.get("force_cpu_for_iqa", False)
+
+    @property
+    def force_cpu_for_flight_detector(self):
+        return self.config.get("force_cpu_for_flight_detector", False)
+
+    @property
+    def cpu_worker_count_adjust(self):
+        return self.config.get("cpu_worker_count_adjust", 0)
+
+    @property
+    def max_cpu_worker_count(self):
+        return self.config.get("max_cpu_worker_count", 8)
+
+    @property
+    def cpu_rate_worker_count(self):
+        return self.config.get("cpu_rate_worker_count", 0)
+
+    @property
+    def cpu_io_worker_count(self):
+        return self.config.get("cpu_io_worker_count", 2)
+
+    @property
+    def cpu_rate_backlog_threshold(self):
+        return self.config.get("cpu_rate_backlog_threshold", 8)
+
+    @property
+    def cpu_rate_assist_enabled(self):
+        return self.config.get("cpu_rate_assist_enabled", True)
+
+    @property
     def save_csv(self):
         return self.config["save_csv"]
 
     @property
     def log_level(self):
         return self.config["log_level"]
+
+    @property
+    def debug_log(self):
+        return self.config.get("debug_log", True)
 
     @property
     def language(self):
@@ -164,6 +262,74 @@ class AdvancedConfig:
         """设置连拍最少张数 (3-10)"""
         self.config["burst_min_count"] = max(3, min(10, int(value)))
 
+    def set_gpu_worker_count_adjust(self, value):
+        """设置GPU Worker数量调整 (-10 到 +10)"""
+        self.config["gpu_worker_count_adjust"] = max(-10, min(10, int(value)))
+
+    def set_max_gpu_worker_count(self, value):
+        """设置GPU Worker最大数量限制 (1-8)"""
+        self.config["max_gpu_worker_count"] = max(1, min(8, int(value)))
+
+    def set_gpu_single_thread_mode(self, value):
+        """设置GPU评分单线程模式"""
+        self.config["gpu_single_thread_mode"] = bool(value)
+
+    def set_gpu_batch_size(self, value):
+        """设置GPU批量大小(0=自动)"""
+        self.config["gpu_batch_size"] = max(0, int(value))
+
+    def set_gpu_batch_min_size(self, value):
+        """设置GPU批量最小值"""
+        self.config["gpu_batch_min_size"] = max(1, int(value))
+
+    def set_gpu_batch_max_size(self, value):
+        """设置GPU批量最大值"""
+        self.config["gpu_batch_max_size"] = max(1, int(value))
+
+    def set_gpu_batch_mem_per_item_gb(self, value):
+        """设置单张批量显存基准(GB)"""
+        self.config["gpu_batch_mem_per_item_gb"] = max(0.1, float(value))
+
+    def set_gpu_batch_mem_overhead_gb(self, value):
+        """设置固定显存开销(GB)"""
+        self.config["gpu_batch_mem_overhead_gb"] = max(0.0, float(value))
+
+    def set_gpu_batch_max_wait_ms(self, value):
+        """设置GPU批量凑批等待时间(ms)"""
+        self.config["gpu_batch_max_wait_ms"] = max(0, int(value))
+
+    def set_force_cpu_for_iqa(self, value):
+        """设置是否强制IQA/TOPIQ使用CPU"""
+        self.config["force_cpu_for_iqa"] = bool(value)
+
+    def set_force_cpu_for_flight_detector(self, value):
+        """设置是否强制飞鸟检测使用CPU"""
+        self.config["force_cpu_for_flight_detector"] = bool(value)
+
+    def set_cpu_worker_count_adjust(self, value):
+        """设置CPU Worker数量调整 (-10 到 +10)"""
+        self.config["cpu_worker_count_adjust"] = max(-10, min(10, int(value)))
+
+    def set_max_cpu_worker_count(self, value):
+        """设置CPU Worker最大数量限制 (1-128)"""
+        self.config["max_cpu_worker_count"] = max(1, min(128, int(value)))
+
+    def set_cpu_rate_worker_count(self, value):
+        """设置CPU评分线程数 (0=自动)"""
+        self.config["cpu_rate_worker_count"] = max(0, min(128, int(value)))
+
+    def set_cpu_io_worker_count(self, value):
+        """设置CPU IO线程数"""
+        self.config["cpu_io_worker_count"] = max(1, min(128, int(value)))
+
+    def set_cpu_rate_backlog_threshold(self, value):
+        """设置CPU评分辅助触发的队列积压阈值"""
+        self.config["cpu_rate_backlog_threshold"] = max(0, int(value))
+
+    def set_cpu_rate_assist_enabled(self, value):
+        """设置是否允许CPU参与评分"""
+        self.config["cpu_rate_assist_enabled"] = bool(value)
+
     def set_save_csv(self, value):
         """设置是否保存CSV"""
         self.config["save_csv"] = bool(value)
@@ -172,6 +338,10 @@ class AdvancedConfig:
         """设置日志详细程度"""
         if value in ["simple", "detailed"]:
             self.config["log_level"] = value
+
+    def set_debug_log(self, value):
+        """设置是否启用调试日志"""
+        self.config["debug_log"] = bool(value)
 
     def set_language(self, value):
         """设置语言"""

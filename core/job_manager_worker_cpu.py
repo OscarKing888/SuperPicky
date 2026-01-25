@@ -8,9 +8,10 @@ from core.job_base import JobBase
 from core.job_base_cpu_rate import JobBaseCPU_Rate
 from core.job_base_cpu_convert_heif import JobBaseCPU_ConvertHEIF
 from core.job_base_cpu_write_exif import JobBaseCPU_WriteEXIF
+from core.job_manager_worker import JobWorker
 
 
-class CPUJobWorker:
+class CPUJobWorker(JobWorker):
     """
     CPU Job Worker（仅负责模型/设备创建和注入，不管理线程池）
 
@@ -41,6 +42,65 @@ class CPUJobWorker:
             photo_processor=photo_processor,
             raw_dict=raw_dict,
         )
+
+    def submit(self, job):
+        """提交任务（由JobManager管理，worker不需要实现）"""
+        raise NotImplementedError("submit should be called by JobManager's executor")
+
+    def _run_job(self, job):
+        """
+        执行job（由JobManager的线程池调用）
+        
+        Args:
+            job: 待执行的job对象
+            
+        Returns:
+            job的执行结果
+        """
+        import traceback
+        job_file_info = None
+        try:
+            # 评分任务：由worker注入设备/模型/检测器/EXIF管理器
+            if isinstance(job, JobBaseCPU_Rate):
+                job_file_info = job.job_file_info
+                self._log(f"[CPU Worker] 开始处理: {job_file_info.file_prefix if job_file_info else 'unknown'}")
+                ctx = self._get_context(job.photo_processor)
+                job.device = self.device
+                job.model = ctx.get("yolo_model")
+                job.keypoint_detector = ctx.get("keypoint_detector")
+                job.flight_detector = ctx.get("flight_detector")
+                job.exiftool_mgr = ctx.get("exiftool_mgr")
+            elif hasattr(job, 'job_file_info'):
+                job_file_info = job.job_file_info
+
+            job.run_job()
+            if hasattr(job, "get_result"):
+                result = job.get_result()
+                if job_file_info:
+                    self._log(f"[CPU Worker] 完成处理: {job_file_info.file_prefix}")
+                return result
+            return None
+        except Exception as e:
+            error_msg = f"[CPU Worker] 执行任务异常"
+            if job_file_info:
+                error_msg += f": {job_file_info.file_prefix}"
+            error_msg += f" - {type(e).__name__}: {str(e)}\n{traceback.format_exc()}"
+            self._log(error_msg, "error")
+            # 返回错误结果而不是抛出异常
+            if job_file_info:
+                return {
+                    'filename': job_file_info.file_prefix,
+                    'filepath': job_file_info.src_file_path,
+                    'rating': -1,
+                    'reason': f'Worker异常: {str(e)}',
+                    'processing_time': 0.0,
+                    'job_file_info': job_file_info,
+                }
+            return None
+
+    def shutdown(self, wait: bool = True):
+        """关闭worker（由JobManager管理，worker不需要实现）"""
+        pass
 
     def _log(self, msg: str, level: str = "info"):
         if self.log_callback:
@@ -89,27 +149,3 @@ class CPUJobWorker:
                 ctx["flight_detector"] = None
 
         return ctx
-
-    def run_job(self, job):
-        """
-        执行job（由JobManager的线程池调用）
-        
-        Args:
-            job: 待执行的job对象
-            
-        Returns:
-            job的执行结果
-        """
-        # 评分任务：由worker注入设备/模型/检测器/EXIF管理器
-        if isinstance(job, JobBaseCPU_Rate):
-            ctx = self._get_context(job.photo_processor)
-            job.device = self.device
-            job.model = ctx.get("yolo_model")
-            job.keypoint_detector = ctx.get("keypoint_detector")
-            job.flight_detector = ctx.get("flight_detector")
-            job.exiftool_mgr = ctx.get("exiftool_mgr")
-
-        job.run_job()
-        if hasattr(job, "get_result"):
-            return job.get_result()
-        return None

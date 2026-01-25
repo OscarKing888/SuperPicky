@@ -85,8 +85,22 @@ class JobBaseCPU_WriteEXIF(JobBaseCPU):
             # 批量写入EXIF
             exif_stats = exiftool_mgr.batch_set_metadata(batch_data)
             
-            if exif_stats.get('failed', 0) > 0:
-                self.error = f"部分EXIF写入失败: {exif_stats.get('failed')}个文件"
+            # 检查写入结果
+            success_count = exif_stats.get('success', 0)
+            failed_count = exif_stats.get('failed', 0)
+            total_count = len(batch_data)
+            
+            if failed_count > 0:
+                # 部分失败：记录警告但不标记为完全失败
+                if success_count > 0:
+                    # 至少部分成功，记录警告
+                    self.error = f"部分EXIF写入失败: {success_count}成功, {failed_count}失败"
+                else:
+                    # 全部失败
+                    self.error = f"EXIF写入全部失败: {failed_count}个文件"
+            elif success_count == 0 and total_count > 0:
+                # 没有成功也没有失败计数，可能是异常情况
+                self.error = "EXIF写入未返回有效结果"
             
         except Exception as e:
             self.error = f"EXIF写入失败: {str(e)}"

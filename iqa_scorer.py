@@ -20,6 +20,15 @@ import torchvision.transforms as T
 
 # 使用 TOPIQ 模型
 from topiq_model import CFANet, load_topiq_weights, get_topiq_weight_path
+from advanced_config import get_advanced_config
+
+
+def _force_cpu_for_iqa() -> bool:
+    try:
+        config = get_advanced_config()
+        return bool(getattr(config, "force_cpu_for_iqa", False))
+    except Exception:
+        return False
 
 
 class IQAScorer:
@@ -50,6 +59,8 @@ class IQAScorer:
         Returns:
             可用的设备
         """
+        if _force_cpu_for_iqa():
+            return torch.device('cpu')
         # 检查 MPS (Apple GPU)
         if preferred_device == 'mps':
             try:
@@ -205,6 +216,9 @@ def get_iqa_scorer(device='mps') -> IQAScorer:
         IQAScorer 实例
     """
     global _iqa_scorer_instances
+
+    if _force_cpu_for_iqa():
+        device = 'cpu'
     
     # 标准化设备字符串
     if isinstance(device, torch.device):

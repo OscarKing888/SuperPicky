@@ -109,14 +109,28 @@ class WorkerThread(threading.Thread):
 
     def run(self):
         """执行处理"""
+        import traceback
         try:
+            if self.i18n:
+                self.signals.log.emit("[WorkerThread] 开始执行处理", "info")
             self._start_caffeinate()
             self.process_files()
+            if self.i18n:
+                self.signals.log.emit("[WorkerThread] 处理完成，发送finished信号", "info")
             self.signals.finished.emit(self.stats)
+            if self.i18n:
+                self.signals.log.emit("[WorkerThread] finished信号已发送", "info")
         except Exception as e:
+            error_msg = f"[WorkerThread] 异常: {type(e).__name__}: {str(e)}\n{traceback.format_exc()}"
+            if self.i18n:
+                self.signals.log.emit(error_msg, "error")
             self.signals.error.emit(str(e))
         finally:
+            if self.i18n:
+                self.signals.log.emit("[WorkerThread] 进入finally块，停止caffeinate", "info")
             self._stop_caffeinate()
+            if self.i18n:
+                self.signals.log.emit("[WorkerThread] run()方法结束", "info")
 
     def _start_caffeinate(self):
         """启动防休眠"""
@@ -213,13 +227,36 @@ class WorkerThread(threading.Thread):
                 gpu_worker_count=gpu_worker_count,
                 log_callback=log_callback,
             )
+
+            # 输出关键 worker 信息
+            try:
+                log_callback(
+                    f"⚙️  Worker配置: CPU评分={job_manager.cpu_rate_worker_count}, "
+                    f"CPU IO={job_manager.cpu_io_worker_count}, "
+                    f"GPU={len(job_manager.gpu_workers)}, "
+                    f"GPU单线程={job_manager.gpu_single_thread_mode}, "
+                    f"CPU评分辅助={job_manager.cpu_rate_assist_enabled}, "
+                    f"评分队列阈值={job_manager.cpu_rate_backlog_threshold}",
+                    "info"
+                )
+            except Exception:
+                pass
             
             # 运行 JobManager
+            log_callback("开始运行 JobManager...", "info")
             job_result = job_manager.run()
+            log_callback(f"JobManager 运行完成，返回结果: stats={job_result.get('stats', {})}, file_ratings数量={len(job_result.get('file_ratings', {}))}", "info")
+            
+            # 检查是否有错误
+            if 'error' in job_result:
+                error_msg = f"JobManager 运行出错: {job_result['error']}"
+                log_callback(error_msg, "error")
+                raise Exception(error_msg)
             
             # 从 JobManager 结果中获取 file_ratings 和 star_3_photos
             file_ratings = job_result.get('file_ratings', {})
             star_3_photos = job_result.get('star_3_photos', [])
+            log_callback(f"获取结果: {len(file_ratings)} 个file_ratings, {len(star_3_photos)} 个star_3_photos", "info")
             
             # 处理文件移动（JobManager 不处理文件移动）
             if file_ratings:
@@ -1026,6 +1063,8 @@ class SuperPickyMainWindow(QMainWindow):
     @Slot(dict)
     def _on_finished(self, stats):
         """处理完成"""
+        self._log("[UI] _on_finished() 被调用", "info")
+        self._log(f"[UI] 接收到的stats: {stats}", "info")
         self.start_btn.setEnabled(True)
         self.reset_btn.setEnabled(True)
         # self.post_da_btn.setEnabled(True)  # V4.1: 重新评星按钮已禁用
@@ -1064,6 +1103,7 @@ class SuperPickyMainWindow(QMainWindow):
     @Slot(str)
     def _on_error(self, error_msg):
         """处理错误"""
+        self._log(f"[UI] _on_error() 被调用", "error")
         self._log(f"Error: {error_msg}", "error")
         self._update_status("Error", COLORS['error'])
         self.start_btn.setEnabled(True)

@@ -281,7 +281,13 @@
     "save_error_title": "Error",
     "save_error_msg": "Failed to save settings.",
     "exposure_threshold": "Exposure Threshold",
-    "exposure_desc": "Photos with overexposed/underexposed ratio above this threshold will be downgraded by 1 star"
+    "exposure_desc": "Photos with overexposed/underexposed ratio above this threshold will be downgraded by 1 star",
+    "gpu_worker_count_adjust": "GPU Worker Count Adjust",
+    "gpu_worker_count_adjust_desc": "Adjust GPU worker count on top of auto-calculated value (-10 to +10)",
+    "cpu_worker_count_adjust": "CPU Worker Count Adjust",
+    "cpu_worker_count_adjust_desc": "Adjust CPU worker count on top of auto-calculated value (-10 to +10)",
+    "max_cpu_worker_count": "Max CPU Worker Count",
+    "max_cpu_worker_count_desc": "Maximum limit for auto-calculated CPU worker count (1-128)"
   },
   "advanced_settings": {
     "title": "Advanced Settings",

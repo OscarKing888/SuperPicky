@@ -311,7 +311,13 @@
     "save_error_title": "错误",
     "save_error_msg": "保存设置失败。",
     "exposure_threshold": "曝光阈值",
-    "exposure_desc": "鸟区域过曝/欠曝像素占比超过此阈值将降级一星"
+    "exposure_desc": "鸟区域过曝/欠曝像素占比超过此阈值将降级一星",
+    "gpu_worker_count_adjust": "GPU Worker 数量调整",
+    "gpu_worker_count_adjust_desc": "在自动计算的基础上增加或减少 GPU Worker 数量（-10 到 +10）",
+    "cpu_worker_count_adjust": "CPU Worker 数量调整",
+    "cpu_worker_count_adjust_desc": "在自动计算的基础上增加或减少 CPU Worker 数量（-10 到 +10）",
+    "max_cpu_worker_count": "CPU Worker 最大数量",
+    "max_cpu_worker_count_desc": "自动计算 CPU Worker 数量时的最大限制（1-128）"
   },
   "advanced_settings": {
     "title": "高级设置",

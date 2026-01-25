@@ -378,3 +378,187 @@ def detect_and_draw_birds(image_path, model, output_path, dir, ui_settings, i18n
             pass
 
     return found_bird, bird_result, bird_confidence, bird_sharpness, nima_score, bird_bbox, img_dims, bird_mask
+
+
+def detect_and_draw_birds_batch(image_paths, model, dir, ui_settings, i18n=None, skip_nima=False, device=None):
+    """
+    Batch YOLO inference. Returns a list of tuples matching detect_and_draw_birds.
+    """
+    from core.config_manager import UISettings
+
+    if isinstance(ui_settings, UISettings):
+        ai_confidence = ui_settings.ai_confidence / 100
+        sharpness_threshold = ui_settings.sharpness_threshold
+        nima_threshold = ui_settings.nima_threshold
+    else:
+        ai_confidence = ui_settings[0] / 100
+        sharpness_threshold = ui_settings[1]
+        nima_threshold = ui_settings[2]
+
+    _ = ai_confidence
+    _ = sharpness_threshold
+    _ = nima_threshold
+
+    results_out = [None] * len(image_paths)
+    valid_indices = []
+    images = []
+    image_meta = []
+
+    for idx, image_path in enumerate(image_paths):
+        if not config.is_jpg_file(image_path):
+            log_message("ERROR: not a jpg file", dir)
+            results_out[idx] = None
+            continue
+        if not os.path.exists(image_path):
+            log_message(f"ERROR: in detect_and_draw_birds_batch, {image_path} not found", dir)
+            results_out[idx] = None
+            continue
+        image = preprocess_image(image_path)
+        height, width, _ = image.shape
+        images.append(image)
+        image_meta.append((image_path, width, height))
+        valid_indices.append(idx)
+
+    if not images:
+        return results_out
+
+    requested_device = device
+    if requested_device:
+        requested_device = _resolve_device(requested_device)
+    else:
+        requested_device = getattr(model, '_sp_device', None)
+    if requested_device in ('', 'auto'):
+        requested_device = None
+
+    try:
+        if requested_device:
+            results = model(images, device=requested_device)
+        else:
+            results = model(images)
+    except Exception as primary_error:
+        if requested_device and requested_device != 'cpu':
+            log_message(f"WARNING: {requested_device.upper()} inference failed, fallback to CPU: {primary_error}", dir)
+        else:
+            log_message(f"ERROR: AI inference failed: {primary_error}", dir)
+        for idx in valid_indices:
+            results_out[idx] = detect_and_draw_birds(
+                image_paths[idx],
+                model,
+                None,
+                dir,
+                ui_settings,
+                i18n,
+                skip_nima=skip_nima,
+                device=device,
+            )
+        return results_out
+
+    for res, idx, meta in zip(results, valid_indices, image_meta):
+        image_path, width, height = meta
+        found_bird = False
+        bird_result = False
+        nima_score = None
+        sharpness = 0.0
+
+        try:
+            detections = res.boxes.xyxy.cpu().numpy() if res.boxes is not None else []
+            confidences = res.boxes.conf.cpu().numpy() if res.boxes is not None else []
+            class_ids = res.boxes.cls.cpu().numpy() if res.boxes is not None else []
+        except Exception:
+            detections = []
+            confidences = []
+            class_ids = []
+
+        masks = None
+        if hasattr(res, 'masks') and res.masks is not None:
+            try:
+                masks = res.masks.data.cpu().numpy()
+            except Exception:
+                masks = None
+
+        bird_idx = -1
+        max_conf = 0.0
+        for det_idx, (detection, conf, class_id) in enumerate(zip(detections, confidences, class_ids)):
+            if int(class_id) == config.ai.BIRD_CLASS_ID and conf > max_conf:
+                max_conf = conf
+                bird_idx = det_idx
+
+        if bird_idx == -1:
+            data = {
+                "filename": os.path.splitext(os.path.basename(image_path))[0],
+                "has_bird": "no",
+                "confidence": 0.0,
+                "head_sharp": "-",
+                "left_eye": "-",
+                "right_eye": "-",
+                "beak": "-",
+                "nima_score": "-",
+                "rating": -1
+            }
+            write_to_csv(data, dir, False)
+            results_out[idx] = (False, bird_result, 0.0, 0.0, None, None, None, None)
+            continue
+
+        detection = detections[bird_idx]
+        x1, y1, x2, y2 = detection
+        x = int(x1)
+        y = int(y1)
+        w = int(x2 - x1)
+        h = int(y2 - y1)
+        class_id = int(class_ids[bird_idx]) if len(class_ids) > bird_idx else config.ai.BIRD_CLASS_ID
+
+        if class_id == config.ai.BIRD_CLASS_ID:
+            found_bird = True
+
+        x = max(0, min(x, width - 1))
+        y = max(0, min(y, height - 1))
+        w = min(w, width - x)
+        h = min(h, height - y)
+
+        if w <= 0 or h <= 0:
+            data = {
+                "filename": os.path.splitext(os.path.basename(image_path))[0],
+                "has_bird": "no",
+                "confidence": 0.0,
+                "head_sharp": "-",
+                "left_eye": "-",
+                "right_eye": "-",
+                "beak": "-",
+                "nima_score": "-",
+                "rating": -1
+            }
+            write_to_csv(data, dir, False)
+            results_out[idx] = (False, bird_result, 0.0, 0.0, None, None, None, None)
+            continue
+
+        data = {
+            "filename": os.path.splitext(os.path.basename(image_path))[0],
+            "has_bird": "yes" if found_bird else "no",
+            "confidence": float(f"{max_conf:.2f}"),
+            "head_sharp": "-",
+            "left_eye": "-",
+            "right_eye": "-",
+            "beak": "-",
+            "nima_score": float(f"{nima_score:.2f}") if nima_score is not None else "-",
+            "rating": 0
+        }
+        write_to_csv(data, dir, False)
+
+        bird_mask = None
+        if found_bird and masks is not None:
+            try:
+                raw_mask = masks[bird_idx]
+                if raw_mask.shape != (height, width):
+                    raw_mask = cv2.resize(raw_mask, (width, height), interpolation=cv2.INTER_NEAREST)
+                bird_mask = (raw_mask > 0.5).astype(np.uint8) * 255
+            except Exception:
+                bird_mask = None
+
+        bird_confidence = float(confidences[bird_idx]) if bird_idx != -1 else 0.0
+        bird_sharpness = sharpness if bird_idx != -1 else 0.0
+        bird_bbox = (x, y, w, h) if found_bird else None
+        img_dims = (width, height) if found_bird else None
+
+        results_out[idx] = (found_bird, bird_result, bird_confidence, bird_sharpness, nima_score, bird_bbox, img_dims, bird_mask)
+
+    return results_out

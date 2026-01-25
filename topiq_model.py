@@ -503,6 +503,12 @@ class TOPIQScorer:
         self._model = None
         
     def _get_device(self, preferred_device='mps'):
+        try:
+            from advanced_config import get_advanced_config
+            if bool(getattr(get_advanced_config(), "force_cpu_for_iqa", False)):
+                return torch.device('cpu')
+        except Exception:
+            pass
         if preferred_device == 'mps':
             try:
                 if torch.backends.mps.is_available():

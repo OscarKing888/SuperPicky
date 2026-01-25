@@ -104,7 +104,15 @@ class FlightDetector:
             raise FileNotFoundError(f"飞版检测模型未找到: {self.model_path}")
         
         # 确定设备
-        if torch.backends.mps.is_available():
+        force_cpu = False
+        try:
+            from advanced_config import get_advanced_config
+            force_cpu = bool(getattr(get_advanced_config(), "force_cpu_for_flight_detector", False))
+        except Exception:
+            force_cpu = False
+        if force_cpu:
+            self.device = torch.device("cpu")
+        elif torch.backends.mps.is_available():
             self.device = torch.device("mps")
         elif torch.cuda.is_available():
             self.device = torch.device("cuda")
