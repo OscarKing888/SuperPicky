@@ -839,12 +839,12 @@ class SuperPickyMainWindow(QMainWindow):
         header_layout.addStretch()
 
         # 右侧: 版本号 + commit hash
-        version_text = "V4.0.1"
+        version_text = "V4.0.2"
         try:
             # V3.9.3: 优先从构建信息读取（发布版本）
             from core.build_info import COMMIT_HASH
             if COMMIT_HASH:
-                version_text = f"V4.0.1\n{COMMIT_HASH}"
+                version_text = f"V4.0.2\n{COMMIT_HASH}"
             else:
                 # 回退到 git 命令（开发环境）
                 import subprocess
@@ -858,7 +858,7 @@ class SuperPickyMainWindow(QMainWindow):
                 )
                 if result.returncode == 0:
                     commit_hash = result.stdout.strip()
-                    version_text = f"V4.0.1\n{commit_hash}"
+                    version_text = f"V4.0.2\n{commit_hash}"
         except:
             pass  # 使用默认版本号
         version_label = QLabel(version_text)

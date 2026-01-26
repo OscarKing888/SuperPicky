@@ -10,7 +10,7 @@ set -e  # 遇到错误立即退出
 # ============================================
 # 配置参数
 # ============================================
-VERSION="4.0.1"
+VERSION="4.0.2"
 APP_NAME="SuperPicky"
 APP_NAME_CN="慧眼选鸟"
 BUNDLE_ID="com.jamesphotography.superpicky"
