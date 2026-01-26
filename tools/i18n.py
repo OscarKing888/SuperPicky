@@ -9,6 +9,7 @@ import json
 import os
 import locale
 import subprocess
+import sys
 from pathlib import Path
 from typing import Dict, Any, Optional
 
@@ -23,7 +24,14 @@ class I18n:
         Args:
             default_lang: 默认语言，如果为None则自动检测系统语言
         """
-        self.locales_dir = Path(__file__).parent / "../locales"
+        if getattr(sys, 'frozen', False):
+            # PyInstaller packaged mode
+            base_dir = Path(sys._MEIPASS)
+        else:
+            # Normal development mode
+            base_dir = Path(__file__).parent.parent
+
+        self.locales_dir = base_dir / "locales"
         self.translations: Dict[str, Any] = {}
         self.current_lang = default_lang or self._detect_system_language()
         self.fallback_lang = "en_US"  # 找不到翻译时使用英文
