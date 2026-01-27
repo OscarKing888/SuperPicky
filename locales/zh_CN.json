@@ -628,7 +628,7 @@
   "about": {
     "window_title": "关于",
     "subtitle": "AI 智能选片助手",
-    "content": "开发者\n詹姆斯·于震 (James Yu)\n澳大利亚华裔职业摄影师\n《詹姆斯的风光摄影笔记》三部曲作者\n\n联系方式\njames@jamesphotography.com.au\njamesphotography.com.au\nYouTube: @JamesZhenYu\n小红书: 4916440495\n微信: jamesyz001\n\n模型训练\n鸟眼检测：Jordan Yu\n飞行姿态：Jordan Yu\n\n开源模型\nYOLO11 - 鸟类检测 (AGPL-3.0)\nTOPIQ - 美学评分\n  作者: Chaofeng Chen 等 (IEEE TIP 2024)\n  github.com/chaofengc/IQA-PyTorch\n  许可证: CC BY-NC-SA 4.0\n\n詹姆斯免费工具集\n• 慧眼选鸟 - AI 鸟类照片筛选\n• 慧眼辨鸟 - AI 鸟种识别 (Lightroom)\n• 慧眼找鸟 - eBird 搜索 (网页)\n• 慧眼去星 - AI 银河去星 (Photoshop)\n• 慧眼观鸟 - 鸟种收藏 (iOS)\n• 镜书 - AI 旅行日记 (iOS)\n\n© 2024-2025 詹姆斯·于震"
+    "content": "开发者\n詹姆斯·于震 (James Yu)\n澳大利亚华裔职业摄影师\n《詹姆斯的风光摄影笔记》三部曲作者\n\n联系方式\njames@jamesphotography.com.au\njamesphotography.com.au\nYouTube: @JamesZhenYu\n小红书: 4916440495\n微信: jamesyz001\n\n模型训练\n鸟眼检测：Jordan Yu\n飞行姿态：Jordan Yu\nWindows 版本：小平, Lyapunov\n\n开源模型\nYOLO11 - 鸟类检测 (AGPL-3.0)\nTOPIQ - 美学评分\n  作者: Chaofeng Chen 等 (IEEE TIP 2024)\n  github.com/chaofengc/IQA-PyTorch\n  许可证: CC BY-NC-SA 4.0\n\n詹姆斯免费工具集\n• 慧眼选鸟 - AI 鸟类照片筛选\n• 慧眼辨鸟 - AI 鸟种识别 (Lightroom)\n• 慧眼找鸟 - eBird 搜索 (网页)\n• 慧眼去星 - AI 银河去星 (Photoshop)\n• 慧眼观鸟 - 鸟种收藏 (iOS)\n• 镜书 - AI 旅行日记 (iOS)\n\n© 2024-2025 詹姆斯·于震"
   },
   "birdid": {
     "title": "鸟类识别",

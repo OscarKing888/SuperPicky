@@ -26,7 +26,7 @@ class AboutDialog(QDialog):
     def _setup_ui(self):
         """设置 UI"""
         self.setWindowTitle(self.i18n.t("about.window_title") if self.i18n else "About")
-        self.setFixedSize(560, 520)
+        self.setFixedSize(560, 680)
         self.setModal(True)
 
         # 应用样式
@@ -99,7 +99,7 @@ class AboutDialog(QDialog):
         subtitle.setStyleSheet(f"color: {COLORS['text_tertiary']}; font-size: 13px;")
         brand_layout.addWidget(subtitle)
 
-        version = QLabel("v4.0.1")
+        version = QLabel("v4.0.2")
         version.setStyleSheet(f"""
             color: {COLORS['accent']};
             font-size: 12px;
@@ -159,6 +159,7 @@ james@jamesphotography.com.au
 WeChat: jamesyz001 XiaoHongShu(小红书): 4916440495
 
 Bird Eye Detection Model: Jordan Yu
+Windows Version: 小平, Lyapunov
 
 Open Source Models
 YOLO11 - Bird Detection (AGPL-3.0)
