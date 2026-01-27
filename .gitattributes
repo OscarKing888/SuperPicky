@@ -1,6 +1,6 @@
-yolo11m-seg.pt filter=lfs diff=lfs merge=lfs -text
-models/*.pth filter=lfs diff=lfs merge=lfs -text
+# Git LFS for large model files
+models/*.pt filter=lfs diff=lfs merge=lfs -text
 
-# Exclude exiftool from language statistics (files still uploaded and usable)
-exiftool_bundle/* linguist-vendored
-exiftool linguist-vendored
+# Exclude exiftool from language statistics
+exiftools_mac/* linguist-vendored
+exiftools_win/* linguist-vendored
