@@ -516,11 +516,6 @@ function exportServiceProvider.processRenderedPhotos( functionContext, exportCon
             LOC "$$$/SuperBirdID/Message/SelectOne=Please select one photo first",
             "error")
         return
-    elseif nPhotos > 1 then
-        LrDialogs.message(PLUGIN_NAME,
-            LOC("$$$/SuperBirdID/Message/MultiSelect=Can only identify one photo at a time\n\nSelected: ^1 photos\n\nPlease select only one photo and try again", nPhotos),
-            "warning")
-        return
     end
 
     -- 检查API服务是否可用
@@ -538,14 +533,29 @@ function exportServiceProvider.processRenderedPhotos( functionContext, exportCon
 
     -- 处理单张照片
     for i, rendition in exportContext:renditions() do
+        -- 更新进度
+        local progressTitle
+        if nPhotos > 1 then
+            progressTitle = string.format("Identifying Birds (%d/%d)", i, nPhotos)
+        else
+            progressTitle = "Identifying Bird"
+        end
+        exportContext:configureProgress { title = progressTitle }
+
         local photo = rendition.photo
         local result = recognizeSinglePhoto(photo, apiUrl, topK, useYolo, useGps)
 
         if result.success and result.results and #result.results > 0 then
             myLogger:info( "识别成功，候选数: " .. #result.results )
 
-            -- 显示结果选择对话框
-            local selectedIndex = showResultSelectionDialog(result.results, result.photoName)
+            local selectedIndex
+            if nPhotos > 1 then
+                -- 批量模式：自动选择第一项
+                selectedIndex = 1
+            else
+                -- 单张模式：显示选择对话框
+                selectedIndex = showResultSelectionDialog(result.results, result.photoName)
+            end
 
             if selectedIndex and selectedIndex > 0 then
                 -- 用户选择了一个结果
@@ -556,8 +566,7 @@ function exportServiceProvider.processRenderedPhotos( functionContext, exportCon
 
                 if writeExif then
                     saveRecognitionResult(photo, species, enName, scientificName, selectedBird.description)
-                    myLogger:info( "用户选择第" .. selectedIndex .. "名，已写入: " .. species .. " (" .. enName .. ")" )
-                    -- 不再弹窗提示，直接完成
+                    myLogger:info( "已写入: " .. species .. " (" .. enName .. ")" )
                 end
             elseif selectedIndex == 0 then
                 -- 用户选择跳过
@@ -571,13 +580,12 @@ function exportServiceProvider.processRenderedPhotos( functionContext, exportCon
             local errorMsg = result.error or "未知错误"
             myLogger:info( "识别失败: " .. errorMsg )
 
-            -- 美化的错误消息
-            -- 美化的错误消息
-            local failMsg = LOC("$$$/SuperBirdID/Message/IdentifyFail=Cannot identify bird in this photo\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\nError:\n^1\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\nPossible reasons:\n• No bird or bird unclear\n• File corrupted or unsupported\n• Model not loaded", errorMsg)
-
-            LrDialogs.message(PLUGIN_NAME .. " - " .. LOC("$$$/SuperBirdID/Dialog/IdentifyFailTitle=Identify Failed"), failMsg, "error")
+            -- 仅单张模式显示错误弹窗
+            if nPhotos == 1 then
+                local failMsg = LOC("$$$/SuperBirdID/Message/IdentifyFail=Cannot identify bird in this photo\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\nError:\n^1\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\nPossible reasons:\n• No bird or bird unclear\n• File corrupted or unsupported\n• Model not loaded", errorMsg)
+                LrDialogs.message(PLUGIN_NAME .. " - " .. LOC("$$$/SuperBirdID/Dialog/IdentifyFailTitle=Identify Failed"), failMsg, "error")
+            end
         end
-        break
     end
 
     myLogger:info( PLUGIN_NAME .. " 识别处理完成" )

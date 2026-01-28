@@ -2,7 +2,7 @@
 
 [![Version](https://img.shields.io/badge/version-4.0.0-blue.svg)](https://github.com/jamesphotography/SuperPicky)
 [![Platform](https://img.shields.io/badge/platform-macOS%20|%20Windows-lightgrey.svg)](https://github.com/jamesphotography/SuperPicky/releases)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 
 **智能鸟类照片筛选工具 - 让AI帮你挑选最美的鸟类照片**
 
@@ -135,6 +135,16 @@ python main.py
 
 ## 📄 许可证
 
-MIT License - 详见 [LICENSE](LICENSE) 文件
+本软件使用 **AGPL-3.0 License** 开源。
+
+- **AGPL-3.0**: 适用于 SuperPicky 主程序代码 (基于 Ultralytics YOLO 的开源要求)
+- **CC-BY-NC-SA 4.0**: 适用于包含的 TOPIQ 模型权重 (仅限非商业研究与个人使用)
+
+这意味着：
+1. 您可以免费下载、使用和修改本软件。
+2. 如果您分发修改后的版本，必须同样开源并使用 AGPL-3.0 协议。
+3. **严禁将本软件或其组件用于商业销售或盈利目的** (受 TOPIQ 权重协议限制)。
+
+详见 [LICENSE](LICENSE) 文件。
 
 **让SuperPicky成为你鸟类摄影的得力助手！** 🦅📸

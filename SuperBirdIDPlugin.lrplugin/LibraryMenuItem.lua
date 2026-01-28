@@ -12,6 +12,8 @@ local LrBinding = import 'LrBinding'
 local LrFunctionContext = import 'LrFunctionContext'
 local LrColor = import 'LrColor'
 local LrFileUtils = import 'LrFileUtils'
+local LrProgressScope = import 'LrProgressScope'
+
 local LrL10n
 local LOC
 
@@ -333,15 +335,6 @@ LrTasks.startAsyncTask(function()
         return
     end
 
-    -- 检查是否选中了多张照片
-    local selectedPhotos = catalog:getTargetPhotos()
-    if #selectedPhotos > 1 then
-        LrDialogs.message(PLUGIN_NAME,
-            LOC("$$$/SuperBirdID/Message/MultiSelect=Can only identify one photo at a time\n\nSelected: ^1 photos\n\nPlease select only one photo and try again", #selectedPhotos),
-            "warning")
-        return
-    end
-
     -- 检查API服务是否可用
     local healthCheck = LrHttp.get(DEFAULT_API_URL .. "/health")
 
@@ -352,7 +345,47 @@ LrTasks.startAsyncTask(function()
         return
     end
 
-    -- 识别照片
+    -- 检查是否选中了多张照片
+    local selectedPhotos = catalog:getTargetPhotos()
+    if #selectedPhotos > 1 then
+        -- 批量处理模式
+        local progressScope = LrProgressScope({
+            title = LOC "$$$/SuperBirdID/Progress/BatchTitle=Identifying Birds (Batch Mode)"
+        })
+        progressScope:setCancelable(true)
+        
+        local successCount = 0
+        local failCount = 0
+        local total = #selectedPhotos
+        
+        for i, photo in ipairs(selectedPhotos) do
+            if progressScope:isCanceled() then break end
+            
+            progressScope:setPortionComplete(i - 1, total)
+            local fileName = photo:getFormattedMetadata("fileName")
+            progressScope:setCaption(string.format("%s (%d/%d)", fileName, i, total))
+            
+            local result = recognizePhoto(photo, DEFAULT_API_URL)
+            
+            if result.success and result.results and #result.results > 0 then
+                -- 自动选择第一个结果 (置信度最高)
+                local best = result.results[1]
+                local displayName = best.display_name or best.cn_name
+                saveRecognitionResult(photo, displayName, best.en_name, best.scientific_name, best.description)
+                successCount = successCount + 1
+            else
+                failCount = failCount + 1
+            end
+        end
+        
+        progressScope:done()
+        
+        local msg = string.format("Batch processing completed.\nTotal: %d\nSuccess: %d\nFailed: %d", total, successCount, failCount)
+        LrDialogs.message(PLUGIN_NAME, msg, "info")
+        return
+    end
+
+    -- 单张处理模式
     local result = recognizePhoto(targetPhoto, DEFAULT_API_URL)
 
     if result.success and result.results and #result.results > 0 then

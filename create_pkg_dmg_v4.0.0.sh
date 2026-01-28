@@ -82,6 +82,23 @@ fi
 
 log_success "PyInstaller 打包完成"
 
+# 移动资源到 Contents/Resources
+log_info "整理资源文件..."
+if [ -d "${APP_PATH}/Contents/MacOS/SuperBirdIDPlugin.lrplugin" ]; then
+    log_info "  移动 Lightroom 插件到 Resources..."
+    mv "${APP_PATH}/Contents/MacOS/SuperBirdIDPlugin.lrplugin" "${APP_PATH}/Contents/Resources/"
+fi
+
+if [ -d "${APP_PATH}/Contents/MacOS/en.lproj" ]; then
+    log_info "  移动 en.lproj 到 Resources..."
+    mv "${APP_PATH}/Contents/MacOS/en.lproj" "${APP_PATH}/Contents/Resources/"
+fi
+
+if [ -d "${APP_PATH}/Contents/MacOS/zh-Hans.lproj" ]; then
+    log_info "  移动 zh-Hans.lproj 到 Resources..."
+    mv "${APP_PATH}/Contents/MacOS/zh-Hans.lproj" "${APP_PATH}/Contents/Resources/"
+fi
+
 # ============================================
 # 步骤3: 代码签名
 # ============================================
