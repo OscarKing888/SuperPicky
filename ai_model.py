@@ -24,14 +24,15 @@ def load_yolo_model(log_callback=None):
     try:
         from config import get_best_device
         device = get_best_device()
+        i18n = get_i18n()
         
-        # 直接显示设备类型，不使用翻译（避免i18n未初始化）
+        # 使用 i18n 翻译设备类型消息
         if device.type == 'mps':
-            msg = f"✅ 使用 MPS (Apple GPU) 加速"
+            msg = i18n.t("ai.using_mps")
         elif device.type == 'cuda':
-            msg = f"✅ 使用 CUDA (NVIDIA GPU) 加速"
+            msg = i18n.t("ai.using_cuda")
         else:
-            msg = f"⚠️  使用 CPU 推理 (GPU不可用)"
+            msg = i18n.t("ai.using_cpu")
         
         # 使用日志回调或直接打印
         if log_callback:
@@ -39,7 +40,8 @@ def load_yolo_model(log_callback=None):
         else:
             print(msg)
     except Exception as e:
-        error_msg = f"⚠️  设备检测失败: {e}"
+        i18n = get_i18n()
+        error_msg = i18n.t("ai.device_detection_failed", error=str(e))
         if log_callback:
             log_callback(error_msg, "warning")
         else:

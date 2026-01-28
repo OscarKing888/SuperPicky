@@ -327,6 +327,10 @@
     "arg_no_preload": "跳过模型预加载"
   },
   "ai": {
+    "using_mps": "✅ 使用 MPS (Apple GPU) 加速",
+    "using_cuda": "✅ 使用 CUDA (NVIDIA GPU) 加速",
+    "using_cpu": "⚠️ 使用 CPU 推理 (GPU不可用)",
+    "device_detection_failed": "⚠️ 设备检测失败: {error}",
     "mps_detected": "✅ 检测到 Apple GPU (MPS)，启用硬件加速",
     "mps_unavailable": "⚠️ MPS不可用，使用CPU推理",
     "gpu_detect_failed": "⚠️ GPU检测失败: {error}，使用CPU推理",
