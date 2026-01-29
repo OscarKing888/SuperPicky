@@ -41,7 +41,8 @@
     "apply": "✅ Apply New Ratings",
     "close": "Close",
     "save": "Save",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "confirm": "Confirm"
   },
   "labels": {
     "directory": "Photo Directory:",
@@ -768,5 +769,19 @@
     "csv_read_failed": "Failed to read CSV: {error}",
     "csv_update_success": "Successfully updated {count} records",
     "csv_update_failed": "Failed to update CSV: {error}"
+  },
+  "skill_level": {
+    "dialog_title": "Choose Your Photography Level",
+    "dialog_subtitle": "Choose Your Photography Level",
+    "dialog_hint": "You can change this anytime in Settings, or customize thresholds",
+    "section_title": "Photography Level",
+    "beginner": "Beginner",
+    "beginner_desc": "Relaxed standards, suitable for beginners",
+    "intermediate": "Intermediate",
+    "intermediate_desc": "Balanced standards, recommended",
+    "master": "Master",
+    "master_desc": "Strict standards, for advanced users",
+    "custom": "Custom",
+    "current_label": "Current: {level}"
   }
 }

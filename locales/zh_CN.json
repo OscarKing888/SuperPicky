@@ -41,7 +41,8 @@
     "apply": "✅ 应用新评分",
     "close": "关闭",
     "save": "保存",
-    "cancel": "取消"
+    "cancel": "取消",
+    "confirm": "确定"
   },
   "labels": {
     "directory": "照片目录：",
@@ -767,5 +768,19 @@
     "csv_read_failed": "读取CSV文件失败：{error}",
     "csv_update_success": "成功更新 {count} 条记录",
     "csv_update_failed": "更新CSV失败: {error}"
+  },
+  "skill_level": {
+    "dialog_title": "选择您的摄影水平",
+    "dialog_subtitle": "选择您的摄影水平",
+    "dialog_hint": "您可以随时在设置中更改，也可以自定义阈值",
+    "section_title": "摄影水平",
+    "beginner": "新手",
+    "beginner_desc": "宽松标准，适合初学者",
+    "intermediate": "初级",
+    "intermediate_desc": "平衡标准，推荐选择",
+    "master": "大师",
+    "master_desc": "严格标准，适合高级用户",
+    "custom": "自选",
+    "current_label": "当前: {level}"
   }
 }

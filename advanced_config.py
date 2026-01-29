@@ -41,6 +41,12 @@ class AdvancedConfig:
 
         # 语言设置（后续实现）
         "language": None,           # zh_CN | en_US | None (Auto)
+        
+        # V4.3: 摄影水平预设 (Skill Level Presets)
+        "skill_level": "intermediate",  # 摄影水平: "beginner" | "intermediate" | "master" | "custom"
+        "is_first_run": True,           # 是否首次运行
+        "custom_sharpness": 380,        # 自选模式下的锐度阈值
+        "custom_aesthetics": 4.8,       # 自选模式下的美学阈值
     }
 
     def __init__(self, config_file=None):
@@ -192,6 +198,40 @@ class AdvancedConfig:
             
         if value in ["zh_CN", "en_US"]:
             self.config["language"] = value
+
+    # V4.3: 摄影水平预设 (Skill Level Presets)
+    @property
+    def skill_level(self):
+        return self.config.get("skill_level", "intermediate")
+    
+    @property
+    def is_first_run(self):
+        return self.config.get("is_first_run", True)
+    
+    @property
+    def custom_sharpness(self):
+        return self.config.get("custom_sharpness", 380)
+    
+    @property
+    def custom_aesthetics(self):
+        return self.config.get("custom_aesthetics", 4.8)
+    
+    def set_skill_level(self, value):
+        """设置摄影水平: beginner | intermediate | master | custom"""
+        if value in ["beginner", "intermediate", "master", "custom"]:
+            self.config["skill_level"] = value
+    
+    def set_is_first_run(self, value):
+        """设置是否首次运行"""
+        self.config["is_first_run"] = bool(value)
+    
+    def set_custom_sharpness(self, value):
+        """设置自选模式下的锐度阈值 (200-600)"""
+        self.config["custom_sharpness"] = max(200, min(600, int(value)))
+    
+    def set_custom_aesthetics(self, value):
+        """设置自选模式下的美学阈值 (4.0-7.0)"""
+        self.config["custom_aesthetics"] = max(4.0, min(7.0, float(value)))
 
     def get_dict(self):
         """获取配置字典（用于传递给其他模块）"""

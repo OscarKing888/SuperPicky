@@ -36,6 +36,7 @@ from ui.styles import (
     COLORS, FONTS, LOG_COLORS, PROGRESS_INFO_STYLE, PROGRESS_PERCENT_STYLE
 )
 from ui.custom_dialogs import StyledMessageBox
+from ui.skill_level_dialog import SkillLevelDialog, SKILL_PRESETS, get_skill_level_thresholds
 
 
 # V3.9: 支持拖放的目录输入框
@@ -408,6 +409,13 @@ class SuperPickyMainWindow(QMainWindow):
         self._really_quit = False  # 标记是否真正退出
         self._background_mode = False  # V4.0: 标记是否进入后台模式（不停止服务器）
         
+        # V4.3: 首次运行时显示水平选择对话框（延迟500ms，确保UI已完成渲染）
+        if self.config.is_first_run:
+            QTimer.singleShot(500, self._show_first_run_skill_level_dialog)
+        else:
+            # 非首次运行：根据保存的水平设置滑块
+            self._apply_skill_level_thresholds(self.config.skill_level)
+        
         # V4.2: 使用默认窗口大小，不最大化
         # self.showMaximized()  # 注释掉这行，使用默认大小
 
@@ -526,6 +534,11 @@ class SuperPickyMainWindow(QMainWindow):
         settings_action = QAction(self.i18n.t("menu.settings"), self)
         settings_action.triggered.connect(self._show_advanced_settings)
         settings_menu.addAction(settings_action)
+        
+        # V4.3: 摄影水平设置
+        skill_level_action = QAction(self.i18n.t("skill_level.section_title") + "...", self)
+        skill_level_action.triggered.connect(self._show_skill_level_dialog)
+        settings_menu.addAction(skill_level_action)
         
         settings_menu.addSeparator()
         
@@ -989,6 +1002,22 @@ class SuperPickyMainWindow(QMainWindow):
         
         header_layout.addLayout(birdid_layout)
         
+        # V4.3: 摄影水平显示标签
+        skill_level_layout = QHBoxLayout()
+        skill_level_layout.setSpacing(4)
+        
+        self.skill_level_label = QLabel("")
+        self.skill_level_label.setStyleSheet(f"""
+            color: {COLORS['accent']};
+            font-size: 11px;
+            padding: 2px 6px;
+            background-color: {COLORS['accent']}15;
+            border-radius: 4px;
+        """)
+        skill_level_layout.addWidget(self.skill_level_label)
+        
+        header_layout.addLayout(skill_level_layout)
+        
         params_layout.addLayout(header_layout)
 
         # 隐藏变量（从高级配置读取，避免硬编码）
@@ -1160,12 +1189,18 @@ class SuperPickyMainWindow(QMainWindow):
         self.sharp_slider.setValue(rounded)
         self.sharp_slider.blockSignals(False)
         self.sharp_value.setText(str(rounded))
+        
+        # V4.3: 检测是否为自选模式（手动调整滑块）
+        self._check_custom_mode()
 
     @Slot()
     def _on_nima_changed(self):
         """NIMA 滑块变化"""
         value = self.nima_slider.value() / 10.0
         self.nima_value.setText(f"{value:.1f}")
+        
+        # V4.3: 检测是否为自选模式（手动调整滑块）
+        self._check_custom_mode()
 
     @Slot()
     def _on_path_entered(self):
@@ -2196,3 +2231,95 @@ class SuperPickyMainWindow(QMainWindow):
             import traceback
             print(f"[ERROR] 显示更新弹窗失败: {e}")
             traceback.print_exc()
+
+    # ========== V4.3: 摄影水平预设 ==========
+    
+    def _show_skill_level_dialog(self):
+        """菜单打开水平选择对话框"""
+        dialog = SkillLevelDialog(self.i18n, self)
+        dialog.level_selected.connect(self._on_skill_level_selected)
+        dialog.exec()
+    
+    def _show_first_run_skill_level_dialog(self):
+        """首次运行：显示水平选择对话框"""
+        dialog = SkillLevelDialog(self.i18n, self)
+        dialog.level_selected.connect(self._on_skill_level_selected)
+        dialog.exec()
+    
+    def _on_skill_level_selected(self, level_key: str):
+        """处理水平选择"""
+        # 保存设置
+        self.config.set_skill_level(level_key)
+        self.config.set_is_first_run(False)
+        self.config.save()
+        
+        # 应用阈值到滑块
+        self._apply_skill_level_thresholds(level_key)
+        
+        # 更新水平显示标签
+        self._update_skill_level_label(level_key)
+        
+        print(f"✅ 已选择摄影水平: {level_key}")
+    
+    def _apply_skill_level_thresholds(self, level_key: str):
+        """应用水平预设的阈值到滑块"""
+        sharpness, aesthetics = get_skill_level_thresholds(level_key, self.config)
+        
+        # 阻止信号防止触发 _check_custom_mode
+        self._applying_preset = True
+        
+        self.sharp_slider.blockSignals(True)
+        self.sharp_slider.setValue(int(sharpness))
+        self.sharp_slider.blockSignals(False)
+        self.sharp_value.setText(str(int(sharpness)))
+        
+        self.nima_slider.blockSignals(True)
+        self.nima_slider.setValue(int(aesthetics * 10))
+        self.nima_slider.blockSignals(False)
+        self.nima_value.setText(f"{aesthetics:.1f}")
+        
+        self._applying_preset = False
+        
+        # 更新水平显示标签
+        self._update_skill_level_label(level_key)
+    
+    def _check_custom_mode(self):
+        """检查当前滑块值是否与任何预设匹配，如果不匹配则切换到自选模式"""
+        # 如果正在应用预设，跳过检查
+        if getattr(self, '_applying_preset', False):
+            return
+        
+        current_sharpness = self.sharp_slider.value()
+        current_aesthetics = self.nima_slider.value() / 10.0
+        
+        # 检查是否匹配某个预设
+        for level_key, preset in SKILL_PRESETS.items():
+            if (current_sharpness == preset["sharpness"] and 
+                abs(current_aesthetics - preset["aesthetics"]) < 0.05):
+                # 匹配预设
+                if self.config.skill_level != level_key:
+                    self.config.set_skill_level(level_key)
+                    self.config.save()
+                    self._update_skill_level_label(level_key)
+                return
+        
+        # 不匹配任何预设，切换到自选模式
+        if self.config.skill_level != "custom":
+            self.config.set_skill_level("custom")
+            self.config.set_custom_sharpness(current_sharpness)
+            self.config.set_custom_aesthetics(current_aesthetics)
+            self.config.save()
+            self._update_skill_level_label("custom")
+            print(f"🎛️ 已切换到自选模式: 锐度={current_sharpness}, 美学={current_aesthetics}")
+    
+    def _update_skill_level_label(self, level_key: str):
+        """更新主界面的水平显示标签"""
+        if hasattr(self, 'skill_level_label'):
+            level_names = {
+                "beginner": self.i18n.t("skill_level.beginner"),
+                "intermediate": self.i18n.t("skill_level.intermediate"),
+                "master": self.i18n.t("skill_level.master"),
+                "custom": self.i18n.t("skill_level.custom")
+            }
+            level_name = level_names.get(level_key, level_key)
+            self.skill_level_label.setText(self.i18n.t("skill_level.current_label", level=level_name))

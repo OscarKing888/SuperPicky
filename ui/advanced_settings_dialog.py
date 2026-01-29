@@ -333,3 +333,16 @@ class AdvancedSettingsDialog(QDialog):
                 self.i18n.t("advanced_settings.save_error_msg"),
                 ok_text=self.i18n.t("buttons.close")
             )
+
+    @Slot(str, int, float)
+    def _on_skill_level_changed(self, level_key: str, sharpness: int, aesthetics: float):
+        """处理水平变化"""
+        # 保存到配置
+        self.config.set_skill_level(level_key)
+        self.config.save()
+        
+        # 如果有父窗口（主窗口），更新其滑块和标签
+        if self.parent() and hasattr(self.parent(), '_apply_skill_level_thresholds'):
+            self.parent()._apply_skill_level_thresholds(level_key)
+        
+        print(f"✅ 已切换摄影水平: {level_key} (锐度={sharpness}, 美学={aesthetics})")
