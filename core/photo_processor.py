@@ -1459,7 +1459,7 @@ class PhotoProcessor:
         manifest = {
             "version": "2.0",  # V4.0: 更新版本号
             "created": datetime.now().isoformat(),
-            "app_version": "V4.0.2",
+            "app_version": "V4.0.3",
             "original_dir": self.dir_path,
             "folder_structure": get_rating_folder_names(),
             "bird_species_dirs": True,  # V4.0: 标记使用了鸟种分目录
