@@ -534,7 +534,7 @@
     "normalization": "Sharpness normalization method, affects fairness between large and small birds"
   },
   "help": {
-    "welcome_title": "Welcome to SuperPicky V4.0.2 - AI-Powered Bird Photo Selector",
+    "welcome_title": "Welcome to SuperPicky V4.0.3 - AI-Powered Bird Photo Selector",
     "usage_steps_title": "Usage Steps:",
     "step1": "Click 'Browse' to select photo directory (supports RAW/JPG)",
     "step2": "Adjust 3-star and pick flag parameters (optional, defaults recommended)",
