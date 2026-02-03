@@ -660,7 +660,7 @@
   "about": {
     "window_title": "About James",
     "subtitle": "AI Photo Selector",
-    "content": "James Yu (詹姆斯·于震)\nAustralian-Chinese Professional Photographer, Author of \"James' Landscape Photography Notes\" Trilogy\n\nContact\njames@jamesphotography.com.au\nWeChat: jamesyz001 XiaoHongShu(小红书): 4916440495\n\nBird Eye Detection Model: Jordan Yu\nWindows Version: 小平, Lyapunov\n\nOpen Source Models\nYOLO11 - Bird Detection (AGPL-3.0)\nTOPIQ - Aesthetic Scoring by Chaofeng Chen et al. (IEEE TIP 2024)\n  github.com/chaofengc/IQA-PyTorch\n  License: CC BY-NC-SA 4.0\n\n© 2024-2025 James Yu"
+    "content": "James Yu\nAustralian-Chinese Professional Photographer, Author of \"James' Landscape Photography Notes\" Trilogy\n\nContact\njames@jamesphotography.com.au\nhttps://www.facebook.com/jameszhenyu/\n\nBird Eye Detection Model: Jordan Yu\nWindows Version: Xiaoping, Lyapunov\n\nOpen Source Models\nYOLO11 - Bird Detection (AGPL-3.0)\nTOPIQ - Aesthetic Scoring by Chaofeng Chen et al. (IEEE TIP 2024)\n  github.com/chaofengc/IQA-PyTorch\n  License: CC BY-NC-SA 4.0\n\n© 2024-2025 James Yu"
   },
   "birdid": {
     "title": "Bird ID",

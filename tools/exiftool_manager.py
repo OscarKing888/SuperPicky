@@ -463,6 +463,8 @@ class ExifToolManager:
             # 只有当原文件存在时才删除临时文件，防止数据丢失
             files_to_clean = [item['file'] for item in files_metadata]
             self.cleanup_temp_files(files_to_clean)
+        
+        return stats
 
     def cleanup_temp_files(self, file_paths: List[str]):
         """
@@ -481,8 +483,6 @@ class ExifToolManager:
                         print(f"⚠️ Failed to clean temp file: {tmp_path} - {e}")
                 else:
                     print(f"⚠️ Original file missing, keeping temp file: {tmp_path}")
-
-        return stats
     
     def _create_xmp_sidecars_for_raf(self, files_metadata: List[Dict[str, any]]):
         """
