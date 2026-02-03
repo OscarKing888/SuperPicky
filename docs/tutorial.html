@@ -47,7 +47,7 @@
             <p class="tutorial-intro">
                 <span class="lang-cn">本教程将带您一步步了解如何使用慧眼选鸟进行智能选片，即使您是电脑新手也能轻松上手。</span>
                 <span class="lang-en">This tutorial will guide you step by step through using SuperPicky for intelligent
-                    photo selection, even if you're new to computers.</span>
+                    photo culling, even if you're new to computers.</span>
             </p>
         </div>
     </section>
@@ -259,7 +259,7 @@
                             </li>
                             <li>
                                 <span class="lang-cn"><strong>飞鸟</strong>：开启后检测飞行姿态，飞鸟照片会打绿色标签</span>
-                                <span class="lang-en"><strong>Flying</strong>: Detects flying poses, marks with green
+                                <span class="lang-en"><strong>BIF</strong>: Detects flying poses, marks with green
                                     label</span>
                             </li>
                             <li>
@@ -286,12 +286,12 @@
                     <div class="step-text">
                         <h3>
                             <span class="lang-cn">开始处理</span>
-                            <span class="lang-en">Start Processing</span>
+                            <span class="lang-en">Start Culling</span>
                         </h3>
                         <p>
                             <span class="lang-cn">点击右下角的<strong>「开始处理」</strong>按钮。AI
                                 将开始分析每一张照片，控制台会实时显示处理进度和每张照片的评分结果。</span>
-                            <span class="lang-en">Click the <strong>"Start Processing"</strong> button at the bottom
+                            <span class="lang-en">Click the <strong>"Start Culling"</strong> button at the bottom
                                 right. AI will analyze each photo, and the console shows real-time progress and rating
                                 results.</span>
                         </p>
@@ -334,7 +334,7 @@
                             </li>
                             <li>
                                 <span class="lang-cn">★ 1星普通：有鸟但未达标</span>
-                                <span class="lang-en">★ 1-star Normal: Bird detected but below threshold</span>
+                                <span class="lang-en">★ 1-star Average: Bird detected but below threshold</span>
                             </li>
                             <li>
                                 <span class="lang-cn">✗ 0星放弃：无鸟或质量差</span>
@@ -441,12 +441,13 @@
                                 文件中读取相机的对焦点位置（红色十字），并检测鸟头区域（蓝色圆圈）。如果对焦点落在鸟头区域内，就判定为<strong>「精焦」</strong>，照片会获得锐度加成。</span>
                             <span class="lang-en">AI reads the camera's focus point (red cross) from the RAW file and
                                 detects the bird's head area (blue circle). If the focus point falls within the head
-                                area, it's rated as <strong>"Best Focus"</strong> and gets a sharpness bonus.</span>
+                                it's rated as <strong>"Critical Focus"</strong> and gets a sharpness bonus.</span>
                         </p>
                         <div class="step-tip">
                             <span class="tip-icon">🔴</span>
                             <span class="lang-cn">精焦照片会被标记红色标签，方便在 Lightroom 中筛选。</span>
-                            <span class="lang-en">Best focus photos are marked with a red label for easy filtering in
+                            <span class="lang-en">Critical focus photos are marked with a red label for easy filtering
+                                in
                                 Lightroom.</span>
                         </div>
                     </div>
@@ -644,7 +645,7 @@
                             <li>
                                 <span class="lang-cn"><strong>国家/地区</strong> = 对焦状态（精焦/合焦/偏移/失焦）</span>
                                 <span class="lang-en"><strong>Country</strong> = Focus status
-                                    (Best/Good/Bad/Worst)</span>
+                                    (Critical/Good/Soft/Out-of-Focus)</span>
                             </li>
                         </ul>
                     </div>
@@ -676,11 +677,11 @@
                             </li>
                             <li>
                                 <span class="lang-cn">🟢 绿色标签 = 飞鸟</span>
-                                <span class="lang-en">🟢 Green label = Flying bird</span>
+                                <span class="lang-en">🟢 Green label = BIF</span>
                             </li>
                             <li>
                                 <span class="lang-cn">🔴 红色标签 = 精焦（对焦点在鸟头）</span>
-                                <span class="lang-en">🔴 Red label = Best focus (focus point on bird head)</span>
+                                <span class="lang-en">🔴 Red label = Critical focus (focus point on bird head)</span>
                             </li>
                         </ul>
                     </div>
