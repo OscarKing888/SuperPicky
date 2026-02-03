@@ -230,19 +230,25 @@ local function recognizeSinglePhoto(photo, apiUrl, topK, useYolo, useGps)
 end
 
 -- 保存识别结果到照片元数据
--- 写入 Title (鸟名) 和 Caption (学名 + 描述)
-local function saveRecognitionResult(photo, species, enName, scientificName, description)
+-- 写入 Title (鸟名) 和 Caption (描述)
+-- 根据 Lightroom 语言环境选择中文或英文
+local function saveRecognitionResult(photo, cnName, enName, scientificName, description)
     local catalog = import('LrApplication').activeCatalog()
 
-    -- 构建 Title 内容：中文名 (英文名)
-    local title = species .. " (" .. enName .. ")"
+    -- 检测 Lightroom 是否为中文环境
+    -- 通过检测 "Window" 菜单的翻译来判断
+    local windowLabel = LOC("$$$/AgApplication/Menu/Window=Window")
+    local isChinese = (windowLabel == "窗口" or windowLabel == "視窗")
+    
+    -- Title: 根据语言只显示单一语言的名称
+    local title = isChinese and cnName or enName
+    
+    -- Caption: 只在中文环境写入
+    local caption = isChinese and (description or "") or ""
 
-    -- 构建 Caption 内容：只写入简介
-    local caption = description or ""
-
-    catalog:withWriteAccessDo("保存鸟类识别结果", function()
+    catalog:withWriteAccessDo(LOC "$$$/SuperBirdID/Undo/SaveResult=Save Bird Recognition Result", function()
         photo:setRawMetadata("title", title)
-        -- 写入 Caption (学名 + 描述)
+        -- 写入 Caption (描述) - 仅中文环境
         if caption ~= "" then
             photo:setRawMetadata("caption", caption)
         end
@@ -560,13 +566,13 @@ function exportServiceProvider.processRenderedPhotos( functionContext, exportCon
             if selectedIndex and selectedIndex > 0 then
                 -- 用户选择了一个结果
                 local selectedBird = result.results[selectedIndex]
-                local species = selectedBird.display_name or selectedBird.cn_name or "Unknown"
+                local cnName = selectedBird.cn_name or selectedBird.display_name or "Unknown"
                 local enName = selectedBird.en_name or ""
                 local scientificName = selectedBird.scientific_name or ""
 
                 if writeExif then
-                    saveRecognitionResult(photo, species, enName, scientificName, selectedBird.description)
-                    myLogger:info( "已写入: " .. species .. " (" .. enName .. ")" )
+                    saveRecognitionResult(photo, cnName, enName, scientificName, selectedBird.description)
+                    myLogger:info( "已写入: " .. (cnName or enName) )
                 end
             elseif selectedIndex == 0 then
                 -- 用户选择跳过

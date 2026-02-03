@@ -398,13 +398,31 @@ class BirdIDDockWidget(QDockWidget):
         t = self.i18n.t
         country_list = {t("birdid.country_auto_gps"): None, t("birdid.country_global"): "GLOBAL"}
         
-        # 优先显示的国家代码（按顺序）- 只显示这些
-        priority_codes = ['AU', 'US', 'GB', 'CN', 'HK', 'TW', 'JP']
+        # 优先显示的国家代码（按地区排序，每个地区内按英文名排序）
+        # 大洋洲 → 美洲 → 亚洲 → 欧洲
+        priority_codes = [
+            # 大洋洲 (Oceania)
+            'AU', 'NZ',
+            # 美洲 (Americas)
+            'BR', 'CA', 'CR', 'US',
+            # 亚洲 (Asia)
+            'CN', 'HK', 'IN', 'ID', 'JP', 'MY', 'KR', 'TW',
+            # 欧洲 (Europe)
+            'FR', 'DE', 'IT', 'NL', 'ES', 'GB'
+        ]
         
         # 国家代码到 i18n 键的映射
         code_to_key = {
-            'AU': 'birdid.country_au', 'US': 'birdid.country_us', 'GB': 'birdid.country_gb', 'CN': 'birdid.country_cn',
-            'HK': 'birdid.country_hk', 'TW': 'birdid.country_tw', 'JP': 'birdid.country_jp'
+            # 大洋洲
+            'AU': 'birdid.country_au', 'NZ': 'birdid.country_nz',
+            # 美洲
+            'BR': 'birdid.country_br', 'CA': 'birdid.country_ca', 'CR': 'birdid.country_cr', 'US': 'birdid.country_us',
+            # 亚洲
+            'CN': 'birdid.country_cn', 'HK': 'birdid.country_hk', 'IN': 'birdid.country_in', 'ID': 'birdid.country_id',
+            'JP': 'birdid.country_jp', 'MY': 'birdid.country_my', 'KR': 'birdid.country_kr', 'TW': 'birdid.country_tw',
+            # 欧洲
+            'FR': 'birdid.country_fr', 'DE': 'birdid.country_de', 'IT': 'birdid.country_it',
+            'NL': 'birdid.country_nl', 'ES': 'birdid.country_es', 'GB': 'birdid.country_gb'
         }
         
         # 添加优先国家（只添加有离线数据或在 regions_data 中的）
