@@ -57,7 +57,7 @@
 
 ### macOS
 **Apple Silicon (M1/M2/M3/M4)**
-- [GitHub 下载](https://github.com/jamesphotography/SuperPicky/releases/download/v4.0.3/SuperPicky_v4.0.3.dmg) | [Google Drive](https://drive.google.com/file/d/1TcW4fZD7J5Aq0mixXNvCQZukyZIO2-e4/view?usp=sharing) | [百度网盘](https://pan.baidu.com/s/1DqtszhrSILBDe4aRAbLvYQ?pwd=c7f5) 提取码: c7f5
+- [GitHub 下载](https://github.com/jamesphotography/SuperPicky/releases/download/v4.0.3/SuperPicky_v4.0.3.dmg) | [Google Drive](https://drive.google.com/file/d/1yUP6UdvD2-BEQzDBae98Fy7bgZmv0Pez/view?usp=sharing) | [百度网盘](https://pan.baidu.com/s/1ZxaRTkjlN1GwOZKzAgHJFQ?pwd=pytn) 提取码: pytn
 
 **Intel (2020年前 Mac)**
 - [GitHub 下载](https://github.com/jamesphotography/SuperPicky/releases/download/v3.9.4/SuperPicky_v3.9.4_x64.dmg) | [Google Drive](https://drive.google.com/file/d/1ljvJU5f8wV9DNtQ3HxoXqlv-UyQc7vta/view?usp=sharing) | [百度网盘](https://pan.baidu.com/s/15D6S8CtzoKWpJVhDBhVfzQ?pwd=rpij) 提取码: rpij
