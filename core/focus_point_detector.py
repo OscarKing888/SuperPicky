@@ -1020,20 +1020,35 @@ def _get_exiftool_path() -> str:
         print(f"🔍 FocusPointDetector: 使用打包 exiftool: {path}")
         return path
     else:
-        # 开发环境：优先系统 exiftool，回退到项目目录
+        # 开发环境：V4.0.4 优先使用项目目录的 exiftool（确保支持最新相机如 Nikon Z6-3）
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        
+        # 优先检查平台特定目录
+        if is_windows:
+            project_exiftool = os.path.join(project_root, 'exiftools_win', exe_name)
+        else:
+            project_exiftool = os.path.join(project_root, 'exiftools_mac', exe_name)
+        
+        if os.path.exists(project_exiftool):
+            return project_exiftool
+        
+        # 回退：检查项目根目录
+        if is_windows:
+            win_path = os.path.join(project_root, 'exiftool.exe')
+            if os.path.exists(win_path):
+                return win_path
+        else:
+            mac_path = os.path.join(project_root, 'exiftool')
+            if os.path.exists(mac_path):
+                return mac_path
+        
+        # 最后回退：使用系统 exiftool
         import shutil
         system_exiftool = shutil.which('exiftool')
         if system_exiftool:
             return system_exiftool
         
-        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        # 优先检查带 .exe 的路径
-        if is_windows:
-            win_path = os.path.join(project_root, 'exiftool.exe')
-            if os.path.exists(win_path):
-                return win_path
-                
-        return os.path.join(project_root, 'exiftool')
+        return 'exiftool'  # 让系统报错
 
 
 def get_focus_detector() -> FocusPointDetector:

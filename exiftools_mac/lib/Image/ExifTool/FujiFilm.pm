@@ -876,7 +876,7 @@ my %faceCategories = (
     0x144a => { Name => 'WBRed',      Writable => 'int16u' },
     0x144b => { Name => 'WBGreen',    Writable => 'int16u' },
     0x144c => { Name => 'WBBlue',     Writable => 'int16u' },
-    
+
     0x144d => { Name => 'RollAngle',  Writable => 'rational64s' }, #forum14319
     0x3803 => { #forum10037
         Name => 'VideoRecordingMode',
@@ -1942,7 +1942,7 @@ sub ProcessRAF($$)
     $et->SetFileType() unless $$et{DOC_NUM};
     my $tbl = GetTagTable('Image::ExifTool::FujiFilm::RAFHeader');
     $et->ProcessDirectory({ DataPt => \$buff, DirName => 'RAFHeader', Base => $base }, $tbl);
-    
+
     # extract information from embedded JPEG
     my %dirInfo = (
         Parent => 'RAF',
@@ -2029,7 +2029,7 @@ FujiFilm maker notes in EXIF information, and to read/write FujiFilm RAW
 
 =head1 AUTHOR
 
-Copyright 2003-2025, Phil Harvey (philharvey66 at gmail.com)
+Copyright 2003-2026, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

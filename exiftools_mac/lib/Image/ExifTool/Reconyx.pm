@@ -420,7 +420,7 @@ my %convUnicode = (
     WRITABLE => 1,
     FIRST_ENTRY => 0,
     NOTES => 'Maker notes tags for Reconyx MicroFire cameras.',
-    0x10 => { Name => 'FileNumber',         Format => 'int16u' },  
+    0x10 => { Name => 'FileNumber',         Format => 'int16u' },
     0x12 => { Name => 'DirectoryNumber',    Format => 'int16u' },
     0x14 => {
         Name => 'DirectoryCreateDate',
@@ -695,7 +695,7 @@ my %convUnicode = (
     0x51 => { Name => 'UserLabel',          Format => 'string[51]' },
     0x84 => { Name => 'SerialNumber',       Format => 'string[15]' },
     0x93 => { Name => 'DirectoryNumber',    Format => 'int16u' },
-    0x95 => { Name => 'FileNumber',         Format => 'int16u' },  
+    0x95 => { Name => 'FileNumber',         Format => 'int16u' },
 );
 
 __END__
@@ -715,7 +715,7 @@ maker notes in images from Reconyx cameras.
 
 =head1 AUTHOR
 
-Copyright 2003-2025, Phil Harvey (philharvey66 at gmail.com)
+Copyright 2003-2026, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

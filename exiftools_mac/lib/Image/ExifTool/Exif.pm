@@ -57,7 +57,7 @@ use vars qw($VERSION $AUTOLOAD @formatSize @formatName %formatNumber %intFormat
 use Image::ExifTool qw(:DataAccess :Utils);
 use Image::ExifTool::MakerNotes;
 
-$VERSION = '4.60';
+$VERSION = '4.63';
 
 sub ProcessExif($$$);
 sub WriteExif($$$);
@@ -213,7 +213,7 @@ $formatName[129] = 'utf8';  # (Exif 3.0)
     10 => 'JBIG Color', #3
     99 => 'JPEG', #16
     262 => 'Kodak 262', #16
-    32766 => 'Next', #3
+    32766 => 'NeXt or Sony ARW Compressed 2', #3/Milos
     32767 => 'Sony ARW Compressed', #16
     32769 => 'Packed RAW', #PH (used by Epson, Nikon, Samsung)
     32770 => 'Samsung SRW Compressed', #PH
@@ -1431,6 +1431,7 @@ my %opcodeInfo = (
         WriteGroup => 'IFD0',
         Mandatory => 1,
         PrintConv => {
+          # 0 - written by Adobe DNG converter 18.1 when converting from CR3
             1 => 'Centered',
             2 => 'Co-sited',
         },
@@ -1598,6 +1599,7 @@ my %opcodeInfo = (
             2 => 'Sony Compressed RAW', # (lossy, ref IB)
             3 => 'Sony Lossless Compressed RAW', #IB
             4 => 'Sony Lossless Compressed RAW 2', #JR (ILCE-1)
+            6 => 'Sony Compressed RAW 2', # ILCE-7M5
         },
     },
     # 0x7001 - int16u[1] (in SubIFD of Sony ARW images) - values: 0,1
@@ -3590,6 +3592,7 @@ my %opcodeInfo = (
             Condition => '$$valPt =~ /^\[ae_dbg_info:/',
             MakerNotes => 1,
             Binary => 1,
+            NotIFD => 1,
             WriteGroup => 'IFD0', # (for Validate)
             SubDirectory => { TagTable => 'Image::ExifTool::DJI::Info' },
             Format => 'undef',
@@ -4696,7 +4699,7 @@ my %subSecConv = (
         PrintConv => 'sprintf("%.1f",$val)',
     },
     FocalLength35efl => { #26/PH
-        Description => 'Focal Length',
+        Description => 'Focal Length 35mm Equiv',
         Notes => 'this value may be incorrect if the image has been resized',
         Groups => { 2 => 'Camera' },
         Require => {
@@ -6191,10 +6194,15 @@ sub ProcessExif($$$)
     my $isExif = ($tagTablePtr eq \%Image::ExifTool::Exif::Main);
 
     # warn for incorrect maker notes in CR3 files
-    if ($$dirInfo{DirName} eq 'MakerNotes' and $$et{FileType} eq 'CR3' and
-        $$dirInfo{Parent} and $$dirInfo{Parent} eq 'ExifIFD')
-    {
-        $et->Warn("MakerNotes shouldn't exist ExifIFD of CR3 image", 1);
+    if ($dirName eq 'MakerNotes') {
+        if ($$et{FileType} eq 'CR3' and $$dirInfo{Parent} and $$dirInfo{Parent} eq 'ExifIFD') {
+            $et->Warn("MakerNotes shouldn't exist ExifIFD of CR3 image", 1);
+        }
+        if ($$dirInfo{TagInfo} and $$dirInfo{TagInfo}{MakerNotes} and
+            $$et{ExifByteOrder} and $$et{ExifByteOrder} ne GetByteOrder())
+        {
+            $et->FoundTag(MakerNoteByteOrder => GetByteOrder());
+        }
     }
     # set flag to calculate image data hash if requested
     $doHash = 1 if $$et{ImageDataHash} and (($$et{FILE_TYPE} eq 'TIFF' and not $base and not $inMakerNotes) or
@@ -6281,7 +6289,7 @@ sub ProcessExif($$$)
         $dirSize = 2 + 12 * $numEntries;
         $dirEnd = $dirStart + $dirSize;
     }
-    $verbose > 0 and $et->VerboseDir($dirName, $numEntries);
+    $verbose > 0 and $et->VerboseDir($dirName, $numEntries, undef, GetByteOrder());
     my $bytesFromEnd = $dataLen - $dirEnd;
     if ($bytesFromEnd < 4) {
         unless ($bytesFromEnd==2 or $bytesFromEnd==0) {
@@ -7149,7 +7157,7 @@ EXIF and TIFF meta information.
 
 =head1 AUTHOR
 
-Copyright 2003-2025, Phil Harvey (philharvey66 at gmail.com)
+Copyright 2003-2026, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

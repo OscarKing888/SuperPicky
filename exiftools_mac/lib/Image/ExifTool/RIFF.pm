@@ -30,7 +30,7 @@ use strict;
 use vars qw($VERSION $AUTOLOAD);
 use Image::ExifTool qw(:DataAccess :Utils);
 
-$VERSION = '1.72';
+$VERSION = '1.73';
 
 sub ConvertTimecode($);
 sub ProcessSGLT($$$);
@@ -391,7 +391,7 @@ my %code2charset = (
     smpl => { #16
         Name => 'Sampler',
         SubDirectory => { TagTable => 'Image::ExifTool::RIFF::Sampler' },
-    },        
+    },
     inst => { #16
         Name => 'Instrument',
         SubDirectory => { TagTable => 'Image::ExifTool::RIFF::Instrument' },
@@ -546,11 +546,11 @@ my %code2charset = (
    'id3 ' => {
         Name => 'ID3',
         SubDirectory => { TagTable => 'Image::ExifTool::ID3::Main' },
-    },        
+    },
    'ID3 ' => { # (NC)
         Name => 'ID3-2',
         SubDirectory => { TagTable => 'Image::ExifTool::ID3::Main' },
-    },        
+    },
 #
 # WebP-specific tags
 #
@@ -851,6 +851,7 @@ my %code2charset = (
         Name => 'DateCreated',
         Groups => { 2 => 'Time' },
         ValueConv => '$_=$val; s/-/:/g; $_',
+        PrintConv => '$self->ConvertDateTime($val)',
     },
     ICRP => 'Cropped',
     IDIM => 'Dimensions',
@@ -2235,7 +2236,7 @@ including AVI videos, WAV audio files and WEBP images.
 
 =head1 AUTHOR
 
-Copyright 2003-2025, Phil Harvey (philharvey66 at gmail.com)
+Copyright 2003-2026, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.
