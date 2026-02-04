@@ -487,6 +487,16 @@ header {
     color: var(--bg-void);
 }
 
+.badge-focus {
+    background: #ef4444;
+    color: white;
+}
+
+.badge-burst {
+    background: #8b5cf6;
+    color: white;
+}
+
 /* === Scoring Logic Section === */
 .logic-section {
     padding: var(--space-2xl) 0;
