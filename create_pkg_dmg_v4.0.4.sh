@@ -10,7 +10,7 @@ set -e  # 遇到错误立即退出
 # ============================================
 # 配置参数
 # ============================================
-VERSION="4.0.3"
+VERSION="4.0.4"
 APP_NAME="SuperPicky"
 APP_NAME_CN="慧眼选鸟"
 BUNDLE_ID="com.jamesphotography.superpicky"
@@ -463,7 +463,7 @@ cat > welcome.html << 'WELCOME_EOF'
 </head>
 <body>
     <h1>Welcome to SuperPicky</h1>
-    <p class="version">Version 4.0.3</p>
+    <p class="version">Version 4.0.4</p>
 
     <p>This installer will install <strong>SuperPicky</strong> and its <strong>Lightroom Plugin</strong> on your computer.</p>
 
@@ -713,7 +713,7 @@ Lightroom Classic, please follow these steps to install manually:
     Make sure the "Bird ID API" toggle is enabled in the main app
 
 ================================================================================
-版本 Version: 4.0.3
+版本 Version: 4.0.4
 © 2026 James Zhen Yu
 ================================================================================
 PLUGIN_README_EOF

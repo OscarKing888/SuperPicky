@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 SuperPicky - PySide6 版本入口点
-Version: 3.9.3 - Focus Status Fix
+Version: 4.0.4 - Burst Logic Optimization
 """
 
 import sys
@@ -44,7 +44,7 @@ def main():
     
     # 设置应用属性
     app.setApplicationName("SuperPicky")
-    app.setApplicationDisplayName("慧眼选鸟v4.0.3 (e6a3d69)")
+    app.setApplicationDisplayName("慧眼选鸟v4.0.4 (679a6abf)")
     app.setOrganizationName("JamesPhotography")
     app.setOrganizationDomain("jamesphotography.com.au")
     
