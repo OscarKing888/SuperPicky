@@ -1250,7 +1250,10 @@ class PhotoProcessor:
                     }]
                     exiftool_mgr.batch_set_metadata(single_batch)
                     # RAW+JPEG 时也写入当前 JPEG，便于单独查看 JPEG 时也有星级/题注（DNG/ARW/NEF 等同理）
-                    if target_file_path != filepath and os.path.exists(filepath):
+                    # V4.0.5: 跳过临时预览文件 (tmp_*.jpg)，避免无用写入
+                    filepath_basename = os.path.basename(filepath)
+                    is_temp_file = filepath_basename.startswith('tmp_') or filepath_basename.startswith('tmp.')
+                    if target_file_path != filepath and os.path.exists(filepath) and not is_temp_file:
                         jpeg_batch = [{
                             'file': filepath,
                             'rating': rating_value if rating_value >= 0 else 0,
