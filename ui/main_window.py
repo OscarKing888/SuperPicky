@@ -199,29 +199,28 @@ class WorkerThread(threading.Thread):
                     # 只从文件读取国家/区域配置，auto_identify 从 ui_settings 读取
                     birdid_use_ebird = birdid_settings.get('use_ebird', True)
                     
-                    # 解析国家代码
-                    selected_country = birdid_settings.get('selected_country', '自动检测 (GPS)')
-                    if selected_country and selected_country != '自动检测 (GPS)':
-                        # 从 "澳大利亚 (AU)" 格式中提取代码
-                        match = re.search(r'\(([A-Z]{2,3})\)', selected_country)
-                        if match:
-                            birdid_country_code = match.group(1)
-                        else:
-                            # 没有括号，尝试从名称映射
-                            country_map = {
-                                '澳大利亚': 'AU', '中国': 'CN', '美国': 'US',
-                                '日本': 'JP', '英国': 'GB', '新西兰': 'NZ',
-                                '加拿大': 'CA', '印度': 'IN', '德国': 'DE',
-                            }
-                            birdid_country_code = country_map.get(selected_country.strip())
+                    # V4.0.4: 直接读取 country_code（新格式）
+                    birdid_country_code = birdid_settings.get('country_code')
                     
-                    # 解析区域代码
-                    selected_region = birdid_settings.get('selected_region', '整个国家')
-                    if selected_region and selected_region != '整个国家':
-                        # 从 "Queensland (AU-QLD)" 格式中提取代码
-                        match = re.search(r'\(([A-Z]{2}-[A-Z0-9]+)\)', selected_region)
-                        if match:
-                            birdid_region_code = match.group(1)
+                    # 兼容旧格式：如果没有 country_code，尝试从 selected_country 解析
+                    if not birdid_country_code:
+                        selected_country = birdid_settings.get('selected_country', '自动检测 (GPS)')
+                        if selected_country and selected_country != '自动检测 (GPS)':
+                            # 从 "澳大利亚 (AU)" 格式中提取代码
+                            match = re.search(r'\(([A-Z]{2,3})\)', selected_country)
+                            if match:
+                                birdid_country_code = match.group(1)
+                    
+                    # V4.0.4: 直接读取 region_code（新格式）
+                    birdid_region_code = birdid_settings.get('region_code')
+                    
+                    # 兼容旧格式：如果没有 region_code，尝试从 selected_region 解析
+                    if not birdid_region_code:
+                        selected_region = birdid_settings.get('selected_region', '整个国家')
+                        if selected_region and selected_region != '整个国家':
+                            match = re.search(r'\(([A-Z]{2}-[A-Z0-9]+)\)', selected_region)
+                            if match:
+                                birdid_region_code = match.group(1)
             print(f"[DEBUG] BirdID 设置读取: auto_identify={birdid_auto_identify}, country={birdid_country_code}, region={birdid_region_code}, confidence={birdid_confidence_threshold}%")
         except Exception as e:
             print(f"[DEBUG] BirdID 设置读取失败: {e}")

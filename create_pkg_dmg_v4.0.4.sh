@@ -1,9 +1,9 @@
 #!/bin/bash
-# SuperPicky V4.0.0 - PKG + DMG 完整打包脚本
+# SuperPicky V4.0.4 - PKG + DMG 完整打包脚本
 # 包含: PyInstaller打包 → PKG组件 → Distribution PKG → DMG → 签名公证
 # 特色: 自动安装 Lightroom 插件
 # 作者: James Zhen Yu
-# 日期: 2026-01-18
+# 日期: 2026-02-08
 
 set -e  # 遇到错误立即退出
 
@@ -56,8 +56,9 @@ log_success "清理完成"
 # ============================================
 log_step "步骤 2/8: PyInstaller 打包应用"
 
-log_info "激活虚拟环境..."
-source .venv/bin/activate
+log_info "激活 Conda 环境..."
+source /usr/local/Caskroom/miniconda/base/etc/profile.d/conda.sh
+conda activate superpicky312
 
 log_info "开始 PyInstaller 打包..."
 pyinstaller SuperPicky.spec --clean --noconfirm
@@ -469,9 +470,10 @@ cat > welcome.html << 'WELCOME_EOF'
 
     <h2>What's New in V4.0.4 <span class="new-badge">NEW</span></h2>
     <ul>
-        <li><span class="highlight">Skill Level Presets</span> - Beginner/Intermediate/Master modes with adaptive culling thresholds</li>
-        <li><span class="highlight">Bird Species ID</span> - AI-powered bird identification with metadata embedding</li>
-        <li><span class="highlight">Lightroom Plugin</span> - Identify bird species directly within Lightroom</li>
+        <li><span class="highlight">⚙️ Skill Level Presets</span> - Beginner/Intermediate/Master modes with adaptive culling thresholds</li>
+        <li><span class="highlight">🦜 Bird Species ID</span> - AI-powered bird identification with metadata embedding</li>
+        <li><span class="highlight">📷 Lightroom Plugin</span> - Identify bird species directly within Lightroom</li>
+        <li><span class="highlight">🐛 Bug Fixes</span> - Improved stability on Intel Macs and burst detection fixes</li>
     </ul>
 
     <h3>System Requirements</h3>
@@ -529,7 +531,7 @@ cat > conclusion.html << 'CONCLUSION_EOF'
     </style>
 </head>
 <body>
-    <h1>Installation Complete</h1>
+    <h1>✓ Installation Complete</h1>
 
     <div class="success">
         <strong>SuperPicky V4.0.4</strong> has been successfully installed!
@@ -537,8 +539,8 @@ cat > conclusion.html << 'CONCLUSION_EOF'
 
     <h2>Installed Components</h2>
     <div class="info-box">
-        <p><strong>Main Application:</strong> /Applications/SuperPicky.app</p>
-        <p><strong>Lightroom Plugin:</strong> ~/Library/Application Support/Adobe/Lightroom/Modules/</p>
+        <p><strong>📍 Main Application:</strong> /Applications/SuperPicky.app</p>
+        <p><strong>📍 Lightroom Plugin:</strong> ~/Library/Application Support/Adobe/Lightroom/Modules/</p>
     </div>
 
     <h2>Getting Started</h2>
@@ -556,7 +558,7 @@ cat > conclusion.html << 'CONCLUSION_EOF'
     </div>
 
     <div class="warning">
-        <p><strong>First-Time Usage Notes:</strong></p>
+        <p><strong>⚠️ First-Time Usage Notes:</strong></p>
         <ul>
             <li>First launch may take 10-30 seconds to load AI models</li>
             <li>The main app must be running before using the Lightroom plugin</li>
@@ -565,7 +567,7 @@ cat > conclusion.html << 'CONCLUSION_EOF'
     </div>
 
     <p style="margin-top: 30px; font-size: 0.9em;">
-        Thank you for using SuperPicky! For support, visit <a href="https://superpicky.jamesphotography.com.au/">GitHub</a>
+        Thank you for using SuperPicky! For support, visit <a href="https://github.com/jamesphotography/SuperPicky">GitHub</a>
     </p>
 </body>
 </html>
@@ -642,10 +644,10 @@ cp -R "SuperBirdIDPlugin.lrplugin" "${TEMP_DMG_DIR}/"
 
 # 生成 PDF 安装指南
 log_info "生成 PDF 安装指南..."
-if [ -f "docs/安装指南_v4.0.4.html" ]; then
+if [ -f "docs/安装指南_v4.0.0.html" ]; then
     # 使用 cupsfilter 或 wkhtmltopdf 生成 PDF（如果可用）
     # 备选：直接复制 HTML，用户可用浏览器打印为 PDF
-    cp "docs/安装指南_v4.0.4.html" "${TEMP_DMG_DIR}/Installation Guide 安装指南.html"
+    cp "docs/安装指南_v4.0.0.html" "${TEMP_DMG_DIR}/Installation Guide 安装指南.html"
     log_info "  已复制 HTML 安装指南（可在浏览器中打印为 PDF）"
 fi
 
@@ -657,7 +659,7 @@ cat > "${TEMP_DMG_DIR}/Online Tutorial 在线教程.webloc" << 'WEBLOC_EOF'
 <plist version="1.0">
 <dict>
     <key>URL</key>
-    <string>https://superpicky.jamesphotography.com.au/tutorial.html</string>
+    <string>https://github.com/jamesphotography/SuperPicky</string>
 </dict>
 </plist>
 WEBLOC_EOF
@@ -757,7 +759,7 @@ Or copy the SuperBirdIDPlugin.lrplugin folder to:
 --------------------------------------------------------------------------------
 【问题反馈 / Feedback & Issues】
 --------------------------------------------------------------------------------
-https://superpicky.jamesphotography.com.au/
+https://github.com/jamesphotography/SuperPicky
 
 ================================================================================
 © 2026 James Zhen Yu
@@ -799,34 +801,10 @@ if echo "${NOTARIZE_OUTPUT}" | grep -q "status: Accepted"; then
     
     log_info "装订公证票据..."
     xcrun stapler staple "${DMG_PATH}"
-    xcrun stapler validate "${DMG_PATH}"
-    log_success "公证票据装订完成"
+    
+    log_success "✅ V4.0.4 打包发布全部完成！"
+    log_info "最终文件: ${DMG_PATH}"
 else
-    log_warning "公证未完成，请检查输出"
+    log_error "❌ 公证失败，请检查日志"
+    exit 1
 fi
-
-# ============================================
-# 清理和总结
-# ============================================
-log_step "清理临时文件"
-
-rm -rf pkg_root pkg_scripts
-rm -f "${APP_NAME}-component.pkg" distribution.xml welcome.html conclusion.html pkg_components.plist
-
-log_success "清理完成"
-
-# ============================================
-# 完成
-# ============================================
-echo ""
-echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${GREEN}🎉 SuperPicky V${VERSION} 打包完成！${NC}"
-echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo ""
-echo -e "📦 DMG 安装包: ${BLUE}dist/${DMG_NAME}${NC}"
-echo -e "📦 PKG 安装包: ${BLUE}${PKG_NAME}${NC}"
-echo ""
-echo -e "文件大小:"
-ls -lh "dist/${DMG_NAME}" "${PKG_NAME}" 2>/dev/null || true
-echo ""
-echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"

@@ -160,8 +160,8 @@ app = BUNDLE(
     info_plist={
         'CFBundleName': 'SuperPicky',
         'CFBundleDisplayName': 'SuperPicky',
-        'CFBundleVersion': '4.0.3',
-        'CFBundleShortVersionString': '4.0.3',
+        'CFBundleVersion': '4.0.4',
+        'CFBundleShortVersionString': '4.0.4',
         'NSHighResolutionCapable': True,
         'NSAppleEventsUsageDescription': '慧眼选鸟需要发送 AppleEvents 与其他应用通信。',
         'NSAppleScriptEnabled': False,

@@ -461,11 +461,26 @@ class BirdIDDockWidget(QDockWidget):
     
     def _save_settings(self):
         """保存设置"""
+        # V4.0.4: 同时保存 country_code，避免读取时需要硬编码映射
+        country_display = self.country_combo.currentText()
+        country_code = self.country_list.get(country_display)
+        
+        # 解析 region_code
+        region_display = self.region_combo.currentText()
+        region_code = None
+        if region_display and region_display != self.i18n.t('birdid.region_entire_country'):
+            import re
+            match = re.search(r'\(([A-Z]{2}-[A-Z0-9]+)\)', region_display)
+            if match:
+                region_code = match.group(1)
+        
         self.settings = {
             'use_ebird': self.ebird_checkbox.isChecked(),
             'auto_identify': self.auto_identify_checkbox.isChecked(),
-            'selected_country': self.country_combo.currentText(),
-            'selected_region': self.region_combo.currentText()
+            'selected_country': country_display,
+            'country_code': country_code,  # V4.0.4: 直接存储代码
+            'selected_region': region_display,
+            'region_code': region_code  # V4.0.4: 直接存储代码
         }
         try:
             settings_path = get_settings_path()

@@ -56,8 +56,9 @@ log_success "清理完成"
 # ============================================
 log_step "步骤 2/8: PyInstaller 打包应用"
 
-log_info "激活虚拟环境..."
-source .venv/bin/activate
+log_info "激活 Conda 环境..."
+source /usr/local/Caskroom/miniconda/base/etc/profile.d/conda.sh
+conda activate superpicky312
 
 log_info "开始 PyInstaller 打包..."
 pyinstaller SuperPicky.spec --clean --noconfirm
