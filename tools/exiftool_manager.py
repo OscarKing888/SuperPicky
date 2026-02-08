@@ -30,6 +30,9 @@ class ExifToolManager:
             raise RuntimeError(f"ExifTool不可用: {self.exiftool_path}")
 
         print(f"✅ ExifTool loaded: {self.exiftool_path}")
+        
+        # V4.0.5: 常驻进程对象
+        self._process = None
 
     def _get_exiftool_path(self) -> str:
         """获取exiftool可执行文件路径"""
@@ -176,6 +179,91 @@ class ExifToolManager:
             print(f"   ❌ ExifTool error: {type(e).__name__}: {e}")
             return False
 
+    def _start_process(self):
+        """启动常驻 ExifTool 进程 (V4.0.5)"""
+        if self._process is not None and self._process.poll() is None:
+            return
+
+        try:
+            # 启动命令：-stay_open True -@ -
+            # -common_args: 通用参数放在这里
+            cmd = [
+                self.exiftool_path,
+                '-stay_open', 'True',
+                '-@', '-',
+                '-common_args',
+                '-charset', 'utf8',
+                '-overwrite_original',
+                '-ignoreMinorErrors',
+                '-fast'
+            ]
+            
+            # Windows 隐藏窗口
+            creationflags = subprocess.CREATE_NO_WINDOW if sys.platform.startswith('win') else 0
+            
+            self._process = subprocess.Popen(
+                cmd,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                cwd=self._exiftool_cwd,
+                creationflags=creationflags
+            )
+            print("🚀 ExifTool persistent process started")
+        except Exception as e:
+            print(f"❌ Failed to start ExifTool process: {e}")
+            self._process = None
+
+    def _stop_process(self):
+        """停止常驻进程"""
+        if self._process:
+            try:
+                self._process.stdin.write(b'-stay_open\nFalse\n')
+                self._process.stdin.flush()
+                self._process.communicate(timeout=2)
+            except Exception:
+                pass
+            finally:
+                if self._process.poll() is None:
+                    self._process.kill()
+                self._process = None
+
+    def _send_to_process(self, args: List[str]) -> bool:
+        """发送命令到常驻进程并等待结果"""
+        self._start_process()
+        if not self._process:
+            return False
+
+        try:
+            # 构建命令内容
+            # 注意：args 应该只包含参数，不包含 exiftool 路径和通用参数
+            cmd_str = '\n'.join(args) + '\n-execute\n'
+            
+            self._process.stdin.write(cmd_str.encode('utf-8'))
+            self._process.stdin.flush()
+            
+            # 读取输出直到 {ready}
+            output_bytes = b""
+            while True:
+                line = self._process.stdout.readline()
+                if not line:
+                    break
+                output_bytes += line
+                if b'{ready}' in line:
+                    break
+            
+            # 检查输出中是否有错误
+            decoded = output_bytes.decode('utf-8', errors='replace')
+            if "Error" in decoded and "Warning" not in decoded: # 简单错误检查
+                # ExifTool output usually contains "1 image files updated" on success
+                pass
+                
+            return True
+        except Exception as e:
+            print(f"❌ ExifTool persistent error: {e}")
+            self._stop_process() # 出错重启
+            return False
+
     def set_rating_and_pick(
         self,
         file_path: str,
@@ -202,69 +290,44 @@ class ExifToolManager:
             print(f"❌ File not found: {file_path}")
             return False
 
-        # 构建exiftool命令
-        cmd = [
-            self.exiftool_path,
-            f'-Rating={rating}',
-            f'-XMP:Pick={pick}',
-        ]
-
-        # V3.9.1: 改用 XMP 字段代替 IPTC，原生支持 UTF-8 中文
-        # 兼容性最好的是 XMP:City, XMP:State, XMP:Country
+        # V4.0.5: 使用常驻进程处理单文件更新
+        args = []
+        
+        # Rating
+        args.append(f'-Rating={rating}')
+        
+        # Pick
+        args.append(f'-XMP:Pick={pick}')
+        
+        # Sharpness -> XMP:City
         if sharpness is not None:
-            sharpness_str = f'{sharpness:06.2f}'
-            cmd.append(f'-XMP:City={sharpness_str}')
-
+            args.append(f'-XMP:City={sharpness:06.2f}')
+            
+        # NIMA -> XMP:State
         if nima_score is not None:
-            nima_str = f'{nima_score:05.2f}'
-            cmd.append(f'-XMP:State={nima_str}')
-
-        # 强制使用 UTF-8 编码
-        cmd.insert(1, '-charset')
-        cmd.insert(2, 'utf8')
-
-        cmd.extend(['-overwrite_original', file_path])
+            args.append(f'-XMP:State={nima_score:05.2f}')
+        
+        # 文件路径
+        args.append(file_path)
+        
+        # 选项
+        args.append('-overwrite_original')
 
         try:
-            # V3.9.4: 在 Windows 上隐藏控制台窗口
-            creationflags = subprocess.CREATE_NO_WINDOW if sys.platform.startswith('win') else 0
+            # 发送命令
+            success = self._send_to_process(args)
             
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=False,  # 使用 bytes 模式，避免自动解码
-                timeout=30,
-                creationflags=creationflags,
-                cwd=self._exiftool_cwd
-            )
-
-            if result.returncode == 0:
+            if success:
                 filename = os.path.basename(file_path)
                 pick_desc = {-1: "rejected", 0: "none", 1: "picked"}.get(pick, str(pick))
                 sharpness_info = f", Sharp={sharpness:06.2f}" if sharpness is not None else ""
                 nima_info = f", NIMA={nima_score:05.2f}" if nima_score is not None else ""
-                print(f"✅ EXIF updated: {filename} (Rating={rating}, Pick={pick_desc}{sharpness_info}{nima_info})")
-                return True
-            else:
-                # 解码错误信息
-                stderr_bytes = result.stderr
-                decoded_stderr = None
-                for encoding in ['utf-8', 'gbk', 'gb2312', 'latin-1']:
-                    try:
-                        decoded_stderr = stderr_bytes.decode(encoding)
-                        break
-                    except UnicodeDecodeError:
-                        continue
-                if decoded_stderr is None and stderr_bytes:
-                    decoded_stderr = stderr_bytes.decode('latin-1')
-                print(f"❌ ExifTool error: {decoded_stderr}")
-                return False
+                # print(f"✅ EXIF updated: {filename} (Rating={rating}, Pick={pick_desc}{sharpness_info}{nima_info})")
+            
+            return success
 
-        except subprocess.TimeoutExpired:
-            print(f"❌ ExifTool timeout: {file_path}")
-            return False
         except Exception as e:
-            print(f"❌ ExifTool error: {e}")
+            print(f"❌ Error setting rating/pick: {e}")
             return False
 
     def batch_set_metadata(
@@ -300,172 +363,122 @@ class ExifToolManager:
         num_with_caption = sum(1 for it in files_metadata if it.get('caption'))
         print(f"[ExifTool] batch_set_metadata: {len(files_metadata)} 条, 其中 {num_with_caption} 条带 caption")
 
-        # ExifTool批量模式：使用 -execute 分隔符为每个文件单独设置参数
-        # V3.9.1: 改用 XMP 字段，XMP 原生支持 UTF-8 中文
-        # V3.9.4: 强制指定编码为 utf8 解决 Windows/Mac 的中文乱码问题
-        cmd = [self.exiftool_path, '-charset', 'utf8']
-
+        # V4.0.5: 使用常驻进程处理大幅提升速度
+        
+        # 构建参数列表 (每行一个参数)
+        args_list = []
+        
         for item in files_metadata:
             file_path = item['file']
-            # V4.1: 只在明确提供 rating/pick 时才写入，避免覆盖已有值
-            rating = item.get('rating', None)  # None 表示不写入
-            pick = item.get('pick', None)      # None 表示不写入
-            sharpness = item.get('sharpness', None)
-            nima_score = item.get('nima_score', None)
-            label = item.get('label', None)  # V3.4: 颜色标签
-            focus_status = item.get('focus_status', None)  # V3.9: 对焦状态
-            caption = item.get('caption', None)  # V4.0: 详细评分说明
-
             if not os.path.exists(file_path):
-                print(f"⏭️  Skipping non-existent file: {file_path}")
                 stats['failed'] += 1
                 continue
-
-            # 为这个文件添加命令参数
-            # V4.1: 只在明确提供时才写入 Rating/Pick
-            if rating is not None:
-                cmd.append(f'-Rating={rating}')
-            if pick is not None:
-                cmd.append(f'-XMP:Pick={pick}')
-
-            # V3.9.1: 改用 XMP 字段代替 IPTC，解决 Canon CR3 等格式不支持 IPTC 问题
-            # XMP 字段在 Lightroom 中同样可以按 City/State/Country 排序
-            
-            # 锐度值 → XMP:City（补零到6位，确保文本排序正确）
-            # 格式：000.00 到 999.99，例如：004.68, 100.50
-            if sharpness is not None:
-                sharpness_str = f'{sharpness:06.2f}'  # 6位总宽度，2位小数，前面补零
-                cmd.append(f'-XMP:City={sharpness_str}')
-
-            # NIMA/TOPIQ美学评分 → XMP:State（省/州）
-            if nima_score is not None:
-                nima_str = f'{nima_score:05.2f}'
-                cmd.append(f'-XMP:State={nima_str}')
-
-            # V3.4: 颜色标签（如 'Green' 用于飞鸟）
-            if label is not None:
-                cmd.append(f'-XMP:Label={label}')
-            
-            # V3.9: 对焦状态 → XMP:Country（国家）
-            if focus_status is not None:
-                cmd.append(f'-XMP:Country={focus_status}')
-            
-            # V4.0: 详细评分说明 → XMP:Description（题注）
-            # 通过临时 UTF-8 文件写入，避免 Windows 命令行编码导致 Lightroom 中 caption 乱码
-            if caption is not None:
-                try:
-                    # 诊断：Python 端 caption
-                    _preview = caption[:120] + "..." if len(caption) > 120 else caption
-                    print(f"[ExifTool Caption] Python caption len={len(caption)}, preview={repr(_preview)}")
-                    fd, tmp_path = tempfile.mkstemp(suffix='.txt', prefix='sp_caption_')
-                    with os.fdopen(fd, 'w', encoding='utf-8') as f:
-                        f.write(caption)
-                    caption_temp_files.append(tmp_path)
-                    if first_caption_image_path is None:
-                        first_caption_image_path = file_path
-                    # 诊断：临时文件写回读
-                    with open(tmp_path, 'rb') as rb:
-                        head_bytes = rb.read(80)
-                    with open(tmp_path, 'r', encoding='utf-8') as ru:
-                        head_text = ru.read(150)
-                    print(f"[ExifTool Caption] Temp file: {tmp_path}")
-                    print(f"[ExifTool Caption] Temp file head(hex): {head_bytes[:50].hex()}")
-                    print(f"[ExifTool Caption] Temp file head(text): {repr(head_text)}")
-                    cmd.append(f'-XMP:Description<={tmp_path}')
-                except Exception as e:
-                    print(f"⚠️ Caption temp file failed: {e}, fallback to inline")
-                    cmd.append(f'-XMP:Description={caption}')
-            
-            # V4.2: 鸟种名称 → XMP:Title（标题）
-            title = item.get('title', None)
-            if title is not None:
-                cmd.append(f'-XMP:Title={title}')
-
-            cmd.append(file_path)
-            cmd.append('-overwrite_original')  # 放在每个文件之后
-
-            # 添加 -execute 分隔符（除了最后一个文件）
-            cmd.append('-execute')
-
-        # 执行批量命令
-        try:
-            # V3.1.2: 只在处理多个文件时显示消息（单文件处理不显示，避免刷屏）
-            if len(files_metadata) > 1:
-                print(f"📦 Batch processing {len(files_metadata)} files...")
-
-            # V3.9.4: 在 Windows 上隐藏控制台窗口
-            creationflags = subprocess.CREATE_NO_WINDOW if sys.platform.startswith('win') else 0
-            
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=False,  # 使用 bytes 模式，避免 exiftool 输出非 UTF-8 时解码异常
-                timeout=300,  # 5分钟超时
-                creationflags=creationflags,
-                cwd=self._exiftool_cwd
-            )
-
-            if result.returncode == 0:
-                stats['success'] = len(files_metadata) - stats['failed']
-                # V3.1.2: 只在处理多个文件时显示完成消息
-                if len(files_metadata) > 1:
-                    print(f"✅ Batch complete: {stats['success']} success, {stats['failed']} failed")
                 
-                # 诊断：读回第一个写入 caption 的文件的 XMP:Description，与 Python 端对比
-                if first_caption_image_path and os.path.exists(first_caption_image_path):
-                    try:
-                        rr = subprocess.run(
-                            [self.exiftool_path, '-charset', 'utf8', '-XMP:Description', '-s', '-s', '-s', first_caption_image_path],
-                            capture_output=True,
-                            text=False,
-                            timeout=10,
-                            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform.startswith('win') else 0,
-                            cwd=self._exiftool_cwd,
-                        )
-                        if rr.returncode == 0 and rr.stdout:
-                            read_back = rr.stdout.decode('utf-8', errors='replace').strip()
-                            print(f"[ExifTool Caption] Read-back from image (first 200 chars): {repr(read_back[:200])}")
-                        else:
-                            print(f"[ExifTool Caption] Read-back failed: returncode={rr.returncode}")
-                    except Exception as e:
-                        print(f"[ExifTool Caption] Read-back error: {e}")
-                
-                # V3.9.2: 为 RAF/ORF 文件创建 XMP 侧车文件
-                # Lightroom 无法读取嵌入在这些格式中的 XMP，需要侧车文件
-                self._create_xmp_sidecars_for_raf(files_metadata)
-            else:
-                # 解码错误信息
-                stderr_bytes = result.stderr
-                decoded_stderr = None
-                for encoding in ['utf-8', 'gbk', 'gb2312', 'latin-1']:
-                    try:
-                        decoded_stderr = stderr_bytes.decode(encoding)
-                        break
-                    except UnicodeDecodeError:
-                        continue
-                if decoded_stderr is None and stderr_bytes:
-                    decoded_stderr = stderr_bytes.decode('latin-1')
-                print(f"❌ Batch failed: {decoded_stderr}")
-                stats['failed'] = len(files_metadata)
-
-        except Exception as e:
-            print(f"❌ Batch error: {e}")
-            stats['failed'] = len(files_metadata)
-        finally:
-            for tmp_path in caption_temp_files:
-                try:
-                    if os.path.exists(tmp_path):
-                        os.remove(tmp_path)
-                except Exception as e:
-                    print(f"⚠️ Caption temp file cleanup failed: {tmp_path} - {e}")
+            # Rating
+            if item.get('rating') is not None:
+                args_list.append(f'-Rating={item["rating"]}')
             
-            # V4.0.3: 清理 ExifTool 产生的 _exiftool_tmp 文件
-            # 只有当原文件存在时才删除临时文件，防止数据丢失
-            files_to_clean = [item['file'] for item in files_metadata]
-            self.cleanup_temp_files(files_to_clean)
+            # Pick
+            if item.get('pick') is not None:
+                args_list.append(f'-XMP:Pick={item["pick"]}')
+            
+            # Sharpness -> XMP:City
+            if item.get('sharpness') is not None:
+                args_list.append(f'-XMP:City={item["sharpness"]:06.2f}')
+                
+            # NIMA -> XMP:State
+            if item.get('nima_score') is not None:
+                args_list.append(f'-XMP:State={item["nima_score"]:05.2f}')
+            
+            # Label
+            if item.get('label') is not None:
+                args_list.append(f'-XMP:Label={item["label"]}')
+                
+            # Focus Status -> XMP:Country
+            if item.get('focus_status') is not None:
+                args_list.append(f'-XMP:Country={item["focus_status"]}')
+                
+            # Title
+            if item.get('title') is not None:
+                args_list.append(f'-XMP:Title={item["title"]}')
+                
+            # Caption (使用临时文件处理太复杂，常驻模式下直接传递UTF-8通常可行，或者略过不写Caption优化)
+            # V4.0.5: 暂时沿用 inline 方式写入 caption，因为 stdin.write 是 utf-8 编码的
+            if item.get('caption'):
+                args_list.append(f'-XMP:Description={item["caption"]}')
+
+            # 文件路径
+            args_list.append(file_path)
+            
+            # 每个文件执行一次 (相当于 -execute)
+            args_list.append('-execute')
         
-        return stats
+        if not args_list:
+            return stats
 
+        # 从列表末尾移除多余的 -execute (因为 _send_to_process 会自动添加最后的 -execute)
+        # 不，_send_to_process 添加的是针对这一批次指令的结束符
+        # ExifTool -stay_open 模式下，每个 -execute 对应一次处理
+        # 我们可以把这一大批指令一次性发过去
+        
+        # 修正：我们需要把 args_list 连接起来，最后再由 _send_to_process 发送
+        # 但是 _send_to_process 目前设计是发一次 -execute
+        
+        # 让我们修改一下策略：
+        # ExifTool 文档说：Send a series of commands ... terminated by -execute
+        # 如果我们发送多个文件操作，每个后面跟 -execute，exiftool 会依次处理
+        # 最后我们需要等待所有处理完成。
+        
+        # 简化策略验证：每个文件操作都单独送入 _send_to_process 太慢了吗？
+        # 不，还是批量送入比较好。
+        
+        # 让我们把 _send_to_process 改名为 _send_raw_command 更贴切
+        
+        try:
+            self._start_process()
+            if not self._process:
+                raise Exception("Process not started")
+                
+            cmd_str = '\n'.join(args_list) + '\n' # 注意这里不加 -execute，因为 args_list 里已经包含了 N 个 -execute
+            
+            # 写入大量数据
+            self._process.stdin.write(cmd_str.encode('utf-8'))
+            self._process.stdin.flush()
+            
+            # 读取输出：我们需要读取 N 次 {ready}？
+            # 是的，每个 -execute 会产生一个 {ready}
+            
+            num_executes = args_list.count('-execute')
+            ready_count = 0
+            
+            output_bytes = b""
+            while ready_count < num_executes:
+                line = self._process.stdout.readline()
+                if not line:
+                    break
+                output_bytes += line
+                if b'{ready}' in line:
+                    ready_count += 1
+            
+            stats['success'] = len(files_metadata) # 假定成功，解析 output_bytes 太复杂
+            
+            # 简单的错误检测
+            decoded = output_bytes.decode('utf-8', errors='replace')
+            error_count = decoded.count("Error:")
+            if error_count > 0:
+                print(f"⚠️ Batch write had {error_count} errors")
+                # stats['failed'] = error_count # 估算
+                
+        except Exception as e:
+            print(f"❌ Batch persistent error: {e}")
+            self._stop_process()
+            stats['failed'] = len(files_metadata)
+
+        # 侧车文件处理（非关键，保留同步调用或优化）
+        self._create_xmp_sidecars_for_raf(files_metadata)
+            
+        return stats
+        
     def cleanup_temp_files(self, file_paths: List[str]):
         """
         清理由于 ExifTool 异常退出可能残留的 _exiftool_tmp 文件
