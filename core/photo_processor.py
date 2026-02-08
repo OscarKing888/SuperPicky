@@ -452,8 +452,22 @@ class PhotoProcessor:
             # V4.0.4: 优化逻辑 - 如果连拍组中所有照片都在 0-1 星，则不合并（不创建 burst 目录）
             if highest_rating < 2:
                 continue
-                
-            highest_rating_dir = os.path.join(self.dir_path, get_rating_folder_name(highest_rating))
+            
+            highest_rating_folder = get_rating_folder_name(highest_rating)
+            highest_rating_dir = os.path.join(self.dir_path, highest_rating_folder)
+            
+            # V4.0.5: 查找连拍组中是否有鸟种识别，以便将 burst 目录放在鸟种子目录内
+            bird_species_name = None
+            for f in current_files:
+                prefix = f['prefix']
+                if prefix in self.file_bird_species:
+                    bird_info = self.file_bird_species[prefix]
+                    if self.i18n.current_lang.startswith('en'):
+                        bird_species_name = bird_info.get('en_name', '').replace(' ', '_')
+                    else:
+                        bird_species_name = bird_info.get('cn_name', '')
+                    if bird_species_name:
+                        break
             
             # 读取评分数据选择最佳
             for f in current_files:
@@ -465,9 +479,13 @@ class PhotoProcessor:
             # 按综合分数选最佳
             best_file = max(current_files, key=lambda x: x['sharpness'] * 0.5 + x['topiq'] * 0.5)
             
-            # 创建 burst 目录
-            burst_dir = os.path.join(highest_rating_dir, f"burst_{group_id:03d}")
+            # 创建 burst 目录（V4.0.5: 如果有鸟种识别，放在鸟种子目录内）
+            if bird_species_name and highest_rating >= 2:
+                burst_dir = os.path.join(highest_rating_dir, bird_species_name, f"burst_{group_id:03d}")
+            else:
+                burst_dir = os.path.join(highest_rating_dir, f"burst_{group_id:03d}")
             os.makedirs(burst_dir, exist_ok=True)
+
             
             # V4.0.4: 移动所有连拍照片到 burst 目录（包括最佳照片）
             for f in current_files:
