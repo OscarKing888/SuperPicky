@@ -657,7 +657,7 @@ cat > "${TEMP_DMG_DIR}/Online Tutorial 在线教程.webloc" << 'WEBLOC_EOF'
 <plist version="1.0">
 <dict>
     <key>URL</key>
-    <string>https://superpicky.jamesphotography.com.au/</string>
+    <string>https://superpicky.jamesphotography.com.au/tutorial.html</string>
 </dict>
 </plist>
 WEBLOC_EOF

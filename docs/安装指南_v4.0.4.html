@@ -1,32 +1,152 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
     <meta charset="utf-8">
     <title>慧眼选鸟 SuperPicky V4.0.4 安装与使用指南</title>
     <style>
-        @media print { body { -webkit-print-color-adjust: exact; } }
-        body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; max-width: 800px; margin: 0 auto; padding: 40px 20px; line-height: 1.8; color: #333; }
-        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
-        h2 { color: #34495e; margin-top: 30px; border-left: 4px solid #3498db; padding-left: 10px; }
-        h3 { color: #7f8c8d; }
-        .version { color: #7f8c8d; font-size: 0.9em; }
-        .highlight { background: #e8f4f8; padding: 2px 6px; border-radius: 4px; }
-        .warning { background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 15px 0; }
-        .info { background: #e8f4f8; border-left: 4px solid #3498db; padding: 15px; margin: 15px 0; }
-        .success { background: #d4edda; border-left: 4px solid #28a745; padding: 15px; margin: 15px 0; }
-        code { background: #f5f5f5; padding: 2px 6px; border-radius: 4px; font-family: Monaco, Consolas, monospace; }
-        pre { background: #f5f5f5; padding: 15px; border-radius: 8px; overflow-x: auto; }
-        ul, ol { padding-left: 25px; }
-        li { margin: 8px 0; }
-        .step { background: #f8f9fa; border-radius: 8px; padding: 20px; margin: 15px 0; }
-        .step-num { display: inline-block; width: 30px; height: 30px; background: #3498db; color: white; text-align: center; line-height: 30px; border-radius: 50%; margin-right: 10px; }
-        footer { margin-top: 50px; padding-top: 20px; border-top: 1px solid #eee; color: #7f8c8d; font-size: 0.9em; text-align: center; }
-        .new-badge { background: #e74c3c; color: white; padding: 2px 8px; border-radius: 10px; font-size: 0.8em; }
-        table { width: 100%; border-collapse: collapse; margin: 15px 0; }
-        th, td { padding: 12px; border: 1px solid #ddd; text-align: left; }
-        th { background: #f5f5f5; }
+        @media print {
+            body {
+                -webkit-print-color-adjust: exact;
+            }
+        }
+
+        body {
+            font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            line-height: 1.8;
+            color: #333;
+        }
+
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+
+        h2 {
+            color: #34495e;
+            margin-top: 30px;
+            border-left: 4px solid #3498db;
+            padding-left: 10px;
+        }
+
+        h3 {
+            color: #7f8c8d;
+        }
+
+        .version {
+            color: #7f8c8d;
+            font-size: 0.9em;
+        }
+
+        .highlight {
+            background: #e8f4f8;
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+
+        .warning {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 15px 0;
+        }
+
+        .info {
+            background: #e8f4f8;
+            border-left: 4px solid #3498db;
+            padding: 15px;
+            margin: 15px 0;
+        }
+
+        .success {
+            background: #d4edda;
+            border-left: 4px solid #28a745;
+            padding: 15px;
+            margin: 15px 0;
+        }
+
+        code {
+            background: #f5f5f5;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: Monaco, Consolas, monospace;
+        }
+
+        pre {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+        }
+
+        ul,
+        ol {
+            padding-left: 25px;
+        }
+
+        li {
+            margin: 8px 0;
+        }
+
+        .step {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 15px 0;
+        }
+
+        .step-num {
+            display: inline-block;
+            width: 30px;
+            height: 30px;
+            background: #3498db;
+            color: white;
+            text-align: center;
+            line-height: 30px;
+            border-radius: 50%;
+            margin-right: 10px;
+        }
+
+        footer {
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            color: #7f8c8d;
+            font-size: 0.9em;
+            text-align: center;
+        }
+
+        .new-badge {
+            background: #e74c3c;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 0.8em;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+        }
+
+        th,
+        td {
+            padding: 12px;
+            border: 1px solid #ddd;
+            text-align: left;
+        }
+
+        th {
+            background: #f5f5f5;
+        }
     </style>
 </head>
+
 <body>
     <h1>🦅 慧眼选鸟 SuperPicky</h1>
     <p class="version">版本 4.0.4 · 安装与使用指南</p>
@@ -34,10 +154,10 @@
     <h2>✨ V4.0.4 新功能</h2>
     <ul>
         <li><strong>⚙️ 摄影水平预设</strong> - 为初学者/进阶/大师提供不同的选片阈值</li>
-        <li><strong>📸 智能连拍管理</strong> - 自动识别连拍组，并将全组照片归档到单独目录</li>
+        <li><strong>📸 智能连拍合并</strong> - 自动将连拍组照片合并至该组最高评分照片的目录（少于4张不视为连拍）</li>
         <li><strong>🐦 AI 鸟种识别</strong> - 自动识别全球 11,000+ 鸟种，智能写入元数据</li>
-        <li><strong>📷 Lightroom 插件</strong> - 支持在 Lightroom 中直接识别鸟种</li>
-        <li><strong>📊 ISO 锐度归一化</strong> - 针对高感光度照片优化锐度评分算法</li>
+        <li><strong>📊 ISO 锐度归一化</strong> - 针对高 ISO 照片优化锐度评分算法</li>
+        <li><strong>⚡️ 性能优化</strong> - 优化 ExifTool 调用，大批量处理速度提升</li>
     </ul>
 
     <h2>💻 系统要求</h2>
@@ -265,8 +385,9 @@ python superpicky_cli.py info ~/Photos/Birds</code></pre>
 
     <footer>
         <p>慧眼选鸟 SuperPicky V4.0.4</p>
-        <p>© 2024-2026 James Zhen Yu · <a href="https://github.com/jamesphotography/SuperPicky">GitHub</a> · <a href="https://superpicky.jamesphotography.com.au/">官网</a></p>
+        <p>© 2024-2026 James Zhen Yu · <a href="https://github.com/jamesphotography/SuperPicky">GitHub</a> · <a
+                href="https://superpicky.jamesphotography.com.au/">官网</a></p>
     </footer>
 </body>
-</html>
 
+</html>

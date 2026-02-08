@@ -83,7 +83,7 @@
     "file_organization_msg": "After analysis, photos will be organized into folders:\n\n• 3-Star → 3star_excellent\n• 2-Star → 2star_good\n• 1-Star → 1star_average\n• Rejects/No Bird → 0star_reject\n{extra_notes}\nUse 'Reset' to restore original structure if needed.",
     "note_flight": "🟢 BIF (Flying) photos will get green label (Sharpness x1.2)",
     "note_birdid": "🐦 2-Star+ photos will auto-identify bird species and write to EXIF Title",
-    "note_burst": "📸 Burst photos will be grouped into burst_xxx/ subdirectories"
+    "note_burst": "📸 Smart Burst: Merged to highest-rated photo's folder (Min 4 photos)"
   },
   "messages": {
     "select_dir_first": "Please select a source folder first",
@@ -541,7 +541,7 @@
     "normalization": "Sharpness normalization method, affects fairness between large and small birds"
   },
   "help": {
-    "welcome_title": "Welcome to SuperPicky V4.0.3 - AI Bird Photo Culling Tool",
+    "welcome_title": "Welcome to SuperPicky V4.0.4 - AI Bird Photo Culling Tool",
     "usage_steps_title": "Usage Steps:",
     "step1": "Click 'Browse' to select source folder (supports RAW/JPG)",
     "step2": "Adjust 3-star and pick parameters (optional, defaults recommended)",
@@ -553,7 +553,7 @@
     "rule_flying": "🟢 Green Label = Bird in Flight (BIF) (Sharpness ×1.2 bonus)",
     "rule_focus": "🔴 Red Label = Critical Focus (focus on head) (Sharpness ×1.1 bonus)",
     "rule_exposure": "⚠️ Over/Under-exposed = Auto downgrade 1 star",
-    "burst_info": "📸 Burst photos are grouped in burst_xxx/ subdirectories",
+    "burst_info": "📸 Smart Burst: Merged to highest-rated photo's folder (Min 4 photos)",
     "rule_2_star": "⭐⭐ = Either sharpness or aesthetics meets threshold (2 stars)",
     "rule_1_star": "⭐ = Bird detected but below threshold (1 star)",
     "rule_0_star": "Unrated (Rejects) = Poor technical quality (confidence/aesthetics/sharpness below threshold or both eyes hidden)",
