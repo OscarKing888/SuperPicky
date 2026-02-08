@@ -182,6 +182,8 @@ class PhotoProcessor:
         """
         从 EXIF 读取 ISO 值
         
+        V4.0.5: 优化 - 复用 focus_detector 的常驻 exiftool 进程，避免每次启动新进程
+        
         Args:
             filepath: 图片文件路径（RAW 或 JPEG）
             
@@ -189,21 +191,11 @@ class PhotoProcessor:
             ISO 值（整数），读取失败返回 None
         """
         try:
-            # 使用 exiftool 读取 ISO
-            exiftool_mgr = get_exiftool_manager()
-            exiftool_path = exiftool_mgr.exiftool_path
-            
-            # 隐藏 Windows 控制台窗口
-            creationflags = subprocess.CREATE_NO_WINDOW if sys.platform.startswith('win') else 0
-            
-            result = subprocess.run(
-                [exiftool_path, '-ISO', '-s', '-s', '-s', filepath],
-                capture_output=True, text=True, timeout=3,
-                creationflags=creationflags
-            )
-            iso_str = result.stdout.strip()
-            if iso_str:
-                return int(iso_str)
+            # V4.0.5: 复用 focus_detector 的常驻 exiftool 进程
+            focus_detector = get_focus_detector()
+            exif_data = focus_detector._read_exif(filepath, ['ISO'])
+            if exif_data and 'ISO' in exif_data:
+                return int(exif_data['ISO'])
         except Exception:
             pass
         return None
