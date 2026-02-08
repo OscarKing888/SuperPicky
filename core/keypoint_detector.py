@@ -119,6 +119,15 @@ class KeypointDetector:
             self.model.load_state_dict(checkpoint)
             
         self.model.to(self.device)
+        
+        # V4.0.5: 启用 FP16 半精度推理，提速约 30-50%
+        # MPS 和 CUDA 都支持 FP16
+        if self.device.type in ('mps', 'cuda'):
+            self.model = self.model.half()
+            self._use_fp16 = True
+        else:
+            self._use_fp16 = False
+            
         self.model.eval()
     
     def detect(self, bird_crop: np.ndarray, box: Tuple[int, int, int, int] = None, 
@@ -143,7 +152,11 @@ class KeypointDetector:
         pil_crop = Image.fromarray(bird_crop)
         tensor = self.transform(pil_crop).unsqueeze(0).to(self.device)
         
-        with torch.no_grad():
+        # V4.0.5: 使用 FP16 和 inference_mode 优化推理
+        if hasattr(self, '_use_fp16') and self._use_fp16:
+            tensor = tensor.half()
+        
+        with torch.inference_mode():
             coords, vis = self.model(tensor)
         
         coords = coords[0].cpu().numpy()

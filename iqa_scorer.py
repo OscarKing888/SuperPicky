@@ -88,6 +88,14 @@ class IQAScorer:
                 self._topiq_model = CFANet()
                 load_topiq_weights(self._topiq_model, weight_path, self.device)
                 self._topiq_model.to(self.device)
+                
+                # V4.0.5: 启用 FP16 半精度推理，提速约 30-50%
+                if self.device.type in ('mps', 'cuda'):
+                    self._topiq_model = self._topiq_model.half()
+                    self._use_fp16 = True
+                else:
+                    self._use_fp16 = False
+                    
                 self._topiq_model.eval()
                 print("✅ TOPIQ 模型加载完成")
             except Exception as e:
@@ -100,6 +108,7 @@ class IQAScorer:
                     self._topiq_model.to(torch.device('cpu'))
                     self._topiq_model.eval()
                     self.device = torch.device('cpu')
+                    self._use_fp16 = False
                     print("✅ TOPIQ 模型加载完成 (CPU模式)")
                 except Exception as e2:
                     raise RuntimeError(f"TOPIQ 模型加载失败: {e2}")
@@ -144,9 +153,13 @@ class IQAScorer:
             # 转为张量
             transform = T.ToTensor()
             img_tensor = transform(img).unsqueeze(0).to(self.device)
+            
+            # V4.0.5: 使用 FP16 和 inference_mode 优化推理
+            if hasattr(self, '_use_fp16') and self._use_fp16:
+                img_tensor = img_tensor.half()
 
             # 计算评分
-            with torch.no_grad():
+            with torch.inference_mode():
                 score = topiq_model(img_tensor, return_mos=True)
 
             # 转换为 Python float
