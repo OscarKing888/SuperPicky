@@ -281,7 +281,7 @@ class ExifToolManager:
             except queue.Empty:
                 raise TimeoutError(f"ExifTool timeout ({timeout}s)")
 
-    def _send_to_process(self, args: List[str], timeout=10.0) -> bool:
+    def _send_to_process(self, args: List[str], timeout=3.0) -> bool:
         """发送命令到常驻进程并等待结果"""
         self._start_process()
         if not self._process:
@@ -494,7 +494,7 @@ class ExifToolManager:
             
             # 读取输出：我们需要读取 N 次 {ready}
             num_executes = args_list.count('-execute')
-            total_timeout = 120.0  # V4.0.5: 批量处理总超时 120秒
+            total_timeout = 10.0  # V4.0.5: 批量处理总超时 10秒
             start_time = time.time()
             
             for _ in range(num_executes):
