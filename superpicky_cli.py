@@ -141,12 +141,14 @@ def cmd_process(args):
     """处理照片目录"""
     from tools.cli_processor import CLIProcessor
     from core.photo_processor import ProcessingSettings
+    from advanced_config import get_advanced_config
     
     print_banner()
     print(t("cli.target_dir", directory=args.directory))
     print(t("cli.sharpness", value=args.sharpness))
     print(t("cli.aesthetics", value=args.nima_threshold))
     print(t("cli.detect_flight", value=t("cli.enabled") if args.flight else t("cli.disabled")))
+    print(t("cli.xmp", value=t("cli.enabled") if args.xmp else t("cli.disabled")))
     print(t("cli.detect_burst", value=t("cli.enabled") if args.burst else t("cli.disabled")))
     print(t("cli.organize_files", value=t("cli.enabled") if args.organize else t("cli.disabled")))
     print(f"⚙️  清理临时: {'是' if args.cleanup else '否'}")
@@ -162,6 +164,11 @@ def cmd_process(args):
         print(f"  └─ 置信度阈值: {getattr(args, 'birdid_threshold', 70.0)}%")
     print()
     
+    # 更新 ARW 写入策略
+    adv_config = get_advanced_config()
+    adv_config.config["arw_write_mode"] = "sidecar" if args.xmp else "embedded"
+    adv_config.save()
+
     # V4.0: 构建 ProcessingSettings（与 GUI 完全一致）
     settings = ProcessingSettings(
         ai_confidence=args.confidence,
@@ -317,6 +324,12 @@ def cmd_restar(args):
     print(f"⚙️  新锐度阈值: {args.sharpness}")
     print(f"⚙️  新美学阈值: {args.nima_threshold}")
     print(f"⚙️  连拍检测: {'是' if args.burst else '否'}")
+    print(t("cli.xmp", value=t("cli.enabled") if args.xmp else t("cli.disabled")))
+
+    # 更新 ARW 写入策略
+    adv_config = get_advanced_config()
+    adv_config.config["arw_write_mode"] = "sidecar" if args.xmp else "embedded"
+    adv_config.save()
     
     # V4.0: 先清理 burst 子目录（将文件移回评分目录）
     print("\n📂 步骤0: 清理连拍子目录...")
@@ -721,6 +734,11 @@ Examples:
                           help='连拍检测 (默认: 开启)')
     p_process.add_argument('--no-burst', action='store_false', dest='burst',
                           help='禁用连拍检测')
+    # XMP 侧车写入
+    p_process.add_argument('--xmp', action='store_true', dest='xmp',
+                          help='写入XMP侧车(不改RAW)')
+    p_process.add_argument('--no-xmp', action='store_false', dest='xmp',
+                          help='直接写入RAW(默认)')
     p_process.add_argument('--no-organize', action='store_false', dest='organize',
                           help='不移动文件到分类文件夹')
     p_process.add_argument('--no-cleanup', action='store_false', dest='cleanup',
@@ -737,7 +755,7 @@ Examples:
     p_process.add_argument('--birdid-threshold', type=float, default=70.0,
                           help='BirdID 置信度阈值 (默认: 70%%)')
     # V3.9: 使用 set_defaults 确保 flight, burst 默认为 True
-    p_process.set_defaults(organize=True, cleanup=True, burst=True, flight=True, auto_identify=False)
+    p_process.set_defaults(organize=True, cleanup=True, burst=True, flight=True, auto_identify=False, xmp=False)
     
     # ===== reset 命令 =====
     p_reset = subparsers.add_parser('reset', help=t("cli.cmd_reset"))
@@ -758,11 +776,16 @@ Examples:
                          help='连拍检测 (默认: 开启)')
     p_restar.add_argument('--no-burst', action='store_false', dest='burst',
                          help='禁用连拍检测')
+    # XMP 侧车写入
+    p_restar.add_argument('--xmp', action='store_true', dest='xmp',
+                         help='写入XMP侧车(不改RAW)')
+    p_restar.add_argument('--no-xmp', action='store_false', dest='xmp',
+                         help='直接写入RAW(默认)')
     p_restar.add_argument('--no-organize', action='store_false', dest='organize',
                          help='不重新分配文件目录')
     p_restar.add_argument('-y', '--yes', action='store_true',
                          help='跳过确认提示')
-    p_restar.set_defaults(organize=True, burst=True)
+    p_restar.set_defaults(organize=True, burst=True, xmp=False)
     
     # ===== info 命令 =====
     p_info = subparsers.add_parser('info', help=t("cli.cmd_info"))

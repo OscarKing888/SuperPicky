@@ -47,6 +47,13 @@ class AdvancedConfig:
         "is_first_run": True,           # 是否首次运行
         "custom_sharpness": 380,        # 自选模式下的锐度阈值
         "custom_aesthetics": 4.8,       # 自选模式下的美学阈值
+
+        # ARW 写入策略:
+        #   sidecar: 只写 XMP 侧车，不修改 ARW（最安全，推荐）
+        #   embedded: 直接写入 ARW
+        #   inplace: 尝试 in-place 写入 ARW（可能失败）
+        #   auto: 尝试 embedded/inplace，若检测到结构变化则回退 sidecar
+        "arw_write_mode": "embedded",
     }
 
     def __init__(self, config_file=None):
@@ -222,6 +229,15 @@ class AdvancedConfig:
     @property
     def custom_aesthetics(self):
         return self.config.get("custom_aesthetics", 4.8)
+
+    @property
+    def arw_write_mode(self):
+        return self.config.get("arw_write_mode", "embedded")
+
+    def set_arw_write_mode(self, value):
+        """设置 ARW 写入策略: sidecar | embedded | inplace | auto"""
+        if value in ("sidecar", "embedded", "inplace", "auto"):
+            self.config["arw_write_mode"] = value
     
     def set_skill_level(self, value):
         """设置摄影水平: beginner | intermediate | master | custom"""

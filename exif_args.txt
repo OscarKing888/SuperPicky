@@ -1,0 +1,10 @@
+-Rating=3
+-XMP:Pick=0
+-XMP:City=123.45
+-XMP:State=06.78
+-XMP:Label=Red
+-XMP:Country=BEST
+-XMP:Title=TestTitle
+-XMP:Description=????: 3? | ????????????
+%s
+-execute

@@ -7,7 +7,7 @@ SuperPicky - 参数设置对话框
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout,
     QLabel, QSlider, QPushButton, QComboBox,
-    QWidget, QFrame
+    QWidget, QFrame, QCheckBox
 )
 from PySide6.QtCore import Qt, Slot
 
@@ -33,8 +33,8 @@ class AdvancedSettingsDialog(QDialog):
     def _setup_ui(self):
         """设置 UI"""
         self.setWindowTitle(self.i18n.t("advanced_settings.window_title"))
-        self.setMinimumSize(500, 620)
-        self.resize(520, 680)
+        self.setMinimumSize(500, 680)
+        self.resize(520, 800)
         self.setModal(True)
 
         # 应用样式
@@ -202,6 +202,32 @@ class AdvancedSettingsDialog(QDialog):
             format_func=lambda v: f"{v}%"
         )
 
+        # 分隔线
+        divider3 = QFrame()
+        divider3.setFixedHeight(1)
+        divider3.setStyleSheet(f"background-color: {COLORS['border_subtle']};")
+        layout.addWidget(divider3)
+
+        # === XMP 写入 ===
+        self._create_section_title(layout, self.i18n.t("advanced_settings.section_xmp"))
+        xmp_row = QHBoxLayout()
+        xmp_row.setSpacing(16)
+        self.vars["xmp_write"] = QCheckBox()
+        self.vars["xmp_write"].setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 13px;")
+        xmp_label = QLabel(self.i18n.t("advanced_settings.xmp_write"))
+        xmp_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 13px; min-width: 80px;")
+        xmp_row.addWidget(xmp_label)
+        xmp_row.addWidget(self.vars["xmp_write"])
+        layout.addLayout(xmp_row)
+        xmp_hint = QLabel(self.i18n.t("advanced_settings.xmp_write_hint"))
+        xmp_hint.setStyleSheet(f"""
+            color: {COLORS['text_muted']};
+            font-size: 11px;
+            margin-left: 96px;
+            margin-bottom: 8px;
+        """)
+        layout.addWidget(xmp_hint)
+
         layout.addStretch()
 
         # 底部按钮
@@ -302,6 +328,11 @@ class AdvancedSettingsDialog(QDialog):
         self.vars["min_nima"].setValue(int(self.config.min_nima * 10))
         self.vars["burst_fps"].setValue(int(self.config.burst_fps))
         self.vars["birdid_confidence"].setValue(int(self.config.birdid_confidence))
+        try:
+            arw_mode = self.config.arw_write_mode
+            self.vars["xmp_write"].setChecked(arw_mode in ("sidecar", "auto"))
+        except Exception:
+            self.vars["xmp_write"].setChecked(False)
 
     @Slot()
     def _reset_to_default(self):
@@ -338,6 +369,7 @@ class AdvancedSettingsDialog(QDialog):
         self.config.set_min_nima(min_nima)
         self.config.set_burst_fps(burst_fps)
         self.config.set_birdid_confidence(birdid_confidence)
+        self.config.set_arw_write_mode("sidecar" if self.vars["xmp_write"].isChecked() else "embedded")
         self.config.set_save_csv(True)
 
         if self.config.save():

@@ -9,11 +9,11 @@ import os
 import subprocess
 import sys
 import tempfile
+import shutil
 from typing import Optional, List, Dict
 from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from constants import RATING_FOLDER_NAMES
-import subprocess
 import time
 import threading
 import queue
@@ -38,6 +38,7 @@ class ExifToolManager:
         self._process = None
         self._stdout_queue = None
         self._reader_thread = None
+        self._lock = threading.Lock()
 
     def _get_exiftool_path(self) -> str:
         """获取exiftool可执行文件路径"""
@@ -204,7 +205,8 @@ class ExifToolManager:
             return
 
         try:
-            # 启动命令
+            # 启动命令（不在此处使用 -fast/-ignoreMinorErrors，避免 ARW 写入后 Image Edge Viewer 无法打开）
+            # 旧版 SuperPickyOsk 写入时未使用这两项，ARW 在 Sony 软件中可正常查看
             cmd = [
                 self.exiftool_path,
                 '-stay_open', 'True',
@@ -212,17 +214,16 @@ class ExifToolManager:
                 '-common_args',
                 '-charset', 'utf8',
                 '-overwrite_original',
-                '-ignoreMinorErrors',
-                '-fast'
             ]
             
             creationflags = subprocess.CREATE_NO_WINDOW if sys.platform.startswith('win') else 0
             
+            # 将 stderr 合并到 stdout，避免 stderr 缓冲区塞满导致死锁
             self._process = subprocess.Popen(
                 cmd,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
                 cwd=self._exiftool_cwd,
                 creationflags=creationflags
             )
@@ -281,35 +282,297 @@ class ExifToolManager:
             except queue.Empty:
                 raise TimeoutError(f"ExifTool timeout ({timeout}s)")
 
-    def _send_to_process(self, args: List[str], timeout=3.0) -> bool:
+    def _send_to_process(self, args: List[str], timeout=30.0) -> bool:
         """发送命令到常驻进程并等待结果"""
-        self._start_process()
-        if not self._process:
+        with self._lock:
+            self._start_process()
+            if not self._process:
+                return False
+
+            try:
+                cmd_str = '\n'.join(args) + '\n-execute\n'
+                
+                self._process.stdin.write(cmd_str.encode('utf-8'))
+                self._process.stdin.flush()
+                
+                # 读取输出
+                output_bytes = self._read_until_ready(timeout)
+                
+                decoded = output_bytes.decode('utf-8', errors='replace')
+                if "Error" in decoded and "Warning" not in decoded:
+                    # print(f"⚠️ ExifTool output contains error: {decoded.strip()}")
+                    pass
+                    
+                return True
+            except TimeoutError:
+                print(f"❌ ExifTool timeout after {timeout}s")
+                self._stop_process()
+                return False
+            except Exception as e:
+                print(f"❌ ExifTool persistent error: {e}")
+                self._stop_process()
+                return False
+
+    def _get_arw_write_mode(self) -> str:
+        """获取 ARW 写入策略"""
+        try:
+            from advanced_config import get_advanced_config
+            cfg = get_advanced_config()
+            mode = cfg.config.get("arw_write_mode", "auto")
+        except Exception:
+            mode = "auto"
+        mode = str(mode).strip().lower()
+        if mode not in {"sidecar", "embedded", "inplace", "auto"}:
+            mode = "auto"
+        return mode
+
+    def _read_arw_structure(self, file_path: str) -> Optional[Dict[str, any]]:
+        """读取 ARW 关键结构标签，用于检测文件布局变化"""
+        tags = [
+            'PreviewImageStart',
+            'ThumbnailOffset',
+            'JpgFromRawStart',
+            'StripOffsets',
+            'HiddenDataOffset',
+            'SR2SubIFDOffset',
+            'FileSize'
+        ]
+        cmd = [self.exiftool_path, '-json'] + [f'-{t}' for t in tags] + [file_path]
+        try:
+            creationflags = subprocess.CREATE_NO_WINDOW if sys.platform.startswith('win') else 0
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=False,
+                timeout=10,
+                creationflags=creationflags,
+                cwd=self._exiftool_cwd
+            )
+            if result.returncode != 0:
+                return None
+            import json
+            stdout_bytes = result.stdout or b""
+            if not stdout_bytes.strip():
+                return None
+            decoded = None
+            for encoding in ['utf-8', 'gbk', 'gb2312', 'latin-1']:
+                try:
+                    decoded = stdout_bytes.decode(encoding)
+                    break
+                except UnicodeDecodeError:
+                    continue
+            if decoded is None:
+                decoded = stdout_bytes.decode('latin-1')
+            data = json.loads(decoded)
+            if not data:
+                return None
+            info = data[0]
+            return {t: info.get(t) for t in tags}
+        except Exception:
+            return None
+
+    @staticmethod
+    def _is_arw(file_path: str) -> bool:
+        """判断是否为 ARW 文件"""
+        return Path(file_path).suffix.lower() == '.arw'
+
+    def _write_metadata_subprocess(self, item: Dict[str, any], in_place: bool = False) -> bool:
+        """使用一次性 subprocess 写入"""
+        file_path = item.get('file')
+        if not file_path or not os.path.exists(file_path):
             return False
 
+        cmd = [self.exiftool_path, '-charset', 'utf8']
+
+        if item.get('rating') is not None:
+            cmd.append(f'-Rating={item["rating"]}')
+        if item.get('pick') is not None:
+            cmd.append(f'-XMP:Pick={item["pick"]}')
+        if item.get('sharpness') is not None:
+            cmd.append(f'-XMP:City={item["sharpness"]:06.2f}')
+        if item.get('nima_score') is not None:
+            cmd.append(f'-XMP:State={item["nima_score"]:05.2f}')
+        if item.get('label') is not None:
+            cmd.append(f'-XMP:Label={item["label"]}')
+        if item.get('focus_status') is not None:
+            cmd.append(f'-XMP:Country={item["focus_status"]}')
+        if item.get('title') is not None:
+            cmd.append(f'-XMP:Title={item["title"]}')
+
+        tmp_path = None
+        caption = item.get('caption')
+        if caption is not None:
+            try:
+                fd, tmp_path = tempfile.mkstemp(suffix='.txt', prefix='sp_caption_')
+                with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                    f.write(caption)
+                cmd.append(f'-XMP:Description<={tmp_path}')
+            except Exception as e:
+                print(f"⚠️ Caption temp file failed: {e}, fallback to inline")
+                cmd.append(f'-XMP:Description={caption}')
+
+        cmd.append('-overwrite_original_in_place' if in_place else '-overwrite_original')
+        cmd.append(file_path)
+
         try:
-            cmd_str = '\n'.join(args) + '\n-execute\n'
-            
-            self._process.stdin.write(cmd_str.encode('utf-8'))
-            self._process.stdin.flush()
-            
-            # 读取输出
-            output_bytes = self._read_until_ready(timeout)
-            
-            decoded = output_bytes.decode('utf-8', errors='replace')
-            if "Error" in decoded and "Warning" not in decoded:
-                # print(f"⚠️ ExifTool output contains error: {decoded.strip()}")
-                pass
-                
-            return True
-        except TimeoutError:
-            print(f"❌ ExifTool timeout after {timeout}s")
-            self._stop_process()
+            creationflags = subprocess.CREATE_NO_WINDOW if sys.platform.startswith('win') else 0
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=False,
+                timeout=60,
+                creationflags=creationflags,
+                cwd=self._exiftool_cwd
+            )
+            return result.returncode == 0
+        except subprocess.TimeoutExpired:
+            print(f"❌ ExifTool timeout: {file_path}")
             return False
         except Exception as e:
-            print(f"❌ ExifTool persistent error: {e}")
-            self._stop_process()
+            print(f"❌ ExifTool error: {e}")
             return False
+        finally:
+            if tmp_path and os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except Exception as e:
+                    print(f"⚠️ Caption temp file cleanup failed: {tmp_path} - {e}")
+
+    def _write_metadata_xmp_sidecar(self, item: Dict[str, any]) -> bool:
+        """写入 XMP 侧车文件（不修改 RAW 本体）"""
+        file_path = item.get('file')
+        if not file_path:
+            return False
+        xmp_path = os.path.splitext(file_path)[0] + '.xmp'
+
+        cmd = [self.exiftool_path, '-charset', 'utf8']
+
+        if item.get('rating') is not None:
+            cmd.append(f'-XMP:Rating={item["rating"]}')
+        if item.get('pick') is not None:
+            cmd.append(f'-XMP:Pick={item["pick"]}')
+        if item.get('sharpness') is not None:
+            cmd.append(f'-XMP:City={item["sharpness"]:06.2f}')
+        if item.get('nima_score') is not None:
+            cmd.append(f'-XMP:State={item["nima_score"]:05.2f}')
+        if item.get('label') is not None:
+            cmd.append(f'-XMP:Label={item["label"]}')
+        if item.get('focus_status') is not None:
+            cmd.append(f'-XMP:Country={item["focus_status"]}')
+        if item.get('title') is not None:
+            cmd.append(f'-XMP:Title={item["title"]}')
+
+        tmp_path = None
+        caption = item.get('caption')
+        if caption is not None:
+            try:
+                fd, tmp_path = tempfile.mkstemp(suffix='.txt', prefix='sp_caption_')
+                with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                    f.write(caption)
+                cmd.append(f'-XMP:Description<={tmp_path}')
+            except Exception as e:
+                print(f"⚠️ Caption temp file failed: {e}, fallback to inline")
+                cmd.append(f'-XMP:Description={caption}')
+
+        cmd.extend(['-overwrite_original', xmp_path])
+
+        try:
+            creationflags = subprocess.CREATE_NO_WINDOW if sys.platform.startswith('win') else 0
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=False,
+                timeout=30,
+                creationflags=creationflags,
+                cwd=self._exiftool_cwd
+            )
+            return result.returncode == 0
+        except Exception as e:
+            print(f"❌ XMP sidecar write error: {e}")
+            return False
+        finally:
+            if tmp_path and os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except Exception as e:
+                    print(f"⚠️ Caption temp file cleanup failed: {tmp_path} - {e}")
+
+    def _reset_xmp_sidecar(self, file_path: str) -> bool:
+        """清理 XMP 侧车中的评分相关字段"""
+        xmp_path = os.path.splitext(file_path)[0] + '.xmp'
+        if not os.path.exists(xmp_path):
+            return True
+
+        cmd = [
+            self.exiftool_path,
+            '-charset', 'utf8',
+            '-XMP:Rating=',
+            '-XMP:Pick=',
+            '-XMP:Label=',
+            '-XMP:City=',
+            '-XMP:State=',
+            '-XMP:Country=',
+            '-XMP:Description=',
+            '-XMP:Title=',
+            '-overwrite_original',
+            xmp_path
+        ]
+        try:
+            creationflags = subprocess.CREATE_NO_WINDOW if sys.platform.startswith('win') else 0
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=False,
+                timeout=30,
+                creationflags=creationflags,
+                cwd=self._exiftool_cwd
+            )
+            return result.returncode == 0
+        except Exception as e:
+            print(f"❌ XMP sidecar reset error: {e}")
+            return False
+
+    def _write_metadata_arw(self, item: Dict[str, any]) -> bool:
+        """ARW 写入策略（embedded / inplace / sidecar / auto）"""
+        mode = self._get_arw_write_mode()
+        file_path = item.get('file')
+        if not file_path or not os.path.exists(file_path):
+            return False
+
+        if mode == 'sidecar':
+            return self._write_metadata_xmp_sidecar(item)
+        if mode == 'embedded':
+            return self._write_metadata_subprocess(item, in_place=False)
+        if mode == 'inplace':
+            return self._write_metadata_subprocess(item, in_place=True)
+
+        # auto: 尝试 in-place 写入，若检测到结构变化则回退 sidecar
+        original_struct = self._read_arw_structure(file_path)
+        if original_struct is None:
+            return self._write_metadata_xmp_sidecar(item)
+
+        tmp_fd, tmp_path = tempfile.mkstemp(suffix=Path(file_path).suffix)
+        os.close(tmp_fd)
+        try:
+            shutil.copy2(file_path, tmp_path)
+            tmp_item = dict(item)
+            tmp_item['file'] = tmp_path
+            ok = self._write_metadata_subprocess(tmp_item, in_place=True)
+            if not ok:
+                return self._write_metadata_xmp_sidecar(item)
+
+            new_struct = self._read_arw_structure(tmp_path)
+            if new_struct is None or new_struct != original_struct:
+                return self._write_metadata_xmp_sidecar(item)
+
+            os.replace(tmp_path, file_path)
+            return True
+        finally:
+            if os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except Exception:
+                    pass
 
     def set_rating_and_pick(
         self,
@@ -336,6 +599,17 @@ class ExifToolManager:
         if not os.path.exists(file_path):
             print(f"❌ File not found: {file_path}")
             return False
+
+        # ARW 使用一次性 subprocess 方式写入（更稳妥）
+        if self._is_arw(file_path):
+            item = {
+                'file': file_path,
+                'rating': rating,
+                'pick': pick,
+                'sharpness': sharpness,
+                'nima_score': nima_score
+            }
+            return self._write_metadata_arw(item)
 
         # V4.0.5: 使用常驻进程处理单文件更新
         args = []
@@ -399,7 +673,6 @@ class ExifToolManager:
         """
         stats = {'success': 0, 'failed': 0}
         caption_temp_files: List[str] = []  # 用于写入 caption 的临时 UTF-8 文件，执行后删除
-        first_caption_image_path: Optional[str] = None  # 第一个写入 caption 的图片，用于执行后读回对比
 
         # V4.0.3: 预先清理可能存在的残留 _exiftool_tmp 文件，防止 ExifTool 报错
         # "Error: Temporary file already exists"
@@ -410,15 +683,28 @@ class ExifToolManager:
         num_with_caption = sum(1 for it in files_metadata if it.get('caption'))
         print(f"[ExifTool] batch_set_metadata: {len(files_metadata)} 条, 其中 {num_with_caption} 条带 caption")
 
-        # V4.0.5: 使用常驻进程处理大幅提升速度
-        
+        # ARW 使用一次性 subprocess 方式写入（更稳妥）
+        arw_items = [it for it in files_metadata if self._is_arw(it.get('file', ''))]
+        other_items = [it for it in files_metadata if it not in arw_items]
+
+        for item in arw_items:
+            if not os.path.exists(item.get('file', '')):
+                stats['failed'] += 1
+                continue
+            if self._write_metadata_arw(item):
+                stats['success'] += 1
+            else:
+                stats['failed'] += 1
+
+        # V4.0.5: 非 ARW 使用常驻进程处理提升速度
         # 构建参数列表 (每行一个参数)
         args_list = []
+        other_missing = 0
         
-        for item in files_metadata:
+        for item in other_items:
             file_path = item['file']
             if not os.path.exists(file_path):
-                stats['failed'] += 1
+                other_missing += 1
                 continue
                 
             # Rating
@@ -449,10 +735,18 @@ class ExifToolManager:
             if item.get('title') is not None:
                 args_list.append(f'-XMP:Title={item["title"]}')
                 
-            # Caption (使用临时文件处理太复杂，常驻模式下直接传递UTF-8通常可行，或者略过不写Caption优化)
-            # V4.0.5: 暂时沿用 inline 方式写入 caption，因为 stdin.write 是 utf-8 编码的
-            if item.get('caption'):
-                args_list.append(f'-XMP:Description={item["caption"]}')
+            # Caption (使用临时 UTF-8 文件，避免换行破坏 -@ 参数流)
+            caption = item.get('caption')
+            if caption is not None:
+                try:
+                    fd, tmp_path = tempfile.mkstemp(suffix='.txt', prefix='sp_caption_')
+                    with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                        f.write(caption)
+                    caption_temp_files.append(tmp_path)
+                    args_list.append(f'-XMP:Description<={tmp_path}')
+                except Exception as e:
+                    print(f"⚠️ Caption temp file failed: {e}, fallback to inline")
+                    args_list.append(f'-XMP:Description={caption}')
 
             # 文件路径
             args_list.append(file_path)
@@ -460,6 +754,8 @@ class ExifToolManager:
             # 每个文件执行一次 (相当于 -execute)
             args_list.append('-execute')
         
+        stats['failed'] += other_missing
+
         if not args_list:
             return stats
 
@@ -481,47 +777,57 @@ class ExifToolManager:
         
         # 让我们把 _send_to_process 改名为 _send_raw_command 更贴切
         
+        num_executes = 0
         try:
-            self._start_process()
-            if not self._process:
-                raise Exception("Process not started")
+            with self._lock:
+                self._start_process()
+                if not self._process:
+                    raise Exception("Process not started")
+                    
+                cmd_str = '\n'.join(args_list) + '\n' # 注意这里不加 -execute，因为 args_list 里已经包含了 N 个 -execute
                 
-            cmd_str = '\n'.join(args_list) + '\n' # 注意这里不加 -execute，因为 args_list 里已经包含了 N 个 -execute
-            
-            # 写入大量数据
-            self._process.stdin.write(cmd_str.encode('utf-8'))
-            self._process.stdin.flush()
-            
-            # 读取输出：我们需要读取 N 次 {ready}
-            num_executes = args_list.count('-execute')
-            total_timeout = 10.0  # V4.0.5: 批量处理总超时 10秒
-            start_time = time.time()
-            
-            for _ in range(num_executes):
-                elapsed = time.time() - start_time
-                remaining = total_timeout - elapsed
-                if remaining <= 0:
-                    raise TimeoutError(f"Batch timeout after {total_timeout}s")
+                # 写入大量数据
+                self._process.stdin.write(cmd_str.encode('utf-8'))
+                self._process.stdin.flush()
                 
-                # 读取一次 {ready}
-                output = self._read_until_ready(timeout=remaining)
+                # 读取输出：我们需要读取 N 次 {ready}
+                num_executes = args_list.count('-execute')
+                # 按文件数线性放大超时
+                total_timeout = max(30.0, num_executes * 5.0)
+                start_time = time.time()
                 
-                # 简单的错误检测 (累积)
-                decoded = output.decode('utf-8', errors='replace')
-                if "Error" in decoded and "Warning" not in decoded:
-                    # print(f"⚠️ Batch item error: {decoded.strip()}")
-                    pass
-            
-            stats['success'] = len(files_metadata)
+                for _ in range(num_executes):
+                    elapsed = time.time() - start_time
+                    remaining = total_timeout - elapsed
+                    if remaining <= 0:
+                        raise TimeoutError(f"Batch timeout after {total_timeout}s")
+                    
+                    # 读取一次 {ready}
+                    output = self._read_until_ready(timeout=remaining)
+                    
+                    # 简单的错误检测 (累积)
+                    decoded = output.decode('utf-8', errors='replace')
+                    if "Error" in decoded and "Warning" not in decoded:
+                        # print(f"⚠️ Batch item error: {decoded.strip()}")
+                        pass
                 
+                stats['success'] += num_executes
+                    
         except TimeoutError:
             print(f"❌ Batch ExifTool timeout (>{total_timeout}s)")
             self._stop_process()
-            stats['failed'] = len(files_metadata)
+            stats['failed'] += num_executes
         except Exception as e:
             print(f"❌ Batch persistent error: {e}")
             self._stop_process()
-            stats['failed'] = len(files_metadata)
+            stats['failed'] += num_executes
+        finally:
+            for tmp_path in caption_temp_files:
+                try:
+                    if os.path.exists(tmp_path):
+                        os.remove(tmp_path)
+                except Exception as e:
+                    print(f"⚠️ Caption temp file cleanup failed: {tmp_path} - {e}")
 
         # 侧车文件处理（非关键，保留同步调用或优化）
         self._create_xmp_sidecars_for_raf(files_metadata)
@@ -662,6 +968,12 @@ class ExifToolManager:
             print(f"❌ File not found: {file_path}")
             return False
 
+        # ARW 在 sidecar/auto 模式下不修改 RAW 本体
+        if self._is_arw(file_path):
+            mode = self._get_arw_write_mode()
+            if mode in {'sidecar', 'auto'}:
+                return self._reset_xmp_sidecar(file_path)
+
         # 删除Rating、Pick、City、Country和Province-State字段
         cmd = [
             self.exiftool_path,
@@ -758,28 +1070,47 @@ class ExifToolManager:
             # V4.0.3: 预先清理可能存在的残留 _exiftool_tmp 文件
             self.cleanup_temp_files(valid_files)
 
+            # ARW 在 sidecar/auto 模式下只清理 XMP 侧车
+            mode = self._get_arw_write_mode()
+            if mode in {'sidecar', 'auto'}:
+                arw_files = [f for f in valid_files if self._is_arw(f)]
+                if arw_files:
+                    for f in arw_files:
+                        if self._reset_xmp_sidecar(f):
+                            stats['success'] += 1
+                        else:
+                            stats['failed'] += 1
+                    valid_files = [f for f in valid_files if f not in arw_files]
+                    if not valid_files:
+                        continue
+
             # 构建ExifTool命令（移除-if条件，强制重置）
             # V4.0: 添加 XMP 字段清除（City/State/Country/Description）
             # V4.2: 添加 XMP:Title 清除（鸟种名称）
             # 修复：添加-ignoreMinorErrors忽略ARW文件警告，-fast加速处理
+            has_arw = any(Path(f).suffix.lower() == '.arw' for f in valid_files)
             cmd = [
                 self.exiftool_path,
                 '-charset', 'utf8',
                 '-Rating=',
                 '-XMP:Pick=',
                 '-XMP:Label=',
-                '-XMP:City=',           # V4.0: 锐度
-                '-XMP:State=',          # V4.0: TOPIQ美学
-                '-XMP:Country=',        # V4.0: 对焦状态
-                '-XMP:Description=',    # V4.0: 详细评分说明
-                '-XMP:Title=',          # V4.2: 鸟种名称
-                '-IPTC:City=',          # 旧版兼容
+                '-XMP:City=',           # V4.0: ??
+                '-XMP:State=',          # V4.0: TOPIQ??
+                '-XMP:Country=',        # V4.0: ????
+                '-XMP:Description=',    # V4.0: ??????
+                '-XMP:Title=',          # V4.2: ????
+                '-IPTC:City=',          # ????
                 '-IPTC:Country-PrimaryLocationName=',
                 '-IPTC:Province-State=',
                 '-overwrite_original',
-                '-ignoreMinorErrors',   # 忽略"Oversized SubIFD StripByteCounts"等次要错误
-                '-fast'                 # 快速模式，加速处理
-            ] + valid_files
+            ]
+            if not has_arw:
+                cmd += [
+                    '-ignoreMinorErrors',   # ??"Oversized SubIFD StripByteCounts"?????
+                    '-fast'                 # ?????????
+                ]
+            cmd += valid_files
 
             try:
                 # V3.9.4: 在 Windows 上隐藏控制台窗口

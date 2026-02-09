@@ -1736,6 +1736,16 @@ class PhotoProcessor:
                             'folder': folder,
                             'bird_species': self.file_bird_species.get(prefix, '')  # V4.0: 记录鸟种用于 manifest
                         })
+
+                    # 若存在 XMP 侧车文件，随 RAW 一并移动
+                    xmp_path = os.path.join(self.dir_path, prefix + '.xmp')
+                    if os.path.exists(xmp_path):
+                        files_to_move.append({
+                            'filename': prefix + '.xmp',
+                            'rating': rating,
+                            'folder': folder,
+                            'bird_species': self.file_bird_species.get(prefix, '')
+                        })
                     
                     # V4.0: 同时移动同名 JPEG（如果存在）
                     for jpg_ext in ['.jpg', '.jpeg', '.JPG', '.JPEG']:
