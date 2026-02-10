@@ -66,8 +66,9 @@
 2. 双击 DMG 文件，将应用拖入 Applications
 3. 首次打开：右键点击应用选择"打开"
 
-### Windows (v4.0.1)
-- [GitHub 下载](https://github.com/jamesphotography/SuperPicky/releases/download/v4.0.2/SuperPicky_Win_v4.0.1.zip) | [Google Drive](https://drive.google.com/file/d/194p5ktxKJRcmcGi4cQhkvJEGRnH5Ts4P/view?usp=sharing) | [百度网盘](https://pan.baidu.com/s/17NZppCRIax_aYfrFt5EJJg?pwd=cnyu) 提取码: cnyu
+### Windows (v4.0.4)
+- CPU (1GB): [GitHub 下载](https://github.com/jamesphotography/SuperPicky/releases/download/v4.0.4/SuperPicky4.0.4_Win64_No_CUDA.zip) | [Google Drive](https://drive.google.com/file/d/1QWfDsb4L7wMoUoo17p6iiW1L9Lf-OAEv/view?usp=sharing) | [百度网盘](https://pan.baidu.com/s/1zhWtMwAzthrLAeKxKf4SZw?pwd=2mrt) 提取码: 2mrt
+- CUDA-GPU (3.4GB): [Google Drive](https://drive.google.com/file/d/1QkBqBYxylpIlN7jByVUC3m9QEM40DYga/view?usp=sharing) | [百度网盘](https://pan.baidu.com/s/1dM79au9DpnWZQoWdUISPQA?pwd=1usg) 提取码: 1usg
 
 1. 下载并解压 ZIP 文件
 2. 运行 `SuperPicky.exe`

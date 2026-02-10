@@ -97,5 +97,13 @@
 - Google Drive: [SuperPicky_v4.0.4_Intel.dmg](https://drive.google.com/file/d/1DghPd1yBRkMjEdM-GpxGNV8GFQBXgXiS/view?usp=sharing)
 - 百度网盘: [SuperPicky_v4.0.4_Intel.dmg](https://pan.baidu.com/s/1iyDhNj1QP-Vg82QN9yoACQ?pwd=xh6u) 提取码: xh6u
 
-### Windows
-- GitHub: [v4.0.1](https://github.com/jamesphotography/SuperPicky/releases/tag/v4.0.2)
+### Windows (v4.0.4)
+
+**CPU 版本 (1GB)**
+- GitHub: [SuperPicky4.0.4_Win64_No_CUDA.zip](https://github.com/jamesphotography/SuperPicky/releases/download/v4.0.4/SuperPicky4.0.4_Win64_No_CUDA.zip)
+- Google Drive: [SuperPicky_Win_v4.0.4_CPU](https://drive.google.com/file/d/1QWfDsb4L7wMoUoo17p6iiW1L9Lf-OAEv/view?usp=sharing)
+- 百度网盘: [SuperPicky_Win_v4.0.4_CPU](https://pan.baidu.com/s/1zhWtMwAzthrLAeKxKf4SZw?pwd=2mrt) 提取码: 2mrt
+
+**CUDA-GPU 版本 (3.4GB)**
+- Google Drive: [SuperPicky_Win_v4.0.4_CUDA](https://drive.google.com/file/d/1QkBqBYxylpIlN7jByVUC3m9QEM40DYga/view?usp=sharing)
+- 百度网盘: [SuperPicky_Win_v4.0.4_CUDA](https://pan.baidu.com/s/1dM79au9DpnWZQoWdUISPQA?pwd=1usg) 提取码: 1usg
