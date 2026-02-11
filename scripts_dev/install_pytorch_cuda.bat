@@ -87,7 +87,7 @@ echo.
 echo [5/5] 卸载旧版本并安装 PyTorch CUDA 版本...
 echo.
 
-set pytorch_cache=E:\SuperPicky-cuda\pytorch_cache
+set pytorch_cache=d:\pytorch_cache
 REM 设置缓存目录
 set CACHE_DIR=%pytorch_cache%
 if not exist "%CACHE_DIR%" mkdir "%CACHE_DIR%"
