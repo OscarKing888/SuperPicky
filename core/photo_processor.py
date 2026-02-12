@@ -19,6 +19,8 @@ import json
 import math
 import subprocess
 import shutil
+import threading
+import queue
 import numpy as np
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -61,6 +63,10 @@ class ProcessingSettings:
     birdid_country_code: str = None   # eBird 国家代码
     birdid_region_code: str = None    # eBird 区域代码
     birdid_confidence_threshold: float = 70.0  # 置信度阈值（70%+才写入）
+    # 性能日志模式
+    perf_logging: bool = False         # 是否输出性能分解日志
+    perf_log_every: int = 25           # 每处理 N 张输出一次中间性能摘要
+    perf_system_metrics: bool = False  # 是否尝试输出 CPU/内存快照（需 psutil）
 
 
 @dataclass
@@ -161,6 +167,37 @@ class PhotoProcessor:
         self.temp_converted_jpegs = set()  # V4.0: Track temp-converted JPEGs to avoid deleting user originals
         self.file_bird_species = {}  # V4.0: Track bird species per file: {'cn_name': '...', 'en_name': '...'}
         self.burst_map = {}  # V4.0.4: Track burst group IDs: {filepath: group_id}, 0 = not a burst
+        # CSV 缓存：避免每张图都整表读写（大目录下会成为主要瓶颈）
+        self._csv_cache_rows = None
+        self._csv_cache_fieldnames = None
+        self._csv_row_index = None
+        self._csv_cache_dirty = False
+        
+        # 性能日志开关（支持 settings 和环境变量）
+        env_perf = os.getenv("SUPERPICKY_PERF_LOG", "").strip().lower() in {"1", "true", "yes", "on"}
+        env_perf_sys = os.getenv("SUPERPICKY_PERF_SYS", "").strip().lower() in {"1", "true", "yes", "on"}
+        env_perf_every = os.getenv("SUPERPICKY_PERF_EVERY", "").strip()
+        
+        self._perf_enabled = bool(settings.perf_logging or env_perf)
+        self._perf_system_metrics = bool(settings.perf_system_metrics or env_perf_sys)
+        self._perf_log_every = max(1, int(settings.perf_log_every or 25))
+        if env_perf_every.isdigit():
+            self._perf_log_every = max(1, int(env_perf_every))
+        
+        self._perf_stats = {
+            'photos': 0,
+            'photo_total_ms': 0.0,
+            'early_exit': 0,
+            'stage_ms': {},
+            'exif_flush_count': 0,
+            'checkpoints': 0,
+        }
+        
+        if self._perf_enabled:
+            self._log(
+                f"⏱ PERF mode enabled (every={self._perf_log_every}, "
+                f"system_metrics={'on' if self._perf_system_metrics else 'off'})"
+            )
     
     def _log(self, msg: str, level: str = "info"):
         """内部日志方法"""
@@ -171,6 +208,99 @@ class PhotoProcessor:
         """内部进度更新"""
         if self.callbacks.progress:
             self.callbacks.progress(percent)
+    
+    def _perf_add_stage(self, stage: str, ms: float):
+        """累计阶段耗时（毫秒）"""
+        if not self._perf_enabled:
+            return
+        if ms is None:
+            return
+        ms = max(0.0, float(ms))
+        self._perf_stats['stage_ms'][stage] = self._perf_stats['stage_ms'].get(stage, 0.0) + ms
+    
+    def _perf_record_photo(self, photo_ms: float, photo_stage_ms: Dict[str, float], early_exit: bool = False):
+        """记录单张耗时并按间隔输出检查点"""
+        if not self._perf_enabled:
+            return
+        
+        self._perf_stats['photos'] += 1
+        self._perf_stats['photo_total_ms'] += max(0.0, float(photo_ms))
+        if early_exit:
+            self._perf_stats['early_exit'] += 1
+        
+        for stage, ms in photo_stage_ms.items():
+            self._perf_add_stage(stage, ms)
+        
+        if self._perf_stats['photos'] % self._perf_log_every == 0:
+            self._perf_stats['checkpoints'] += 1
+            self._perf_log_checkpoint()
+    
+    def _perf_system_snapshot(self) -> str:
+        """可选系统资源快照（依赖 psutil）"""
+        if not self._perf_enabled or not self._perf_system_metrics:
+            return ""
+        try:
+            import psutil
+            p = psutil.Process(os.getpid())
+            rss_gb = p.memory_info().rss / (1024 ** 3)
+            cpu = psutil.cpu_percent(interval=None)
+            return f", cpu={cpu:.0f}%, rss={rss_gb:.1f}GB"
+        except Exception:
+            return ""
+    
+    def _perf_log_checkpoint(self):
+        """输出中间性能摘要"""
+        if not self._perf_enabled:
+            return
+        photos = self._perf_stats['photos']
+        if photos <= 0:
+            return
+        
+        avg_ms = self._perf_stats['photo_total_ms'] / photos
+        stage = self._perf_stats['stage_ms']
+        yolo = stage.get('yolo', 0.0) / photos
+        keypoint = stage.get('keypoint', 0.0) / photos
+        topiq = stage.get('topiq', 0.0) / photos
+        flight = stage.get('flight', 0.0) / photos
+        exposure = stage.get('exposure', 0.0) / photos
+        focus = stage.get('focus', 0.0) / photos
+        self._log(
+            f"⏱ PERF [{photos}] avg={avg_ms/1000:.3f}s "
+            f"(yolo={yolo:.0f}ms kp={keypoint:.0f}ms topiq={topiq:.0f}ms "
+            f"flight={flight:.0f}ms exp={exposure:.0f}ms focus={focus:.0f}ms"
+            f"{self._perf_system_snapshot()})"
+        )
+    
+    def _perf_finalize(self):
+        """输出最终性能摘要并写入 stats"""
+        if not self._perf_enabled:
+            return
+        photos = self._perf_stats['photos']
+        if photos <= 0:
+            return
+        
+        avg_ms = self._perf_stats['photo_total_ms'] / photos
+        stage_avg = {k: (v / photos) for k, v in self._perf_stats['stage_ms'].items()}
+        
+        self._log("⏱ PERF Summary:")
+        self._log(
+            f"  photos={photos}, early_exit={self._perf_stats['early_exit']}, "
+            f"avg={avg_ms/1000:.3f}s/photo, exif_flush={self._perf_stats['exif_flush_count']}"
+        )
+        if stage_avg:
+            # 只打印前 10 个最重阶段
+            sorted_items = sorted(stage_avg.items(), key=lambda kv: kv[1], reverse=True)[:10]
+            stage_text = ", ".join([f"{k}={v:.0f}ms" for k, v in sorted_items])
+            self._log(f"  stage_avg: {stage_text}{self._perf_system_snapshot()}")
+        
+        self.stats['perf'] = {
+            'enabled': True,
+            'photos': photos,
+            'early_exit': self._perf_stats['early_exit'],
+            'avg_ms_per_photo': avg_ms,
+            'stage_avg_ms': stage_avg,
+            'exif_flush_count': self._perf_stats['exif_flush_count'],
+        }
     
     # ============ V4.3: ISO 锐度归一化 ============
     # 高 ISO 噪点会虚高 Tenengrad 锐度值，需要根据 ISO 进行归一化补偿
@@ -634,6 +764,79 @@ class PhotoProcessor:
         self._log(self.i18n.t("logs.files_to_process", total=total_files))
         
         exiftool_mgr = get_exiftool_manager()
+        metadata_batch: List[Dict] = []
+        metadata_batch_size = 64
+        env_exif_batch = os.getenv("SUPERPICKY_EXIF_BATCH_SIZE", "").strip()
+        if env_exif_batch.isdigit():
+            metadata_batch_size = max(8, int(env_exif_batch))
+        
+        metadata_async_enabled = os.getenv("SUPERPICKY_EXIF_ASYNC", "1").strip().lower() not in {"0", "false", "no", "off"}
+        metadata_queue_max_batches = 6
+        env_exif_qmax = os.getenv("SUPERPICKY_EXIF_QUEUE_MAX", "").strip()
+        if env_exif_qmax.isdigit():
+            metadata_queue_max_batches = max(2, int(env_exif_qmax))
+        
+        metadata_queue = queue.Queue(maxsize=metadata_queue_max_batches) if metadata_async_enabled else None
+        metadata_writer_thread = None
+        metadata_writer_errors: List[Exception] = []
+        metadata_writer_stats = {'flush_ms': 0.0, 'flush_count': 0}
+        metadata_writer_stats_lock = threading.Lock()
+        
+        if metadata_async_enabled:
+            def metadata_writer_worker():
+                while True:
+                    batch = metadata_queue.get()
+                    if batch is None:
+                        metadata_queue.task_done()
+                        break
+                    exif_start = time.time()
+                    try:
+                        exiftool_mgr.batch_set_metadata(batch)
+                    except Exception as e:
+                        metadata_writer_errors.append(e)
+                    finally:
+                        with metadata_writer_stats_lock:
+                            metadata_writer_stats['flush_ms'] += (time.time() - exif_start) * 1000
+                            metadata_writer_stats['flush_count'] += 1
+                        metadata_queue.task_done()
+            
+            metadata_writer_thread = threading.Thread(
+                target=metadata_writer_worker,
+                daemon=True,
+                name="sp-exif-writer"
+            )
+            metadata_writer_thread.start()
+            if self._perf_enabled:
+                self._log(
+                    f"  ⚙️ EXIF async queue: on (batch={metadata_batch_size}, qmax={metadata_queue_max_batches})"
+                )
+        elif self._perf_enabled:
+            self._log(f"  ⚙️ EXIF async queue: off (batch={metadata_batch_size})")
+        
+        def flush_metadata_batch():
+            if not metadata_batch:
+                return
+            batch = metadata_batch.copy()
+            metadata_batch.clear()
+            if metadata_async_enabled and metadata_queue is not None:
+                enqueue_start = time.time()
+                metadata_queue.put(batch)  # 队列满时会背压，避免内存无限增长
+                enqueue_wait_ms = (time.time() - enqueue_start) * 1000
+                if enqueue_wait_ms > 0.1:
+                    self._perf_add_stage('exif_enqueue_wait', enqueue_wait_ms)
+                return
+            exif_start = time.time()
+            exiftool_mgr.batch_set_metadata(batch)
+            exif_ms = (time.time() - exif_start) * 1000
+            self._perf_add_stage('exif_flush', exif_ms)
+            self._perf_stats['exif_flush_count'] += 1
+        
+        def queue_metadata(item: Dict):
+            if not item or not item.get('file'):
+                return
+            metadata_batch.append(item)
+            if len(metadata_batch) >= metadata_batch_size:
+                flush_metadata_batch()
         
         # UI设置转为列表格式
         ui_settings = [
@@ -643,21 +846,304 @@ class PhotoProcessor:
             self.settings.save_crop,
             self.settings.normalization_mode
         ]
+        focus_supported_raw_exts = {'.nef', '.nrw', '.arw', '.cr3', '.cr2', '.orf', '.raf', '.rw2'}
         
         ai_total_start = time.time()
         
-        for i, filename in enumerate(files_tbr, 1):
-            # 记录每张照片的开始时间
-            photo_start_time = time.time()
+        # 预获取 TOPIQ scorer（单例）并在循环中复用，减少重复导入/查找开销
+        topiq_scorer = None
+        try:
+            from iqa_scorer import get_iqa_scorer
+            topiq_scorer = get_iqa_scorer(device='mps')
+        except Exception:
+            topiq_scorer = None
+        
+        # 推理线程池：用于将飞版检测与主线程关键点/TOPIQ并行
+        inference_pool = ThreadPoolExecutor(max_workers=2)
+        
+        # BirdID 异步队列：将识别耗时与主处理流程重叠
+        birdid_executor = ThreadPoolExecutor(max_workers=1) if self.settings.auto_identify else None
+        birdid_tasks = []
+        identify_bird_fn = None
+        if self.settings.auto_identify:
+            try:
+                from birdid.bird_identifier import identify_bird as identify_bird_fn
+            except Exception as e:
+                identify_bird_fn = None
+                self._log(f"  ⚠️ BirdID import failed: {e}", "warning")
+        
+        def submit_birdid_task(file_prefix: str, image_path: str, title_targets: List[str]):
+            if birdid_executor is None or identify_bird_fn is None:
+                return
+            if not title_targets:
+                return
+            try:
+                submit_start = time.time()
+                future = birdid_executor.submit(
+                    identify_bird_fn,
+                    image_path,
+                    True,   # use_yolo
+                    True,   # use_gps
+                    self.settings.birdid_use_ebird,
+                    self.settings.birdid_country_code,
+                    self.settings.birdid_region_code,
+                    1       # top_k
+                )
+                self._perf_add_stage('birdid_submit', (time.time() - submit_start) * 1000)
+                birdid_tasks.append((future, file_prefix, list(title_targets)))
+            except Exception:
+                pass
+        
+        def apply_birdid_result(file_prefix: str, title_targets: List[str], birdid_result: Dict):
+            if not birdid_result or not birdid_result.get('success') or not birdid_result.get('results'):
+                return
+            top_result = birdid_result['results'][0]
+            birdid_confidence = top_result.get('confidence', 0)
+            cn_name = top_result.get('cn_name', '')
+            en_name = top_result.get('en_name', '')
             
-            filepath = os.path.join(self.dir_path, filename)
-            file_prefix, _ = os.path.splitext(filename)
+            if birdid_confidence >= self.settings.birdid_confidence_threshold:
+                if self.i18n.current_lang.startswith('en'):
+                    bird_log = en_name or cn_name
+                    bird_title = en_name or cn_name
+                else:
+                    bird_log = cn_name or en_name
+                    bird_title = cn_name or en_name
+                
+                self._log(f"  🐦 Bird ID: {bird_log} ({birdid_confidence:.0f}%)")
+                
+                species_entry = {'cn_name': cn_name, 'en_name': en_name}
+                if not any(s.get('cn_name') == cn_name for s in self.stats['bird_species']):
+                    self.stats['bird_species'].append(species_entry)
+                if cn_name:
+                    self.file_bird_species[file_prefix] = {
+                        'cn_name': cn_name,
+                        'en_name': en_name
+                    }
+                
+                for target_file in title_targets:
+                    if target_file and os.path.exists(target_file):
+                        queue_metadata({
+                            'file': target_file,
+                            'title': bird_title,
+                        })
+            else:
+                self._log(
+                    f"  🐦 Low confidence: {top_result.get('cn_name', '?')} "
+                    f"({birdid_confidence:.0f}% < {self.settings.birdid_confidence_threshold}%)"
+                )
+        
+        # 轻量 Job 调度：在 MPS 上默认关闭 YOLO 预取，避免与 TOPIQ 并发争用
+        # 如需强制开启/关闭，可通过 SUPERPICKY_YOLO_PREFETCH 覆盖。
+        mps_available = False
+        try:
+            import torch
+            mps_available = bool(getattr(torch.backends, "mps", None) and torch.backends.mps.is_available())
+        except Exception:
+            mps_available = False
+        
+        env_yolo_prefetch_raw = os.getenv("SUPERPICKY_YOLO_PREFETCH", "").strip().lower()
+        if env_yolo_prefetch_raw:
+            yolo_prefetch_enabled = env_yolo_prefetch_raw not in {"0", "false", "no", "off"}
+        else:
+            yolo_prefetch_enabled = not mps_available
+        
+        yolo_prefetch_depth = 3
+        env_yolo_prefetch_depth = os.getenv("SUPERPICKY_YOLO_PREFETCH_DEPTH", "").strip()
+        if env_yolo_prefetch_depth.isdigit():
+            yolo_prefetch_depth = max(2, int(env_yolo_prefetch_depth))
+        
+        yolo_result_queue = queue.Queue(maxsize=yolo_prefetch_depth) if yolo_prefetch_enabled else None
+        yolo_prefetch_thread = None
+        yolo_infer_lock = threading.Lock()
+        focus_exif_lock = threading.Lock()
+        
+        def resolve_file_context(in_filename: str) -> Dict[str, any]:
+            in_filepath = os.path.join(self.dir_path, in_filename)
+            in_file_prefix, _ = os.path.splitext(in_filename)
             
             # V4.0.4: 从 tmp_*.jpg 提取原始文件前缀用于匹配 raw_dict
             # 例如: tmp__Z9W0898.jpg -> tmp__Z9W0898 -> _Z9W0898
-            original_prefix = file_prefix
-            if file_prefix.startswith('tmp_'):
-                original_prefix = file_prefix[4:]  # 去掉 "tmp_" 前缀
+            in_original_prefix = in_file_prefix
+            if in_file_prefix.startswith('tmp_'):
+                in_original_prefix = in_file_prefix[4:]  # 去掉 "tmp_" 前缀
+            
+            in_raw_ext = raw_dict.get(in_original_prefix)
+            in_raw_path = os.path.join(self.dir_path, in_original_prefix + in_raw_ext) if in_raw_ext else None
+            in_can_read_focus_raw = bool(
+                in_raw_ext and in_raw_ext.lower() in focus_supported_raw_exts and in_raw_path and os.path.exists(in_raw_path)
+            )
+            
+            return {
+                'filename': in_filename,
+                'filepath': in_filepath,
+                'file_prefix': in_file_prefix,
+                'original_prefix': in_original_prefix,
+                'raw_ext': in_raw_ext,
+                'raw_path': in_raw_path,
+                'can_read_focus_raw': in_can_read_focus_raw,
+            }
+        
+        def run_yolo_detection(in_filepath: str, focus_point: Optional[Tuple[float, float]] = None):
+            # 单模型实例在“预取线程 + 主线程复选”两处复用，串行化推理调用以保证稳定性
+            with yolo_infer_lock:
+                return detect_and_draw_birds(
+                    in_filepath, model, None, self.dir_path, ui_settings, None,
+                    skip_nima=True, focus_point=focus_point
+                )
+        
+        def read_focus_result_safe(in_raw_path: Optional[str]):
+            if not in_raw_path:
+                return None
+            with focus_exif_lock:
+                focus_detector = get_focus_detector()
+                return focus_detector.detect(in_raw_path)
+        
+        def read_iso_safe(in_filepath: Optional[str]):
+            if not in_filepath:
+                return None
+            with focus_exif_lock:
+                return self._read_iso(in_filepath)
+        
+        def build_yolo_item(index: int, in_filename: str) -> Dict[str, any]:
+            ctx = resolve_file_context(in_filename)
+            in_filepath = ctx['filepath']
+            
+            yolo_start = time.time()
+            yolo_result = None
+            yolo_error = None
+            try:
+                yolo_result = run_yolo_detection(in_filepath, None)
+                if yolo_result is None:
+                    yolo_error = self.i18n.t("logs.cannot_process", filename=in_filename)
+            except Exception as e:
+                yolo_error = self.i18n.t("logs.processing_error", filename=in_filename, error=str(e))
+            
+            return {
+                'index': index,
+                'filename': ctx['filename'],
+                'filepath': ctx['filepath'],
+                'file_prefix': ctx['file_prefix'],
+                'original_prefix': ctx['original_prefix'],
+                'raw_ext': ctx['raw_ext'],
+                'raw_path': ctx['raw_path'],
+                'can_read_focus_raw': ctx['can_read_focus_raw'],
+                'result': yolo_result,
+                'error': yolo_error,
+                'yolo_ms': (time.time() - yolo_start) * 1000,
+            }
+        
+        if yolo_prefetch_enabled and yolo_result_queue is not None:
+            def yolo_prefetch_worker():
+                try:
+                    for idx, queued_filename in enumerate(files_tbr, 1):
+                        yolo_result_queue.put(build_yolo_item(idx, queued_filename))
+                finally:
+                    # 结束哨兵，保证主线程可正常退出
+                    yolo_result_queue.put(None)
+            
+            yolo_prefetch_thread = threading.Thread(
+                target=yolo_prefetch_worker,
+                daemon=True,
+                name="sp-yolo-prefetch"
+            )
+            yolo_prefetch_thread.start()
+            if self._perf_enabled:
+                self._log(f"  ⚙️ YOLO prefetch: on (depth={yolo_prefetch_depth})")
+        elif self._perf_enabled:
+            if env_yolo_prefetch_raw:
+                self._log("  ⚙️ YOLO prefetch: off")
+            else:
+                self._log(f"  ⚙️ YOLO prefetch: off (auto, mps={'on' if mps_available else 'off'})")
+        
+        # ISO 异步预取：把 EXIF ISO 读取与主流程并行，减少主线程等待
+        env_iso_prefetch = os.getenv("SUPERPICKY_ISO_PREFETCH", "1").strip().lower()
+        iso_prefetch_enabled = env_iso_prefetch not in {"0", "false", "no", "off"}
+        iso_prefetch_thread = None
+        iso_prefetch_results = {}
+        iso_prefetch_done = False
+        iso_prefetch_cond = threading.Condition()
+        
+        if iso_prefetch_enabled:
+            def iso_prefetch_worker():
+                nonlocal iso_prefetch_done
+                try:
+                    for idx, queued_filename in enumerate(files_tbr, 1):
+                        ctx = resolve_file_context(queued_filename)
+                        prefetched_iso = None
+                        if ctx['raw_path'] and os.path.exists(ctx['raw_path']):
+                            prefetched_iso = read_iso_safe(ctx['raw_path'])
+                        if prefetched_iso is None:
+                            prefetched_iso = read_iso_safe(ctx['filepath'])
+                        with iso_prefetch_cond:
+                            iso_prefetch_results[idx] = prefetched_iso
+                            iso_prefetch_cond.notify_all()
+                finally:
+                    with iso_prefetch_cond:
+                        iso_prefetch_done = True
+                        iso_prefetch_cond.notify_all()
+            
+            iso_prefetch_thread = threading.Thread(
+                target=iso_prefetch_worker,
+                daemon=True,
+                name="sp-iso-prefetch"
+            )
+            iso_prefetch_thread.start()
+            if self._perf_enabled:
+                self._log("  ⚙️ ISO prefetch: on")
+        elif self._perf_enabled:
+            self._log("  ⚙️ ISO prefetch: off")
+
+        for i in range(1, total_files + 1):
+            photo_stage_ms = {}
+            
+            def add_photo_stage(stage: str, ms: float):
+                photo_stage_ms[stage] = photo_stage_ms.get(stage, 0.0) + max(0.0, float(ms))
+            
+            # 从预取队列获取 YOLO 结果；未启用预取时回退为同步执行
+            if yolo_result_queue is not None:
+                yolo_wait_start = time.time()
+                yolo_item = yolo_result_queue.get()
+                yolo_wait_ms = (time.time() - yolo_wait_start) * 1000
+                if yolo_wait_ms > 0.1:
+                    add_photo_stage('yolo_queue_wait', yolo_wait_ms)
+                if yolo_item is None:
+                    break
+            else:
+                filename_inline = files_tbr[i - 1]
+                yolo_item = build_yolo_item(i, filename_inline)
+            
+            prefetched_iso_value = None
+            iso_prefetched = False
+            if iso_prefetch_enabled:
+                iso_wait_start = time.time()
+                with iso_prefetch_cond:
+                    while i not in iso_prefetch_results and not iso_prefetch_done:
+                        iso_prefetch_cond.wait(timeout=0.01)
+                    if i in iso_prefetch_results:
+                        prefetched_iso_value = iso_prefetch_results.pop(i)
+                        iso_prefetched = True
+                iso_wait_ms = (time.time() - iso_wait_start) * 1000
+                if iso_wait_ms > 0.1:
+                    add_photo_stage('iso_prefetch_wait', iso_wait_ms)
+            
+            yolo_ms = yolo_item.get('yolo_ms', 0.0) or 0.0
+            add_photo_stage('yolo', yolo_ms)
+            
+            filename = yolo_item['filename']
+            filepath = yolo_item['filepath']
+            file_prefix = yolo_item['file_prefix']
+            original_prefix = yolo_item['original_prefix']
+            raw_ext = yolo_item['raw_ext']
+            raw_path = yolo_item['raw_path']
+            can_read_focus_raw = yolo_item['can_read_focus_raw']
+            
+            # 后处理阶段开始时间（最终日志会叠加 yolo_ms，保持单图耗时口径一致）
+            photo_start_time = time.time()
+            
+            # 延迟对焦点读取：仅在必要时触发，避免在早期退出样本上浪费 IO
+            preloaded_focus_result = None
+            focus_point_for_selection = None
             
             # 更新进度
             should_update = (i % 5 == 0 or i == total_files or i == 1)
@@ -665,47 +1151,40 @@ class PhotoProcessor:
                 progress = int((i / total_files) * 100)
                 self._progress(progress)
             
-            # 优化流程：YOLO → 关键点检测(在crop上) → 条件NIMA
-            # Phase 1: 先做YOLO检测（跳过NIMA），获取鸟的位置和bbox
-            try:
-                result = detect_and_draw_birds(
-                    filepath, model, None, self.dir_path, ui_settings, None, skip_nima=True
-                )
-                if result is None:
-                    self._log(self.i18n.t("logs.cannot_process", filename=filename), "error")
-                    continue
-            except Exception as e:
-                self._log(self.i18n.t("logs.processing_error", filename=filename, error=str(e)), "error")
+            result = yolo_item.get('result')
+            if result is None:
+                self._log(yolo_item.get('error') or self.i18n.t("logs.cannot_process", filename=filename), "error")
                 continue
             
             # V4.2: 解构 AI 结果（现在有 9 个返回值，包含 bird_count）
             detected, _, confidence, sharpness, _, bird_bbox, img_dims, bird_mask, bird_count = result
             
-            # V4.2: 多鸟对焦点选择 - 如果检测到多只鸟，读取对焦点重新选择
-            if bird_count > 1 and original_prefix in raw_dict:
-                raw_ext = raw_dict[original_prefix]
-                raw_path = os.path.join(self.dir_path, original_prefix + raw_ext)
-                if raw_ext.lower() in ['.nef', '.nrw', '.arw', '.cr3', '.cr2', '.orf', '.raf', '.rw2']:
+            # 多鸟场景才补读对焦点，并在需要时做一次 YOLO 复选（避免全量样本都读 RAW 对焦）
+            if detected and bird_count > 1 and can_read_focus_raw:
+                pre_focus_start = time.time()
+                try:
+                    preloaded_focus_result = read_focus_result_safe(raw_path)
+                    if preloaded_focus_result is not None:
+                        focus_point_for_selection = (preloaded_focus_result.x, preloaded_focus_result.y)
+                except Exception:
+                    preloaded_focus_result = None
+                add_photo_stage('focus_prefetch', (time.time() - pre_focus_start) * 1000)
+                
+                if focus_point_for_selection is not None:
+                    refine_start = time.time()
                     try:
-                        focus_detector = get_focus_detector()
-                        focus_result = focus_detector.detect(raw_path)
-                        if focus_result is not None:
-                            focus_point_for_selection = (focus_result.x, focus_result.y)
-                            # 重新调用 YOLO，传入对焦点进行鸟选择
-                            result = detect_and_draw_birds(
-                                filepath, model, None, self.dir_path, ui_settings, None, 
-                                skip_nima=True, focus_point=focus_point_for_selection
-                            )
-                            if result is not None:
-                                detected, _, confidence, sharpness, _, bird_bbox, img_dims, bird_mask, bird_count = result
-                    except Exception as e:
-                        pass  # 对焦检测失败，使用原来的选择
+                        refined_result = run_yolo_detection(filepath, focus_point_for_selection)
+                        if refined_result is not None:
+                            detected, _, confidence, sharpness, _, bird_bbox, img_dims, bird_mask, bird_count = refined_result
+                    except Exception:
+                        pass
+                    add_photo_stage('yolo_refine', (time.time() - refine_start) * 1000)
             
             # V4.1: 早期退出 - 无鸟或置信度低，跳过所有后续检测
             # V4.2: 使用用户设置的 ai_confidence 阈值（百分比转小数）
             confidence_threshold = self.settings.ai_confidence / 100.0
             if not detected or (detected and confidence < confidence_threshold):
-                photo_time_ms = (time.time() - photo_start_time) * 1000
+                photo_time_ms = (time.time() - photo_start_time) * 1000 + yolo_ms
                 
                 if not detected:
                     rating_value = -1
@@ -729,7 +1208,7 @@ class PhotoProcessor:
                     raw_extension = raw_dict[original_prefix]
                     target_file_path = os.path.join(self.dir_path, original_prefix + raw_extension)
                     if os.path.exists(target_file_path):
-                        single_batch = [{
+                        queue_metadata({
                             'file': target_file_path,
                             'rating': 0 if rating_value >= 0 else 0,  # -1星也写0
                             'pick': -1 if rating_value == -1 else 0,
@@ -738,8 +1217,9 @@ class PhotoProcessor:
                             'label': None,
                             'focus_status': None,
                             'caption': f"{rating_value}星 | {reason}",
-                        }]
-                        exiftool_mgr.batch_set_metadata(single_batch)
+                        })
+                
+                self._perf_record_photo(photo_time_ms, photo_stage_ms, early_exit=True)
                 
                 continue  # 跳过后续所有检测
             
@@ -748,6 +1228,7 @@ class PhotoProcessor:
             both_eyes_hidden = False  # 保留用于日志/调试
             best_eye_visibility = 0.0  # V3.8: 眼睛最高置信度，用于封顶逻辑
             head_sharpness = 0.0
+            flight_future = None  # 与关键点阶段并行提交飞版检测
             has_visible_eye = False
             has_visible_beak = False
             left_eye_vis = 0.0
@@ -769,6 +1250,7 @@ class PhotoProcessor:
             bird_crop_mask = None # 裁剪区域掩码缓存
             bird_mask_orig = None  # V3.9: 原图尺寸的分割掩码（用于对焦验证）
             
+            keypoint_start = time.time()
             if use_keypoints and detected and bird_bbox is not None and img_dims is not None:
                 try:
                     import cv2
@@ -811,6 +1293,13 @@ class PhotoProcessor:
                             bird_crop_mask = bird_mask_orig[y_orig:y_orig+h_orig_box, x_orig:x_orig+w_orig_box]
                         
                         if bird_crop_bgr.size > 0:
+                            # 关键点与飞版并行：飞版在线程池异步执行，主线程继续关键点检测
+                            if use_flight:
+                                try:
+                                    flight_future = inference_pool.submit(flight_detector.detect, bird_crop_bgr)
+                                except Exception:
+                                    flight_future = None
+                            
                             crop_rgb = cv2.cvtColor(bird_crop_bgr, cv2.COLOR_BGR2RGB)
                             # 在裁剪区域上进行关键点检测，传入分割掩码
                             kp_result = keypoint_detector.detect(
@@ -856,18 +1345,23 @@ class PhotoProcessor:
                     # import traceback
                     # self._log(traceback.format_exc(), "error")
                     pass
+                add_photo_stage('keypoint', (time.time() - keypoint_start) * 1000)
             
             # Phase 3: 根据关键点可见性决定是否计算TOPIQ
             # V4.0: 眼睛可见度 < 30% 时也跳过 TOPIQ（节省时间）
             topiq = None
             if detected and not all_keypoints_hidden and best_eye_visibility >= 0.3:
                 # 双眼可见，需要计算NIMA以进行星级判定
+                topiq_start = time.time()
                 try:
-                    from iqa_scorer import get_iqa_scorer
                     import time as time_module
                     
                     step_start = time_module.time()
-                    scorer = get_iqa_scorer(device='mps')
+                    scorer = topiq_scorer
+                    if scorer is None:
+                        from iqa_scorer import get_iqa_scorer
+                        scorer = get_iqa_scorer(device='mps')
+                        topiq_scorer = scorer
                     
                     # V3.7: 使用全图而非裁剪图进行TOPIQ美学评分
                     # 全图评分 + 头部锐度阈值 是更好的组合：
@@ -878,12 +1372,21 @@ class PhotoProcessor:
                     topiq_time = (time_module.time() - step_start) * 1000
                 except Exception as e:
                     pass  # V3.3: 简化日志，静默 TOPIQ 计算失败
+                add_photo_stage('topiq', (time.time() - topiq_start) * 1000)
             # V3.8: 移除跳过日志，改用 all_keypoints_hidden 后跳过的情况会少很多
             
             # Phase 4: V3.4 飞版检测（在鸟的裁剪区域上执行）
             is_flying = False
             flight_confidence = 0.0
-            if use_flight and detected and bird_crop_bgr is not None and bird_crop_bgr.size > 0:
+            flight_stage_start = time.time()
+            if flight_future is not None:
+                try:
+                    flight_result = flight_future.result()
+                    is_flying = flight_result.is_flying
+                    flight_confidence = flight_result.confidence
+                except Exception as e:
+                    self._log(f"  ⚠️ Flight detection error: {e}", "warning")
+            elif use_flight and detected and bird_crop_bgr is not None and bird_crop_bgr.size > 0:
                 try:
                     flight_result = flight_detector.detect(bird_crop_bgr)
                     is_flying = flight_result.is_flying
@@ -892,11 +1395,14 @@ class PhotoProcessor:
                     # self._log(f"  🦅 飞版检测: is_flying={is_flying}, conf={flight_confidence:.2f}")
                 except Exception as e:
                     self._log(f"  ⚠️ Flight detection error: {e}", "warning")
+            if flight_future is not None or (use_flight and detected and bird_crop_bgr is not None and bird_crop_bgr.size > 0):
+                add_photo_stage('flight', (time.time() - flight_stage_start) * 1000)
             
             # Phase 5: V3.8 曝光检测（在鸟的裁剪区域上执行）
             is_overexposed = False
             is_underexposed = False
             if self.settings.detect_exposure and detected and bird_crop_bgr is not None and bird_crop_bgr.size > 0:
+                exposure_start = time.time()
                 try:
                     exposure_detector = get_exposure_detector()
                     exposure_result = exposure_detector.detect(
@@ -907,6 +1413,7 @@ class PhotoProcessor:
                     is_underexposed = exposure_result.is_underexposed
                 except Exception as e:
                     pass  # 曝光检测失败不影响处理
+                add_photo_stage('exposure', (time.time() - exposure_start) * 1000)
             
             # V3.8: 飞版加成（仅当 confidence >= 0.5 且 is_flying 时）
             # 锐度+100，美学+0.5，加成后的值用于评分
@@ -919,29 +1426,31 @@ class PhotoProcessor:
             
             # V4.3: ISO 锐度归一化 - 高 ISO 噪点会虚高锐度值，需要补偿
             # 从 RAW 或 JPEG 读取 ISO 值并计算归一化系数
-            iso_value = None
+            iso_start = time.time()
+            iso_value = prefetched_iso_value if iso_prefetched else None
             iso_sharpness_factor = 1.0
             
-            # 优先从 RAW 文件读取 ISO（更可靠）
-            if original_prefix in raw_dict:
-                raw_ext = raw_dict[original_prefix]
-                raw_path = os.path.join(self.dir_path, original_prefix + raw_ext)
-                if os.path.exists(raw_path):
-                    iso_value = self._read_iso(raw_path)
-            
-            # 如果 RAW 没有 ISO，尝试从 JPEG 读取
-            if iso_value is None:
-                iso_value = self._read_iso(filepath)
+            # 未命中预取时回退为同步读取
+            if not iso_prefetched:
+                # 优先从 RAW 文件读取 ISO（更可靠）
+                if raw_path and os.path.exists(raw_path):
+                    iso_value = read_iso_safe(raw_path)
+                
+                # 如果 RAW 没有 ISO，尝试从 JPEG 读取
+                if iso_value is None:
+                    iso_value = read_iso_safe(filepath)
             
             # 计算归一化系数（ISO 800 及以下为 1.0，之后每翻倍扣 5%）
             iso_sharpness_factor = self._get_iso_sharpness_factor(iso_value)
             
             # 应用 ISO 归一化到锐度
             normalized_sharpness = head_sharpness * iso_sharpness_factor
+            add_photo_stage('iso', (time.time() - iso_start) * 1000)
             
             # V4.0 优化: 先计算初步评分（不考虑对焦），只对 1 星以上做对焦检测
             # 这样 0 星和 -1 星照片不需要调用 exiftool，节省大量时间
             # V4.3: 使用 ISO 归一化后的锐度进行评分
+            prelim_start = time.time()
             preliminary_result = self.rating_engine.calculate(
                 detected=detected,
                 confidence=confidence,
@@ -955,31 +1464,32 @@ class PhotoProcessor:
                 focus_topiq_weight=1.0,
                 is_flying=False,             # 初步评分不考虑飞鸟加成
             )
+            add_photo_stage('rating_pre', (time.time() - prelim_start) * 1000)
             
             # Phase 6: V4.0 对焦点验证
             # 4 层检测返回两个权重: 锐度权重 + 美学权重
+            focus_start = time.time()
             focus_sharpness_weight = 1.0  # 默认无影响
             focus_topiq_weight = 1.0      # 默认无影响
             focus_x, focus_y = None, None
-            focus_data_available = False  # V3.9.3: 标记是否有对焦点数据
-            focus_result = None           # V3.9.3: 保存对焦检测结果用于调试图
+            focus_result = preloaded_focus_result  # 复用预读结果
+            focus_data_available = focus_result is not None  # V3.9.3: 标记是否有对焦点数据
+            if focus_data_available:
+                focus_x, focus_y = focus_result.x, focus_result.y
             
-            # V3.9.3: 对焦点坐标获取（始终执行，用于调试图显示）
-            # 即使是 0 星照片，也需要在调试图中显示对焦点位置
-            if detected and bird_bbox is not None and img_dims is not None:
-                if original_prefix in raw_dict:
-                    raw_ext = raw_dict[original_prefix]
-                    raw_path = os.path.join(self.dir_path, original_prefix + raw_ext)
-                    # Nikon, Sony, Canon, Olympus, Fujifilm, Panasonic 全支持
-                    if raw_ext.lower() in ['.nef', '.nrw', '.arw', '.cr3', '.cr2', '.orf', '.raf', '.rw2']:
-                        try:
-                            focus_detector = get_focus_detector()
-                            focus_result = focus_detector.detect(raw_path)
-                            if focus_result is not None:
-                                focus_data_available = True
-                                focus_x, focus_y = focus_result.x, focus_result.y
-                        except Exception as e:
-                            pass  # 对焦检测失败不影响处理
+            # 对焦点坐标获取：只对潜在 1 星及以上样本补读，减少低价值样本 IO
+            if preliminary_result.rating >= 1 and detected and bird_bbox is not None and img_dims is not None:
+                # 只在未预读到结果时再尝试一次
+                if not focus_data_available and can_read_focus_raw:
+                    pre_focus_start = time.time()
+                    try:
+                        focus_result = read_focus_result_safe(raw_path)
+                        if focus_result is not None:
+                            focus_data_available = True
+                            focus_x, focus_y = focus_result.x, focus_result.y
+                    except Exception:
+                        pass  # 对焦检测失败不影响处理
+                    add_photo_stage('focus_prefetch', (time.time() - pre_focus_start) * 1000)
             
             # V4.0: 对焦权重计算（仅对 1 星以上照片，节省时间）
             if preliminary_result.rating >= 1:
@@ -1014,17 +1524,15 @@ class PhotoProcessor:
                         head_center=head_center_orig,
                         head_radius=head_radius_val,
                     )
-                elif original_prefix in raw_dict:
+                elif raw_ext is not None:
                     # V3.9.3: 支持对焦检测的 RAW 文件但无法获取对焦点数据
-                    raw_ext = raw_dict[original_prefix]
-                    if raw_ext.lower() in ['.nef', '.nrw', '.arw', '.cr3', '.cr2', '.orf', '.raf', '.rw2']:
+                    if raw_ext.lower() in focus_supported_raw_exts and raw_path is not None:
                         # 检查是否是手动对焦模式
                         is_manual_focus = False
                         try:
                             import subprocess
                             focus_detector = get_focus_detector()
                             exiftool_path = focus_detector._get_exiftool_path()
-                            raw_path = os.path.join(self.dir_path, original_prefix + raw_ext)
                             # V3.9.4: 在 Windows 上隐藏控制台窗口
                             creationflags = subprocess.CREATE_NO_WINDOW if sys.platform.startswith('win') else 0
                             result = subprocess.run(
@@ -1047,10 +1555,12 @@ class PhotoProcessor:
                         else:
                             focus_sharpness_weight = 0.7
                             focus_topiq_weight = 0.9
+            add_photo_stage('focus', (time.time() - focus_start) * 1000)
             
             # V4.0: 最终评分计算（传入对焦权重和飞鸟状态）
             # 注意: 现在总是重新计算，因为需要传入 is_flying 参数
             # V4.3: 使用 ISO 归一化后的锐度
+            rating_final_start = time.time()
             rating_result = self.rating_engine.calculate(
                 detected=detected,
                 confidence=confidence,
@@ -1064,6 +1574,7 @@ class PhotoProcessor:
                 focus_topiq_weight=focus_topiq_weight,          # V4.0: 美学权重
                 is_flying=is_flying,                            # V4.0: 飞鸟乘法加成
             )
+            add_photo_stage('rating_final', (time.time() - rating_final_start) * 1000)
             
             rating_value = rating_result.rating
             pick = rating_result.pick
@@ -1122,6 +1633,7 @@ class PhotoProcessor:
                         fy_px = int(focus_y * img_h_for_focus) - y_orig
                         focus_point_crop = (fx_px, fy_px)
                 
+                debug_start = time.time()
                 try:
                     debug_img = self._save_debug_crop(
                         filename,
@@ -1137,9 +1649,10 @@ class PhotoProcessor:
                         self.callbacks.crop_preview(debug_img)
                 except Exception as e:
                     pass  # 调试图生成失败不影响主流程
+                add_photo_stage('debug_viz', (time.time() - debug_start) * 1000)
             
             # 计算真正总耗时并输出简化日志
-            photo_time_ms = (time.time() - photo_start_time) * 1000
+            photo_time_ms = (time.time() - photo_start_time) * 1000 + yolo_ms
             has_exposure_issue = is_overexposed or is_underexposed
             self._log_photo_result_simple(i, total_files, filename, rating_value, reason, photo_time_ms, is_flying, has_exposure_issue, focus_status)
             
@@ -1186,64 +1699,8 @@ class PhotoProcessor:
                 target_extension = raw_extension
                 
                 if os.path.exists(target_file_path):
-                    # V4.2: 自动鸟种识别（对2星及以上照片执行）
-                    bird_title = None
-                    if self.settings.auto_identify and rating_value >= 2:
-                        try:
-                            from birdid.bird_identifier import identify_bird
-                            
-                            # 使用裁剪图片进行识别（如果可用）
-                            birdid_result = identify_bird(
-                                filepath,  # 原始文件路径
-                                use_yolo=True,
-                                use_gps=True,
-                                use_ebird=self.settings.birdid_use_ebird,
-                                country_code=self.settings.birdid_country_code,
-                                region_code=self.settings.birdid_region_code,
-                                top_k=1
-                            )
-                            
-                            if birdid_result.get('success') and birdid_result.get('results'):
-                                top_result = birdid_result['results'][0]
-                                confidence = top_result.get('confidence', 0)
-                                
-                                # 置信度阈值检查（80%+）
-                                if confidence >= self.settings.birdid_confidence_threshold:
-                                    cn_name = top_result.get('cn_name', '')
-                                    en_name = top_result.get('en_name', '')
-                                    
-                                    # V4.2: Localize EXIF Title (pure Chinese or English)
-                                    if self.i18n.current_lang.startswith('en'):
-                                        bird_title = en_name
-                                    else:
-                                        bird_title = cn_name
-                                        
-                                    # Fallback if preferred name is empty
-                                    if not bird_title:
-                                        bird_title = cn_name or en_name
-                                        
-                                    # V4.2: Display bird name in current locale language
-                                    if self.i18n.current_lang.startswith('en'):
-                                        bird_log = en_name or cn_name
-                                    else:
-                                        bird_log = cn_name or en_name
-                                    self._log(f"  🐦 Bird ID: {bird_log} ({confidence:.0f}%)")
-                                    # V4.2: 收集识别的鸟种名称 (both languages)
-                                    species_entry = {'cn_name': cn_name, 'en_name': en_name}
-                                    if not any(s.get('cn_name') == cn_name for s in self.stats['bird_species']):
-                                        self.stats['bird_species'].append(species_entry)
-                                    # V4.0: Record file's bird species for folder organization
-                                    if cn_name:
-                                        self.file_bird_species[original_prefix] = {
-                                            'cn_name': cn_name,
-                                            'en_name': en_name
-                                        }
-                                else:
-                                    self._log(f"  🐦 Low confidence: {top_result.get('cn_name', '?')} ({confidence:.0f}% < {self.settings.birdid_confidence_threshold}%)")
-                        except Exception as e:
-                            self._log(f"  ⚠️ Bird ID failed: {e}", "warning")
-                    
-                    single_batch = [{
+                    birdid_title_targets = [target_file_path]
+                    queue_metadata({
                         'file': target_file_path,
                         'rating': rating_value if rating_value >= 0 else 0,
                         'pick': pick,
@@ -1252,15 +1709,14 @@ class PhotoProcessor:
                         'label': label,
                         'focus_status': focus_status,
                         'caption': caption,
-                        'title': bird_title,
-                    }]
-                    exiftool_mgr.batch_set_metadata(single_batch)
+                    })
                     # RAW+JPEG 时也写入当前 JPEG，便于单独查看 JPEG 时也有星级/题注（DNG/ARW/NEF 等同理）
                     # V4.0.5: 跳过临时预览文件 (tmp_*.jpg)，避免无用写入
                     filepath_basename = os.path.basename(filepath)
                     is_temp_file = filepath_basename.startswith('tmp_') or filepath_basename.startswith('tmp.')
                     if target_file_path != filepath and os.path.exists(filepath) and not is_temp_file:
-                        jpeg_batch = [{
+                        birdid_title_targets.append(filepath)
+                        queue_metadata({
                             'file': filepath,
                             'rating': rating_value if rating_value >= 0 else 0,
                             'pick': pick,
@@ -1269,68 +1725,18 @@ class PhotoProcessor:
                             'label': label,
                             'focus_status': focus_status,
                             'caption': caption,
-                            'title': bird_title,
-                        }]
-                        exiftool_mgr.batch_set_metadata(jpeg_batch)
+                        })
+                    
+                    # BirdID 异步提交（2星及以上）
+                    if self.settings.auto_identify and rating_value >= 2:
+                        submit_birdid_task(original_prefix, filepath, birdid_title_targets)
             else:
                 # V3.4: 纯 JPEG 文件（没有对应 RAW）
                 target_file_path = filepath
                 target_extension = os.path.splitext(filename)[1]
                 
-                # V4.0.5: 先执行识鸟，然后一次性写入 EXIF
-                jpeg_bird_title = None
-                if self.settings.auto_identify and rating_value >= 2:
-                    if original_prefix not in self.file_bird_species:
-                        try:
-                            from birdid.bird_identifier import identify_bird
-                            
-                            birdid_result = identify_bird(
-                                filepath,
-                                use_yolo=True,
-                                use_gps=True,
-                                use_ebird=self.settings.birdid_use_ebird,
-                                country_code=self.settings.birdid_country_code,
-                                region_code=self.settings.birdid_region_code,
-                                top_k=1
-                            )
-                            
-                            if birdid_result.get('success') and birdid_result.get('results'):
-                                top_result = birdid_result['results'][0]
-                                birdid_confidence = top_result.get('confidence', 0)
-                                
-                                if birdid_confidence >= self.settings.birdid_confidence_threshold:
-                                    cn_name = top_result.get('cn_name', '')
-                                    en_name = top_result.get('en_name', '')
-                                    
-                                    if self.i18n.current_lang.startswith('en'):
-                                        bird_log = en_name or cn_name
-                                    else:
-                                        bird_log = cn_name or en_name
-                                    self._log(f"  🐦 Bird ID: {bird_log} ({birdid_confidence:.0f}%)")
-                                    
-                                    species_entry = {'cn_name': cn_name, 'en_name': en_name}
-                                    if not any(s.get('cn_name') == cn_name for s in self.stats['bird_species']):
-                                        self.stats['bird_species'].append(species_entry)
-                                    if cn_name:
-                                        self.file_bird_species[original_prefix] = {
-                                            'cn_name': cn_name,
-                                            'en_name': en_name
-                                        }
-                                    
-                                    # V4.0.5: 设置 bird_title 用于 EXIF 写入
-                                    if self.i18n.current_lang.startswith('en'):
-                                        jpeg_bird_title = en_name
-                                    else:
-                                        jpeg_bird_title = cn_name
-                                    if not jpeg_bird_title:
-                                        jpeg_bird_title = cn_name or en_name
-                                else:
-                                    self._log(f"  🐦 Low confidence: {top_result.get('cn_name', '?')} ({birdid_confidence:.0f}% < {self.settings.birdid_confidence_threshold}%)")
-                        except Exception as e:
-                            self._log(f"  ⚠️ Bird ID failed: {e}", "warning")
-                
                 if os.path.exists(target_file_path):
-                    single_batch = [{
+                    queue_metadata({
                         'file': target_file_path,
                         'rating': rating_value if rating_value >= 0 else 0,
                         'pick': pick,
@@ -1339,9 +1745,10 @@ class PhotoProcessor:
                         'label': label,
                         'focus_status': focus_status,
                         'caption': caption,
-                        'title': jpeg_bird_title,  # V4.0.5: 已合并识鸟结果
-                    }]
-                    exiftool_mgr.batch_set_metadata(single_batch)
+                    })
+                    # BirdID 异步提交（2星及以上）
+                    if self.settings.auto_identify and rating_value >= 2:
+                        submit_birdid_task(original_prefix, filepath, [target_file_path])
 
             # V3.4: 以下操作对 RAW 和纯 JPEG 都执行
             if target_file_path and os.path.exists(target_file_path):
@@ -1354,6 +1761,7 @@ class PhotoProcessor:
                     adj_topiq_csv = adj_topiq_csv * 1.1
                 
                 # 更新 CSV 中的关键点数据（V4.1: 添加 adj_sharpness, adj_topiq）
+                csv_update_start = time.time()
                 self._update_csv_keypoint_data(
                     file_prefix, 
                     head_sharpness,  # V4.1: 原始头部锐度
@@ -1372,6 +1780,7 @@ class PhotoProcessor:
                     adj_sharpness_csv,  # V4.1: 调整后锐度
                     adj_topiq_csv,  # V4.1: 调整后美学
                 )
+                add_photo_stage('csv_update', (time.time() - csv_update_start) * 1000)
                 
                 # 收集3星照片（V4.1: 使用调整后的值）
                 if rating_value == 3 and adj_topiq_csv is not None:
@@ -1398,6 +1807,66 @@ class PhotoProcessor:
                         self.star2_reasons[file_prefix] = 'nima'  # 保留原字段名兼容
                     else:
                         self.star2_reasons[file_prefix] = 'both'
+            
+            self._perf_record_photo(photo_time_ms, photo_stage_ms, early_exit=False)
+        
+        if yolo_prefetch_thread is not None:
+            try:
+                yolo_prefetch_thread.join(timeout=30)
+            except Exception:
+                pass
+        if iso_prefetch_thread is not None:
+            try:
+                iso_prefetch_thread.join(timeout=30)
+            except Exception:
+                pass
+        
+        # 回收 BirdID 异步任务：补写标题并更新鸟种映射（用于后续分类目录）
+        if birdid_tasks:
+            for future, file_prefix, title_targets in birdid_tasks:
+                try:
+                    birdid_wait_start = time.time()
+                    birdid_result = future.result()
+                    self._perf_add_stage('birdid_wait', (time.time() - birdid_wait_start) * 1000)
+                    birdid_apply_start = time.time()
+                    apply_birdid_result(file_prefix, title_targets, birdid_result)
+                    self._perf_add_stage('birdid_apply', (time.time() - birdid_apply_start) * 1000)
+                except Exception as e:
+                    self._log(f"  ⚠️ Bird ID failed: {e}", "warning")
+        
+        if birdid_executor is not None:
+            try:
+                birdid_executor.shutdown(wait=True)
+            except Exception:
+                pass
+        
+        try:
+            inference_pool.shutdown(wait=True)
+        except Exception:
+            pass
+        
+        # 批量落盘 EXIF 队列（避免每张图一次写入）
+        flush_metadata_batch()
+        if metadata_async_enabled and metadata_queue is not None:
+            exif_wait_start = time.time()
+            metadata_queue.put(None)  # writer 退出哨兵
+            metadata_queue.join()
+            if metadata_writer_thread is not None:
+                metadata_writer_thread.join(timeout=30)
+            self._perf_add_stage('exif_wait', (time.time() - exif_wait_start) * 1000)
+            with metadata_writer_stats_lock:
+                async_flush_ms = metadata_writer_stats['flush_ms']
+                async_flush_count = metadata_writer_stats['flush_count']
+            if async_flush_ms > 0:
+                self._perf_add_stage('exif_flush', async_flush_ms)
+            self._perf_stats['exif_flush_count'] += async_flush_count
+            if metadata_writer_errors:
+                self._log(f"  ⚠️ EXIF async writer errors: {len(metadata_writer_errors)}", "warning")
+        
+        # 批量落盘 CSV 缓存（避免每张图反复整表 IO）
+        self._flush_csv_cache()
+        
+        self._perf_finalize()
         
         ai_total_time = time.time() - ai_total_start
         avg_ai_time = ai_total_time / total_files if total_files > 0 else 0
@@ -1583,15 +2052,51 @@ class PhotoProcessor:
         adj_sharpness: float = None,  # V4.1: 调整后锐度
         adj_topiq: float = None  # V4.1: 调整后美学
     ):
-        """更新CSV中的关键点数据和评分（V4.1: 添加 adj_sharpness, adj_topiq）"""
+        """更新 CSV 缓存中的关键点数据和评分（V4.1: 添加 adj_sharpness, adj_topiq）"""
+        # 首次调用时加载 CSV 到内存缓存
+        self._load_csv_cache()
+        if not self._csv_cache_rows or not self._csv_row_index:
+            return
+        
+        row_idx = self._csv_row_index.get(filename)
+        if row_idx is None:
+            return
+        
+        row = self._csv_cache_rows[row_idx]
+        # V3.4: 使用英文字段名更新数据
+        row['head_sharp'] = f"{head_sharpness:.0f}" if head_sharpness > 0 else "-"
+        row['left_eye'] = f"{left_eye_vis:.2f}"
+        row['right_eye'] = f"{right_eye_vis:.2f}"
+        row['beak'] = f"{beak_vis:.2f}"
+        row['nima_score'] = f"{nima:.2f}" if nima is not None else "-"
+        # V3.4: 飞版检测字段
+        row['is_flying'] = "yes" if is_flying else "no"
+        row['flight_conf'] = f"{flight_confidence:.2f}"
+        row['rating'] = str(rating)
+        # V3.9: 对焦状态和坐标字段
+        row['focus_status'] = focus_status if focus_status else "-"
+        row['focus_x'] = f"{focus_x:.3f}" if focus_x is not None else "-"
+        row['focus_y'] = f"{focus_y:.3f}" if focus_y is not None else "-"
+        # V4.1: 调整后锐度和美学（用于重新评星一致性）
+        row['adj_sharpness'] = f"{adj_sharpness:.2f}" if adj_sharpness else "-"
+        row['adj_topiq'] = f"{adj_topiq:.2f}" if adj_topiq else "-"
+        self._csv_cache_dirty = True
+    
+    def _load_csv_cache(self):
+        """加载 report.csv 到内存缓存，仅在首次更新时执行一次。"""
         import csv
         
         csv_path = os.path.join(self.dir_path, ".superpicky", "report.csv")
         if not os.path.exists(csv_path):
+            self._csv_cache_rows = []
+            self._csv_cache_fieldnames = []
+            self._csv_row_index = {}
+            return
+        
+        if self._csv_cache_rows is not None:
             return
         
         try:
-            # 读取现有CSV
             rows = []
             with open(csv_path, 'r', encoding='utf-8-sig') as f:
                 reader = csv.DictReader(f)
@@ -1616,34 +2121,42 @@ class PhotoProcessor:
                     fieldnames.insert(adj_sharp_idx + 1, 'adj_topiq')
                 
                 for row in reader:
-                    if row.get('filename') == filename:
-                        # V3.4: 使用英文字段名更新数据
-                        row['head_sharp'] = f"{head_sharpness:.0f}" if head_sharpness > 0 else "-"
-                        row['left_eye'] = f"{left_eye_vis:.2f}"
-                        row['right_eye'] = f"{right_eye_vis:.2f}"
-                        row['beak'] = f"{beak_vis:.2f}"
-                        row['nima_score'] = f"{nima:.2f}" if nima is not None else "-"
-                        # V3.4: 飞版检测字段
-                        row['is_flying'] = "yes" if is_flying else "no"
-                        row['flight_conf'] = f"{flight_confidence:.2f}"
-                        row['rating'] = str(rating)
-                        # V3.9: 对焦状态和坐标字段
-                        row['focus_status'] = focus_status if focus_status else "-"
-                        row['focus_x'] = f"{focus_x:.3f}" if focus_x is not None else "-"
-                        row['focus_y'] = f"{focus_y:.3f}" if focus_y is not None else "-"
-                        # V4.1: 调整后锐度和美学（用于重新评星一致性）
-                        row['adj_sharpness'] = f"{adj_sharpness:.2f}" if adj_sharpness else "-"
-                        row['adj_topiq'] = f"{adj_topiq:.2f}" if adj_topiq else "-"
+                    for extra_field in ['focus_status', 'focus_x', 'focus_y', 'adj_sharpness', 'adj_topiq']:
+                        if extra_field not in row:
+                            row[extra_field] = "-"
                     rows.append(row)
-            
-            # 写回CSV
-            if fieldnames and rows:
-                with open(csv_path, 'w', newline='', encoding='utf-8-sig') as f:
-                    writer = csv.DictWriter(f, fieldnames=fieldnames)
-                    writer.writeheader()
-                    writer.writerows(rows)
+
+            self._csv_cache_rows = rows
+            self._csv_cache_fieldnames = fieldnames
+            self._csv_row_index = {}
+            for idx, row in enumerate(rows):
+                key = row.get('filename')
+                if key and key not in self._csv_row_index:
+                    self._csv_row_index[key] = idx
         except Exception as e:
             self._log(f"  ⚠️  CSV update failed: {e}", "warning")
+            self._csv_cache_rows = []
+            self._csv_cache_fieldnames = []
+            self._csv_row_index = {}
+    
+    def _flush_csv_cache(self):
+        """将内存中的 CSV 更新一次性写回磁盘。"""
+        import csv
+        
+        if not self._csv_cache_dirty:
+            return
+        if not self._csv_cache_fieldnames or self._csv_cache_rows is None:
+            return
+        
+        csv_path = os.path.join(self.dir_path, ".superpicky", "report.csv")
+        try:
+            with open(csv_path, 'w', newline='', encoding='utf-8-sig') as f:
+                writer = csv.DictWriter(f, fieldnames=self._csv_cache_fieldnames)
+                writer.writeheader()
+                writer.writerows(self._csv_cache_rows)
+            self._csv_cache_dirty = False
+        except Exception as e:
+            self._log(f"  ⚠️  CSV flush failed: {e}", "warning")
     
     def _calculate_picked_flags(self):
         """Calculate picked flags - intersection of aesthetics + sharpness rankings among 3-star photos"""
@@ -1846,4 +2359,3 @@ class PhotoProcessor:
             self._log(self.i18n.t("logs.temp_deleted", count=deleted_count))
         else:
             self._log("  ℹ️  No temp files to clean")
-
