@@ -647,10 +647,10 @@ cp -R "SuperBirdIDPlugin.lrplugin" "${TEMP_DMG_DIR}/"
 
 # 生成 PDF 安装指南
 log_info "生成 PDF 安装指南..."
-if [ -f "docs/安装指南_v4.0.0.html" ]; then
+if [ -f "docs/安装指南_v4.0.4.html" ]; then
     # 使用 cupsfilter 或 wkhtmltopdf 生成 PDF（如果可用）
     # 备选：直接复制 HTML，用户可用浏览器打印为 PDF
-    cp "docs/安装指南_v4.0.0.html" "${TEMP_DMG_DIR}/Installation Guide 安装指南.html"
+    cp "docs/安装指南_v4.0.4.html" "${TEMP_DMG_DIR}/Installation Guide 安装指南.html"
     log_info "  已复制 HTML 安装指南（可在浏览器中打印为 PDF）"
 fi
 

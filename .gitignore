@@ -58,6 +58,11 @@ temp_models/
 test_*.sh
 quick_test.sh
 DEBUG_VERSION_README.md
+distribution.xml
+welcome.html
+conclusion.html
+pkg_components.plist
+pkg_scripts/
 
 # 旧的打包脚本（保留本地备份，不同步）
 package_notarize.sh
@@ -67,6 +72,7 @@ package_unsigned.sh
 # AI 工具配置（不上传）
 .agent/
 .claude/
+CLAUDE.md
 
 
 # IDE 配置
