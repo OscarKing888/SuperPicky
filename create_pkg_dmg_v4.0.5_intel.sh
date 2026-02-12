@@ -10,7 +10,7 @@ set -e  # 遇到错误立即退出
 # ============================================
 # 配置参数
 # ============================================
-VERSION="4.0.4"
+VERSION=$(python3 -c "from constants import APP_VERSION; print(APP_VERSION)")
 APP_NAME="SuperPicky"
 APP_NAME_CN="慧眼选鸟"
 BUNDLE_ID="com.jamesphotography.superpicky"
@@ -139,10 +139,10 @@ ditto "${APP_PATH}" "pkg_root/Applications/${APP_NAME}.app"
 log_info "创建 postinstall 脚本..."
 cat > pkg_scripts/postinstall << 'POSTINSTALL_EOF'
 #!/bin/bash
-# SuperPicky V4.0.4 - 安装后配置脚本
+# SuperPicky V__VERSION__ - 安装后配置脚本
 # Post-install configuration script
 
-echo "Configuring SuperPicky V4.0.4..."
+echo "Configuring SuperPicky V__VERSION__..."
 
 APP_PATH="/Applications/SuperPicky.app"
 
@@ -360,7 +360,7 @@ echo "✓ Quarantine cleared"
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "✅ SuperPicky V4.0.4 Installation Completed!"
+echo "✅ SuperPicky V__VERSION__ Installation Completed!"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 echo "📍 Location: /Applications/SuperPicky.app"
@@ -387,6 +387,7 @@ exit 0
 POSTINSTALL_EOF
 
 chmod +x pkg_scripts/postinstall
+sed -i '' "s/__VERSION__/${VERSION}/g" pkg_scripts/postinstall
 
 # 创建组件 plist 禁用 relocation（防止应用被安装到错误位置）
 log_info "创建组件 plist (禁用 relocation)..."
@@ -464,16 +465,16 @@ cat > welcome.html << 'WELCOME_EOF'
 </head>
 <body>
     <h1>Welcome to SuperPicky</h1>
-    <p class="version">Version 4.0.4</p>
+    <p class="version">Version __VERSION__</p>
 
     <p>This installer will install <strong>SuperPicky</strong> and its <strong>Lightroom Plugin</strong> on your computer.</p>
 
-    <h2>What's New in V4.0.4 <span class="new-badge">NEW</span></h2>
+    <h2>What's New in V__VERSION__ <span class="new-badge">NEW</span></h2>
     <ul>
+        <li><span class="highlight">🐛 Bug Fixes</span> - Corrected issues with Chinese file paths for AI models</li>
+        <li><span class="highlight">📝 Logging Specs</span> - Improved Bird ID logging with clear source file indication</li>
+        <li><span class="highlight">🚀 Performance</span> - Optimized non-blocking log output for better UX</li>
         <li><span class="highlight">⚙️ Skill Level Presets</span> - Beginner/Intermediate/Master modes with adaptive culling thresholds</li>
-        <li><span class="highlight">🦜 Bird Species ID</span> - AI-powered bird identification with metadata embedding</li>
-        <li><span class="highlight">📷 Lightroom Plugin</span> - Identify bird species directly within Lightroom</li>
-        <li><span class="highlight">🐛 Bug Fixes</span> - Improved stability on Intel Macs and burst detection fixes</li>
     </ul>
 
     <h3>System Requirements</h3>
@@ -487,6 +488,7 @@ cat > welcome.html << 'WELCOME_EOF'
 </body>
 </html>
 WELCOME_EOF
+sed -i '' "s/__VERSION__/${VERSION}/g" welcome.html
 
 cat > conclusion.html << 'CONCLUSION_EOF'
 <!DOCTYPE html>
@@ -534,7 +536,7 @@ cat > conclusion.html << 'CONCLUSION_EOF'
     <h1>✓ Installation Complete</h1>
 
     <div class="success">
-        <strong>SuperPicky V4.0.4</strong> has been successfully installed!
+        <strong>SuperPicky V__VERSION__</strong> has been successfully installed!
     </div>
 
     <h2>Installed Components</h2>
@@ -572,6 +574,7 @@ cat > conclusion.html << 'CONCLUSION_EOF'
 </body>
 </html>
 CONCLUSION_EOF
+sed -i '' "s/__VERSION__/${VERSION}/g" conclusion.html
 
 # 创建 Distribution XML
 cat > distribution.xml << DISTRIBUTION_EOF
@@ -715,16 +718,17 @@ Lightroom Classic, please follow these steps to install manually:
     Make sure the "Bird ID API" toggle is enabled in the main app
 
 ================================================================================
-版本 Version: 4.0.4
+版本 Version: __VERSION__
 © 2026 James Zhen Yu
 ================================================================================
 PLUGIN_README_EOF
+sed -i '' "s/__VERSION__/${VERSION}/g" "${TEMP_DMG_DIR}/Lightroom Plugin Manual Installation 插件手动安装.txt"
 
 # 创建总说明文件
 cat > "${TEMP_DMG_DIR}/README 安装说明.txt" << README_EOF
 ================================================================================
-慧眼选鸟 SuperPicky V4.0.4 安装说明
-SuperPicky V4.0.4 Installation Guide
+慧眼选鸟 SuperPicky V${VERSION} 安装说明
+SuperPicky V${VERSION} Installation Guide
 ================================================================================
 
 --------------------------------------------------------------------------------

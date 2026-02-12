@@ -2,10 +2,10 @@
   "_meta": {
     "language_name": "English",
     "language_code": "en_US",
-    "version": "4.0.4"
+    "version": "4.0.5"
   },
   "app": {
-    "title": "SuperPicky - AI Bird Photo Culling Tool v4.0.4 (111db4d6)",
+    "title": "SuperPicky - AI Bird Photo Culling Tool v{version} ({hash})",
     "window_title": "SuperPicky - AI Bird Photo Culling Tool",
     "brand_name": "SuperPicky"
   },
@@ -475,6 +475,13 @@
     "window_title": "Settings",
     "section_selection": "Culling Criteria",
     "section_birdid": "Bird ID",
+    "section_detection": "Detection",
+    "section_output": "Output",
+    "section_general": "General",
+    "nav_rating": "Rating",
+    "nav_detection": "Detection",
+    "nav_output": "Output",
+    "nav_general": "General",
     "detection_sensitivity": "Detection Sensitivity",
     "detection_sensitivity_hint": "Lower = More sensitive, easier to detect birds",
     "sharpness_requirement": "Sharpness Requirement",
@@ -487,6 +494,12 @@
     "section_xmp": "XMP Write",
     "xmp_write": "XMP Sidecar Write",
     "xmp_write_hint": "When checked: write XMP sidecar only, do not modify RAW; when unchecked: write directly to ARW",
+    "xmp_mode_embedded": "Embed in RAW",
+    "xmp_mode_embedded_hint": "Write directly to ARW/CR3 raw files",
+    "xmp_mode_sidecar": "XMP Sidecar",
+    "xmp_mode_sidecar_hint": "Create separate .xmp file, preserve original RAW",
+    "xmp_mode_sidecar_recommend": "Recommended - Fixes Sony viewer compatibility",
+    "xmp_write_mode": "Metadata Write Mode",
     "burst_fps": "Burst Speed",
     "burst_fps_hint": "Continuous shots faster than this will be grouped together",
     "reset_defaults": "Reset Defaults",
@@ -548,7 +561,7 @@
     "normalization": "Sharpness normalization method, affects fairness between large and small birds"
   },
   "help": {
-    "welcome_title": "Welcome to SuperPicky V4.0.4 - AI Bird Photo Culling Tool",
+    "welcome_title": "Welcome to SuperPicky V4.0.5 - AI Bird Photo Culling Tool",
     "usage_steps_title": "Usage Steps:",
     "step1": "Click 'Browse' to select source folder (supports RAW/JPG)",
     "step2": "Adjust 3-star and pick parameters (optional, defaults recommended)",

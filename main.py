@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 SuperPicky - PySide6 版本入口点
-Version: 4.0.4 - Burst Logic Optimization
+Version: 4.0.5 - Burst Logic Optimization
 """
 
 import sys
@@ -43,8 +43,21 @@ def main():
         print("⚠️  检测到已存在的 QApplication 实例")
     
     # 设置应用属性
+    # V4.0.5: 动态设置应用名称
+    from constants import APP_VERSION
+    from core.build_info import COMMIT_HASH
+    
+    commit_hash = COMMIT_HASH
+    if commit_hash == "154984fd": # 默认占位符
+         try:
+             import subprocess
+             hash_short = subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD']).strip().decode('utf-8')
+             commit_hash = hash_short
+         except:
+             pass
+
     app.setApplicationName("SuperPicky")
-    app.setApplicationDisplayName("慧眼选鸟v4.0.4 (1bf7c61a)")
+    app.setApplicationDisplayName(f"慧眼选鸟v{APP_VERSION} ({commit_hash})")
     app.setOrganizationName("JamesPhotography")
     app.setOrganizationDomain("jamesphotography.com.au")
     

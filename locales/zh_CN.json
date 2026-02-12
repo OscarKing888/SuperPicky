@@ -2,10 +2,10 @@
   "_meta": {
     "language_name": "简体中文",
     "language_code": "zh_CN",
-    "version": "4.0.4"
+    "version": "4.0.5"
   },
   "app": {
-    "title": "慧眼选鸟 by 詹姆斯于震 V4.0.4 (111db4d6)",
+    "title": "慧眼选鸟 by 詹姆斯于震 V{version} ({hash})",
     "window_title": "慧眼选鸟 by 詹姆斯于震",
     "brand_name": "慧眼选鸟"
   },
@@ -475,6 +475,13 @@
     "window_title": "参数设置",
     "section_selection": "选片标准",
     "section_birdid": "自动识鸟",
+    "section_detection": "检测设置",
+    "section_output": "输出设置",
+    "section_general": "通用设置",
+    "nav_rating": "评分",
+    "nav_detection": "检测",
+    "nav_output": "输出",
+    "nav_general": "通用",
     "detection_sensitivity": "检测敏感度",
     "detection_sensitivity_hint": "越低越敏感，更容易发现鸟",
     "sharpness_requirement": "清晰度要求",
@@ -487,6 +494,12 @@
     "section_xmp": "XMP 写入",
     "xmp_write": "XMP 侧车写入",
     "xmp_write_hint": "勾选时只写 XMP 侧车文件，不修改原 RAW；不勾选时直接写入 ARW",
+    "xmp_mode_embedded": "嵌入 RAW 文件",
+    "xmp_mode_embedded_hint": "直接写入 ARW/CR3 等原始文件",
+    "xmp_mode_sidecar": "XMP 侧车文件",
+    "xmp_mode_sidecar_hint": "生成独立 .xmp 文件，不修改原始 RAW",
+    "xmp_mode_sidecar_recommend": "推荐 - 解决 Sony 图像浏览器兼容问题",
+    "xmp_write_mode": "元数据写入方式",
     "burst_fps": "连拍速度",
     "burst_fps_hint": "快于此速度的连续拍摄将被归为一组",
     "reset_defaults": "恢复默认",
@@ -548,7 +561,7 @@
     "normalization": "锐度归一化方法，影响大小鸟之间的公平性"
   },
   "help": {
-    "welcome_title": "欢迎使用 SuperPicky V4.0.4 - 慧眼选鸟 | 比你更聪明的选片工具",
+    "welcome_title": "欢迎使用 SuperPicky V4.0.5 - 慧眼选鸟 | 比你更聪明的选片工具",
     "usage_steps_title": "使用步骤：",
     "step1": "点击'浏览'选择照片目录（支持RAW/JPG）",
     "step2": "调整三星与精选参数（可选，推荐默认值）",

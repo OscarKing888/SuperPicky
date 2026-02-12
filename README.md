@@ -1,6 +1,6 @@
 # SuperPicky - 慧眼选鸟 🦅
 
-[![Version](https://img.shields.io/badge/version-4.0.4-blue.svg)](https://github.com/jamesphotography/SuperPicky)
+[![Version](https://img.shields.io/badge/version-4.0.5-blue.svg)](https://github.com/jamesphotography/SuperPicky)
 [![Platform](https://img.shields.io/badge/platform-macOS%20|%20Windows-lightgrey.svg)](https://github.com/jamesphotography/SuperPicky/releases)
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 
@@ -57,10 +57,10 @@
 
 ### macOS
 **Apple Silicon (M1/M2/M3/M4)**
-- [GitHub 下载](https://github.com/jamesphotography/SuperPicky/releases/download/v4.0.4/SuperPicky_v4.0.4.dmg) | [Google Drive](https://drive.google.com/file/d/1JpPJUjSe64YJL-E-4nn8lsIqtDXae7CH/view?usp=sharing) | [百度网盘](https://pan.baidu.com/s/1OGiZYBFaKYpxPZDHfLxFwA?pwd=i1eq) 提取码: i1eq
+- [GitHub 下载](https://github.com/jamesphotography/SuperPicky/releases/download/v4.0.5/SuperPicky_v4.0.5.dmg) | [Google Drive](https://drive.google.com/file/d/PLACEHOLDER/view?usp=sharing) | [百度网盘](https://pan.baidu.com/s/PLACEHOLDER?pwd=code) 提取码: code
 
 **Intel (2020年前 Mac)**
-- [GitHub 下载](https://github.com/jamesphotography/SuperPicky/releases/download/v4.0.4/SuperPicky_v4.0.4_Intel.dmg) | [Google Drive](https://drive.google.com/file/d/1DghPd1yBRkMjEdM-GpxGNV8GFQBXgXiS/view?usp=sharing) | [百度网盘](https://pan.baidu.com/s/1iyDhNj1QP-Vg82QN9yoACQ?pwd=xh6u) 提取码: xh6u
+- [GitHub 下载](https://github.com/jamesphotography/SuperPicky/releases/download/v4.0.5/SuperPicky_v4.0.5_Intel.dmg) | [Google Drive](https://drive.google.com/file/d/PLACEHOLDER/view?usp=sharing) | [百度网盘](https://pan.baidu.com/s/PLACEHOLDER?pwd=code) 提取码: code
 
 1. 下载对应版本的 DMG 文件
 2. 双击 DMG 文件，将应用拖入 Applications

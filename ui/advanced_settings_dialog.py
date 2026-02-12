@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
 """
 SuperPicky - 参数设置对话框
-简化版 - 移除技术术语，使普通用户更易理解
+顶部标签页布局
 """
 
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout,
-    QLabel, QSlider, QPushButton, QComboBox,
-    QWidget, QFrame, QCheckBox
+    QLabel, QSlider, QPushButton,
+    QWidget, QFrame, QRadioButton,
+    QButtonGroup, QTabWidget
 )
 from PySide6.QtCore import Qt, Slot
 
@@ -18,7 +19,7 @@ from ui.custom_dialogs import StyledMessageBox
 
 
 class AdvancedSettingsDialog(QDialog):
-    """参数设置对话框 - 简化版"""
+    """参数设置对话框 - 顶部标签页布局"""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -33,11 +34,60 @@ class AdvancedSettingsDialog(QDialog):
     def _setup_ui(self):
         """设置 UI"""
         self.setWindowTitle(self.i18n.t("advanced_settings.window_title"))
-        self.setMinimumSize(500, 680)
-        self.resize(520, 800)
+        self.setMinimumSize(480, 480)
+        self.resize(520, 520)
         self.setModal(True)
 
         # 应用样式
+        self._apply_styles()
+
+        # 主布局
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        # 标签页
+        self.tab_widget = QTabWidget()
+        self.tab_widget.setStyleSheet(f"""
+            QTabWidget::pane {{
+                border: none;
+                background-color: {COLORS['bg_primary']};
+            }}
+            QTabBar::tab {{
+                background-color: {COLORS['bg_card']};
+                color: {COLORS['text_secondary']};
+                padding: 10px 24px;
+                border: none;
+                border-bottom: 2px solid transparent;
+                font-size: 13px;
+            }}
+            QTabBar::tab:selected {{
+                color: {COLORS['text_primary']};
+                border-bottom: 2px solid {COLORS['accent']};
+            }}
+            QTabBar::tab:hover:!selected {{
+                color: {COLORS['text_primary']};
+                background-color: {COLORS['bg_elevated']};
+            }}
+        """)
+
+        # 添加标签页
+        self.tab_widget.addTab(
+            self._create_culling_page(),
+            self.i18n.t("advanced_settings.section_selection")
+        )
+        self.tab_widget.addTab(
+            self._create_output_page(),
+            self.i18n.t("advanced_settings.section_output")
+        )
+
+        main_layout.addWidget(self.tab_widget, 1)
+
+        # 底部按钮区域
+        self._create_buttons(main_layout)
+
+    def _apply_styles(self):
+        """应用全局样式"""
         self.setStyleSheet(f"""
             QDialog {{
                 background-color: {COLORS['bg_primary']};
@@ -90,53 +140,35 @@ class AdvancedSettingsDialog(QDialog):
                 background: {COLORS['text_primary']};
                 border-radius: 8px;
             }}
-            QComboBox {{
-                background-color: {COLORS['bg_input']};
-                border: 1px solid {COLORS['border']};
-                border-radius: 8px;
-                padding: 10px 16px;
-                color: {COLORS['text_primary']};
+            QRadioButton {{
+                color: {COLORS['text_secondary']};
                 font-size: 13px;
-                min-width: 150px;
+                spacing: 8px;
             }}
-            QComboBox::drop-down {{
-                border: none;
-                width: 24px;
+            QRadioButton::indicator {{
+                width: 16px;
+                height: 16px;
             }}
-            QComboBox::down-arrow {{
-                image: none;
-                border-left: 5px solid transparent;
-                border-right: 5px solid transparent;
-                border-top: 6px solid {COLORS['text_tertiary']};
-                margin-right: 8px;
+            QRadioButton::indicator:unchecked {{
+                border: 2px solid {COLORS['text_tertiary']};
+                border-radius: 9px;
+                background: transparent;
             }}
-            QComboBox QAbstractItemView {{
-                background-color: {COLORS['bg_elevated']};
-                border: 1px solid {COLORS['border']};
-                border-radius: 8px;
-                padding: 4px;
-                selection-background-color: {COLORS['accent']};
-                selection-color: {COLORS['bg_void']};
+            QRadioButton::indicator:checked {{
+                border: 2px solid {COLORS['accent']};
+                border-radius: 9px;
+                background: {COLORS['accent']};
             }}
         """)
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 24, 24, 24)
-        layout.setSpacing(20)
+    def _create_culling_page(self):
+        """创建选片设置页面"""
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(12)
 
-        # 标题
-        title = QLabel(self.i18n.t("advanced_settings.title"))
-        title.setStyleSheet(f"""
-            color: {COLORS['text_primary']};
-            font-size: 18px;
-            font-weight: 600;
-        """)
-        layout.addWidget(title)
-
-        # === 选片标准 ===
-        self._create_section_title(layout, self.i18n.t("advanced_settings.section_selection"))
-        
-        # 检测敏感度（原 AI 置信度）
+        # 检测敏感度
         self.vars["min_confidence"] = self._create_slider_setting(
             layout,
             self.i18n.t("advanced_settings.detection_sensitivity"),
@@ -144,7 +176,7 @@ class AdvancedSettingsDialog(QDialog):
             min_val=30, max_val=70, default=50,
             format_func=lambda v: f"{v}%"
         )
-        
+
         # 清晰度要求
         self.vars["min_sharpness"] = self._create_slider_setting(
             layout,
@@ -165,33 +197,8 @@ class AdvancedSettingsDialog(QDialog):
         )
 
         # 分隔线
-        divider1 = QFrame()
-        divider1.setFixedHeight(1)
-        divider1.setStyleSheet(f"background-color: {COLORS['border_subtle']};")
-        layout.addWidget(divider1)
+        self._add_divider(layout)
 
-        # === 连拍设置 V4.0.4 ===
-        self._create_section_title(layout, self.i18n.t("advanced_settings.section_burst"))
-        
-        # 连拍速度
-        self.vars["burst_fps"] = self._create_slider_setting(
-            layout,
-            self.i18n.t("advanced_settings.burst_fps"),
-            self.i18n.t("advanced_settings.burst_fps_hint"),
-            min_val=4, max_val=20, default=10,
-            step=1,
-            format_func=lambda v: f"{v} 张/秒"
-        )
-
-        # 分隔线
-        divider2 = QFrame()
-        divider2.setFixedHeight(1)
-        divider2.setStyleSheet(f"background-color: {COLORS['border_subtle']};")
-        layout.addWidget(divider2)
-
-        # === 识鸟设置 ===
-        self._create_section_title(layout, self.i18n.t("advanced_settings.section_birdid"))
-        
         # 识别确信度
         self.vars["birdid_confidence"] = self._create_slider_setting(
             layout,
@@ -202,54 +209,131 @@ class AdvancedSettingsDialog(QDialog):
             format_func=lambda v: f"{v}%"
         )
 
-        # 分隔线
-        divider3 = QFrame()
-        divider3.setFixedHeight(1)
-        divider3.setStyleSheet(f"background-color: {COLORS['border_subtle']};")
-        layout.addWidget(divider3)
-
-        # === XMP 写入 ===
-        self._create_section_title(layout, self.i18n.t("advanced_settings.section_xmp"))
-        xmp_row = QHBoxLayout()
-        xmp_row.setSpacing(16)
-        self.vars["xmp_write"] = QCheckBox()
-        self.vars["xmp_write"].setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 13px;")
-        xmp_label = QLabel(self.i18n.t("advanced_settings.xmp_write"))
-        xmp_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 13px; min-width: 80px;")
-        xmp_row.addWidget(xmp_label)
-        xmp_row.addWidget(self.vars["xmp_write"])
-        layout.addLayout(xmp_row)
-        xmp_hint = QLabel(self.i18n.t("advanced_settings.xmp_write_hint"))
-        xmp_hint.setStyleSheet(f"""
-            color: {COLORS['text_muted']};
-            font-size: 11px;
-            margin-left: 96px;
-            margin-bottom: 8px;
-        """)
-        layout.addWidget(xmp_hint)
+        # 连拍速度
+        self.vars["burst_fps"] = self._create_slider_setting(
+            layout,
+            self.i18n.t("advanced_settings.burst_fps"),
+            self.i18n.t("advanced_settings.burst_fps_hint"),
+            min_val=4, max_val=20, default=10,
+            step=1,
+            format_func=lambda v: f"{v} fps"
+        )
 
         layout.addStretch()
+        return page
 
-        # 底部按钮
-        self._create_buttons(layout)
+    def _create_output_page(self):
+        """创建输出设置页面 - XMP 设置"""
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(16)
 
-    def _create_section_title(self, layout, text):
-        """创建区域标题"""
-        label = QLabel(text)
-        label.setStyleSheet(f"""
-            color: {COLORS['text_tertiary']};
-            font-size: 11px;
+        # 页面标题
+        title = QLabel(self.i18n.t("advanced_settings.xmp_write_mode"))
+        title.setStyleSheet(f"""
+            color: {COLORS['text_primary']};
+            font-size: 13px;
             font-weight: 500;
-            letter-spacing: 1px;
-            text-transform: uppercase;
+            margin-bottom: 4px;
         """)
-        layout.addWidget(label)
+        layout.addWidget(title)
+
+        # XMP 写入方式 - 使用单选按钮组
+        xmp_group_widget = QWidget()
+        xmp_group_widget.setStyleSheet(f"""
+            QWidget {{
+                background-color: {COLORS['bg_card']};
+                border: 1px solid {COLORS['border_subtle']};
+                border-radius: 8px;
+            }}
+        """)
+        xmp_layout = QVBoxLayout(xmp_group_widget)
+        xmp_layout.setContentsMargins(16, 12, 16, 12)
+        xmp_layout.setSpacing(0)
+
+        self.xmp_button_group = QButtonGroup(self)
+
+        # 选项1: 嵌入 RAW
+        embedded_container = QWidget()
+        embedded_layout = QVBoxLayout(embedded_container)
+        embedded_layout.setContentsMargins(0, 8, 0, 8)
+        embedded_layout.setSpacing(4)
+
+        embedded_option = QRadioButton(self.i18n.t("advanced_settings.xmp_mode_embedded"))
+        self.vars["xmp_embedded"] = embedded_option
+        self.xmp_button_group.addButton(embedded_option, 0)
+        embedded_layout.addWidget(embedded_option)
+
+        embedded_hint = QLabel(self.i18n.t("advanced_settings.xmp_mode_embedded_hint"))
+        embedded_hint.setStyleSheet(f"""
+            color: {COLORS['text_muted']};
+            font-size: 11px;
+            margin-left: 24px;
+        """)
+        embedded_layout.addWidget(embedded_hint)
+
+        xmp_layout.addWidget(embedded_container)
+
+        # 分隔线
+        sep = QFrame()
+        sep.setFixedHeight(1)
+        sep.setStyleSheet(f"background-color: {COLORS['border_subtle']};")
+        xmp_layout.addWidget(sep)
+
+        # 选项2: XMP 侧车文件（推荐）
+        sidecar_container = QWidget()
+        sidecar_layout = QVBoxLayout(sidecar_container)
+        sidecar_layout.setContentsMargins(0, 8, 0, 8)
+        sidecar_layout.setSpacing(4)
+
+        sidecar_option = QRadioButton(self.i18n.t("advanced_settings.xmp_mode_sidecar"))
+        sidecar_option.setStyleSheet(f"""
+            QRadioButton {{
+                color: {COLORS['text_primary']};
+                font-size: 13px;
+                font-weight: 500;
+            }}
+        """)
+        self.vars["xmp_sidecar"] = sidecar_option
+        self.xmp_button_group.addButton(sidecar_option, 1)
+        sidecar_layout.addWidget(sidecar_option)
+
+        sidecar_hint = QLabel(self.i18n.t("advanced_settings.xmp_mode_sidecar_hint"))
+        sidecar_hint.setStyleSheet(f"""
+            color: {COLORS['text_muted']};
+            font-size: 11px;
+            margin-left: 24px;
+        """)
+        sidecar_layout.addWidget(sidecar_hint)
+
+        # 推荐标签
+        recommend_label = QLabel(self.i18n.t("advanced_settings.xmp_mode_sidecar_recommend"))
+        recommend_label.setStyleSheet(f"""
+            color: {COLORS['accent']};
+            font-size: 11px;
+            margin-left: 24px;
+        """)
+        sidecar_layout.addWidget(recommend_label)
+
+        xmp_layout.addWidget(sidecar_container)
+
+        layout.addWidget(xmp_group_widget)
+
+        layout.addStretch()
+        return page
+
+    def _add_divider(self, layout):
+        """添加分隔线"""
+        divider = QFrame()
+        divider.setFixedHeight(1)
+        divider.setStyleSheet(f"background-color: {COLORS['border_subtle']}; margin: 4px 0;")
+        layout.addWidget(divider)
 
     def _create_slider_setting(self, layout, label_text, hint_text,
                                min_val, max_val, default, step=1,
                                format_func=None, scale=1):
         """创建滑块设置项"""
-        # 主行：标签 + 滑块 + 值
         container = QHBoxLayout()
         container.setSpacing(16)
 
@@ -272,7 +356,7 @@ class AdvancedSettingsDialog(QDialog):
             font-size: 14px;
             font-family: {FONTS['mono']};
             font-weight: 500;
-            min-width: 40px;
+            min-width: 50px;
         """)
         value_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         container.addWidget(value_label)
@@ -280,7 +364,7 @@ class AdvancedSettingsDialog(QDialog):
         slider.valueChanged.connect(lambda v: value_label.setText(format_func(v)))
 
         layout.addLayout(container)
-        
+
         # 添加小字提示
         hint_label = QLabel(hint_text)
         hint_label.setStyleSheet(f"""
@@ -296,7 +380,16 @@ class AdvancedSettingsDialog(QDialog):
 
     def _create_buttons(self, layout):
         """创建底部按钮"""
-        btn_layout = QHBoxLayout()
+        btn_container = QWidget()
+        btn_container.setStyleSheet(f"""
+            QWidget {{
+                background-color: {COLORS['bg_card']};
+                border-top: 1px solid {COLORS['border_subtle']};
+            }}
+        """)
+
+        btn_layout = QHBoxLayout(btn_container)
+        btn_layout.setContentsMargins(24, 12, 24, 12)
 
         # 恢复默认
         reset_btn = QPushButton(self.i18n.t("advanced_settings.reset_defaults"))
@@ -319,7 +412,7 @@ class AdvancedSettingsDialog(QDialog):
         save_btn.clicked.connect(self._save_settings)
         btn_layout.addWidget(save_btn)
 
-        layout.addLayout(btn_layout)
+        layout.addWidget(btn_container)
 
     def _load_current_config(self):
         """加载当前配置"""
@@ -328,11 +421,16 @@ class AdvancedSettingsDialog(QDialog):
         self.vars["min_nima"].setValue(int(self.config.min_nima * 10))
         self.vars["burst_fps"].setValue(int(self.config.burst_fps))
         self.vars["birdid_confidence"].setValue(int(self.config.birdid_confidence))
+
+        # 加载 XMP 设置
         try:
             arw_mode = self.config.arw_write_mode
-            self.vars["xmp_write"].setChecked(arw_mode in ("sidecar", "auto"))
+            if arw_mode in ("sidecar", "auto"):
+                self.vars["xmp_sidecar"].setChecked(True)
+            else:
+                self.vars["xmp_embedded"].setChecked(True)
         except Exception:
-            self.vars["xmp_write"].setChecked(False)
+            self.vars["xmp_embedded"].setChecked(True)
 
     @Slot()
     def _reset_to_default(self):
@@ -369,7 +467,10 @@ class AdvancedSettingsDialog(QDialog):
         self.config.set_min_nima(min_nima)
         self.config.set_burst_fps(burst_fps)
         self.config.set_birdid_confidence(birdid_confidence)
-        self.config.set_arw_write_mode("sidecar" if self.vars["xmp_write"].isChecked() else "embedded")
+
+        # 保存 XMP 设置
+        xmp_mode = "sidecar" if self.vars["xmp_sidecar"].isChecked() else "embedded"
+        self.config.set_arw_write_mode(xmp_mode)
         self.config.set_save_csv(True)
 
         if self.config.save():
@@ -391,12 +492,10 @@ class AdvancedSettingsDialog(QDialog):
     @Slot(str, int, float)
     def _on_skill_level_changed(self, level_key: str, sharpness: int, aesthetics: float):
         """处理水平变化"""
-        # 保存到配置
         self.config.set_skill_level(level_key)
         self.config.save()
-        
-        # 如果有父窗口（主窗口），更新其滑块和标签
+
         if self.parent() and hasattr(self.parent(), '_apply_skill_level_thresholds'):
             self.parent()._apply_skill_level_thresholds(level_key)
-        
+
         print(f"✅ 已切换摄影水平: {level_key} (锐度={sharpness}, 美学={aesthetics})")

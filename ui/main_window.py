@@ -799,31 +799,26 @@ class SuperPickyMainWindow(QMainWindow):
         header_layout.addStretch()
 
         # 右侧: 版本号 + commit hash
-        version_text = "V4.0.4"
-        try:
-            # V3.9.3: 优先从构建信息读取（发布版本）
-            from core.build_info import COMMIT_HASH
-            if COMMIT_HASH:
-                version_text = f"V4.0.4\n{COMMIT_HASH}"
-            else:
-                # 回退到 git 命令（开发环境）
-                import subprocess
-                result = subprocess.run(
-                    ['git', 'rev-parse', '--short', 'HEAD'],
-                    capture_output=True, 
-                    text=True, 
-                    encoding='utf-8',
-                    timeout=2,
-                    cwd=os.path.dirname(os.path.dirname(__file__))
-                )
-                if result.returncode == 0:
-                    commit_hash = result.stdout.strip()
-                    version_text = f"V4.0.4\n{commit_hash}"
-        except:
-            pass  # 使用默认版本号
+        # 右侧: 版本号 + commit hash
+        from constants import APP_VERSION
+        from core.build_info import COMMIT_HASH
+        
+        # V4.0.5: 动态获取版本号和 Commit Hash
+        commit_hash = COMMIT_HASH
+        if commit_hash == "154984fd": # 默认占位符
+             # 开发环境尝试获取真实 hash
+             try:
+                 import subprocess
+                 hash_short = subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD']).strip().decode('utf-8')
+                 commit_hash = hash_short
+             except:
+                 pass
+
+        version_text = f"V{APP_VERSION}\n{commit_hash}"
+        
         version_label = QLabel(version_text)
         version_label.setStyleSheet(VERSION_STYLE)
-        version_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        version_label.setAlignment(Qt.AlignRight | Qt.AlignBottom)
         header_layout.addWidget(version_label)
 
 

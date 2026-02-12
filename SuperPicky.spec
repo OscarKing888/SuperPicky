@@ -1,6 +1,9 @@
 import os
 import site
 from PyInstaller.utils.hooks import collect_data_files, copy_metadata
+import sys
+sys.path.append(os.path.abspath('.'))
+from constants import APP_VERSION
 
 # 获取当前工作目录
 base_path = os.path.abspath('.')
@@ -160,8 +163,8 @@ app = BUNDLE(
     info_plist={
         'CFBundleName': 'SuperPicky',
         'CFBundleDisplayName': 'SuperPicky',
-        'CFBundleVersion': '4.0.4',
-        'CFBundleShortVersionString': '4.0.4',
+        'CFBundleVersion': APP_VERSION,
+        'CFBundleShortVersionString': APP_VERSION,
         'NSHighResolutionCapable': True,
         'NSAppleEventsUsageDescription': '慧眼选鸟需要发送 AppleEvents 与其他应用通信。',
         'NSAppleScriptEnabled': False,

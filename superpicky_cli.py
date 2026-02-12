@@ -46,7 +46,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 def print_banner():
     """打印 CLI 横幅"""
     print("\n" + "━" * 60)
-    print(t("cli.banner", version="4.0.4"))
+    print(t("cli.banner", version="4.0.5"))
     print("━" * 60)
 
 
@@ -200,7 +200,7 @@ def cmd_process(args):
         cleanup_temp=args.cleanup
     )
     
-    # V4.0.4: 连拍检测已移至 PhotoProcessor 内部
+    # V4.0.5: 连拍检测已移至 PhotoProcessor 内部
     # - 早期检测: _detect_bursts_early() 在文件扫描后执行
     # - 跨目录合并: _consolidate_burst_groups() 在文件整理后执行
     # 这样可以实现跨星级目录的连拍合并，将所有连拍照片移至最高星级目录
