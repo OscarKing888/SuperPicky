@@ -174,26 +174,17 @@ end
 
 -- 保存识别结果到照片元数据
 -- 写入 Title (鸟名) 和 Caption (描述)
--- 根据 Lightroom 语言环境选择中文或英文
-local function saveRecognitionResult(photo, cnName, enName, scientificName, description)
+-- V4.0.5: 使用服务端返回的 display_name，不再自行判断语言
+--   服务端已根据 SuperPicky 主程序语言设置选择中文/英文名称
+local function saveRecognitionResult(photo, displayName, description)
     local catalog = LrApplication.activeCatalog()
 
-    -- 检测 Lightroom 是否为中文环境
-    -- 通过检测 "Window" 菜单的翻译来判断
-    local windowLabel = LOC("$$$/AgApplication/Menu/Window=Window")
-    local isChinese = (windowLabel == "窗口" or windowLabel == "視窗")
-    
-    -- Title: 根据语言只显示单一语言的名称
-    local title = isChinese and cnName or enName
-    
-    -- Caption: 只在中文环境写入
-    local caption = isChinese and (description or "") or ""
-
     catalog:withWriteAccessDo(LOC "$$$/SuperBirdID/Undo/SaveResult=Save Bird Recognition Result", function()
-        photo:setRawMetadata("title", title)
-        -- 写入 Caption (描述) - 仅中文环境
-        if caption ~= "" then
-            photo:setRawMetadata("caption", caption)
+        -- Title: 使用服务端已选好的 display_name
+        photo:setRawMetadata("title", displayName)
+        -- Caption: 写入描述（如有）
+        if description and description ~= "" then
+            photo:setRawMetadata("caption", description)
         end
     end)
 end
@@ -376,9 +367,8 @@ LrTasks.startAsyncTask(function()
             if result.success and result.results and #result.results > 0 then
                 -- 自动选择第一个结果 (置信度最高)
                 local best = result.results[1]
-                local cnName = best.cn_name or best.display_name or ""
-                local enName = best.en_name or ""
-                saveRecognitionResult(photo, cnName, enName, best.scientific_name, best.description)
+                local displayName = best.display_name or best.cn_name or best.en_name or "Unknown"
+                saveRecognitionResult(photo, displayName, best.description)
                 successCount = successCount + 1
             else
                 failCount = failCount + 1
@@ -401,11 +391,9 @@ LrTasks.startAsyncTask(function()
 
         if selectedIndex and selectedIndex > 0 then
             local selectedBird = result.results[selectedIndex]
-            local cnName = selectedBird.cn_name or selectedBird.display_name or LOC "$$$/SuperBirdID/Dialog/Unknown=Unknown"
-            local enName = selectedBird.en_name or ""
-            local scientificName = selectedBird.scientific_name or ""
+            local displayName = selectedBird.display_name or selectedBird.cn_name or selectedBird.en_name or "Unknown"
 
-            saveRecognitionResult(targetPhoto, cnName, enName, scientificName, selectedBird.description)
+            saveRecognitionResult(targetPhoto, displayName, selectedBird.description)
         end
     else
         local errorMsg = result.error or LOC "$$$/SuperBirdID/Dialog/Unknown=Unknown"
