@@ -48,7 +48,7 @@ class DirectoryConfig:
     
     # 日志和报告文件（隐藏）
     LOG_FILE: str = ".process_log.txt"
-    REPORT_FILE: str = ".report.csv"
+    REPORT_FILE: str = ".report.db"
     COMPARISON_REPORT_FILE: str = ".algorithm_comparison.csv"
 
 

@@ -1151,10 +1151,10 @@ class SuperPickyMainWindow(QMainWindow):
         self._check_report_csv()
 
         # V4.1: 检测历史记录 - 只问是否重置（重新评星功能已禁用）
-        history_csv = os.path.join(directory, ".superpicky", "report.csv")
+        history_db = os.path.join(directory, ".superpicky", "report.db")
         history_manifest = os.path.join(directory, ".superpicky_manifest.json")
 
-        if os.path.exists(history_csv) or os.path.exists(history_manifest):
+        if os.path.exists(history_db) or os.path.exists(history_manifest):
             reply = StyledMessageBox.question(
                 self,
                 self.i18n.t("messages.history_detected_title"),
@@ -1167,12 +1167,12 @@ class SuperPickyMainWindow(QMainWindow):
                 QTimer.singleShot(100, self._quick_restore_directory)
 
     def _check_report_csv(self):
-        """检查是否有 report.csv"""
+        """检查是否有 report.db"""
         if not self.directory_path:
             # self.post_da_btn.setEnabled(False)  # V4.1: 重新评星按钮已禁用
             return
 
-        report_path = os.path.join(self.directory_path, ".superpicky", "report.csv")
+        report_path = os.path.join(self.directory_path, ".superpicky", "report.db")
         if os.path.exists(report_path):
             # self.post_da_btn.setEnabled(True)  # V4.1: 重新评星按钮已禁用
             self._log(self.i18n.t("messages.report_detected"))
@@ -1586,7 +1586,7 @@ class SuperPickyMainWindow(QMainWindow):
             )
             return
 
-        report_path = os.path.join(self.directory_path, ".superpicky", "report.csv")
+        report_path = os.path.join(self.directory_path, ".superpicky", "report.db")
         if not os.path.exists(report_path):
             StyledMessageBox.warning(
                 self,

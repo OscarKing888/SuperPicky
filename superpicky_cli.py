@@ -115,8 +115,7 @@ def cmd_burst(args):
                 continue
             
             photos = detector.read_timestamps(filepaths)
-            csv_path = os.path.join(args.directory, '.superpicky', 'report.csv')
-            photos = detector.enrich_from_csv(photos, csv_path)
+            photos = detector.enrich_from_db(photos, args.directory)
             groups = detector.detect_groups(photos)
             groups = detector.select_best_in_groups(groups)
             
@@ -372,11 +371,10 @@ def cmd_restar(args):
     else:
         print("  ℹ️  无连拍子目录需要清理")
     
-    # 检查 report.csv 是否存在（可能在根目录或 .superpicky 子目录）
-    report_path = os.path.join(args.directory, 'report.csv')
-    report_path_alt = os.path.join(args.directory, '.superpicky', 'report.csv')
-    if not os.path.exists(report_path) and not os.path.exists(report_path_alt):
-        print("\n❌ 未找到 report.csv，请先运行 process 命令")
+    # 检查 report.db 是否存在
+    db_path = os.path.join(args.directory, '.superpicky', 'report.db')
+    if not os.path.exists(db_path):
+        print("\n❌ 未找到 report.db，请先运行 process 命令")
         return 1
     
     # 初始化引擎
@@ -468,8 +466,8 @@ def cmd_restar(args):
     exif_stats = exiftool_mgr.batch_set_metadata(batch_data)
     print(f"  ✅ 成功: {exif_stats.get('success', 0)}, 失败: {exif_stats.get('failed', 0)}")
     
-    # 更新 CSV
-    print("\n📊 更新 report.csv...")
+    # 更新数据库
+    print("\n📊 更新 report.db...")
     picked_files = set()  # CLI 模式暂不支持精选计算
     engine.update_report_csv(new_photos, picked_files)
     
@@ -543,8 +541,7 @@ def _run_burst_detection_restar(directory: str):
             continue
         
         photos = detector.read_timestamps(filepaths)
-        csv_path = os.path.join(directory, '.superpicky', 'report.csv')
-        photos = detector.enrich_from_csv(photos, csv_path)
+        photos = detector.enrich_from_db(photos, directory)
         groups = detector.detect_groups(photos)
         groups = detector.select_best_in_groups(groups)
         
@@ -560,40 +557,38 @@ def _run_burst_detection_restar(directory: str):
 
 def cmd_info(args):
     """显示目录信息"""
-    import pandas as pd
+    from tools.report_db import ReportDB
     
     print_banner()
     print(f"\n📁 目录: {args.directory}")
     
     # 检查各种文件
-    report_path = os.path.join(args.directory, 'report.csv')
+    db_path = os.path.join(args.directory, '.superpicky', 'report.db')
     manifest_path = os.path.join(args.directory, '.superpicky_manifest.json')
     
     print("\n📋 文件状态:")
     
-    if os.path.exists(report_path):
-        print("  ✅ report.csv 存在")
+    if os.path.exists(db_path):
+        print("  ✅ report.db 存在")
         try:
-            df = pd.read_csv(report_path)
-            total = len(df)
+            db = ReportDB(args.directory)
+            stats = db.get_statistics()
+            total = stats['total']
             print(f"     共 {total} 条记录")
             
-            if 'rating' in df.columns:
-                rating_counts = df['rating'].value_counts().sort_index()
-                print("\n📊 评分分布:")
-                for rating, count in rating_counts.items():
-                    stars = "⭐" * max(0, int(rating)) if rating >= 0 else "❌"
-                    print(f"     {stars} {rating}星: {count} 张")
+            print("\n📊 评分分布:")
+            for rating, count in sorted(stats['by_rating'].items()):
+                stars = "⭐" * max(0, int(rating)) if rating >= 0 else "❌"
+                print(f"     {stars} {rating}星: {count} 张")
             
-            if 'is_flying' in df.columns:
-                flying = df[df['is_flying'] == 'yes'].shape[0]
-                if flying > 0:
-                    print(f"\n🦅 飞鸟照片: {flying} 张")
-                    
+            if stats['flying'] > 0:
+                print(f"\n🦅 飞鸟照片: {stats['flying']} 张")
+            
+            db.close()
         except Exception as e:
             print(f"     读取失败: {e}")
     else:
-        print("  ❌ report.csv 不存在")
+        print("  ❌ report.db 不存在")
     
     if os.path.exists(manifest_path):
         print("  ✅ manifest 文件存在 (可重置)")

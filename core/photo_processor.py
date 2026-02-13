@@ -32,6 +32,7 @@ from datetime import datetime
 # 现有模块
 from tools.find_bird_util import raw_to_jpeg
 from ai_model import load_yolo_model, detect_and_draw_birds
+from tools.report_db import ReportDB
 from tools.exiftool_manager import get_exiftool_manager
 from advanced_config import get_advanced_config
 from core.rating_engine import RatingEngine, create_rating_engine_from_config
@@ -168,11 +169,8 @@ class PhotoProcessor:
         self.temp_converted_jpegs = set()  # V4.0: Track temp-converted JPEGs to avoid deleting user originals
         self.file_bird_species = {}  # V4.0: Track bird species per file: {'cn_name': '...', 'en_name': '...'}
         self.burst_map = {}  # V4.0.4: Track burst group IDs: {filepath: group_id}, 0 = not a burst
-        # CSV 缓存：避免每张图都整表读写（大目录下会成为主要瓶颈）
-        self._csv_cache_rows = None
-        self._csv_cache_fieldnames = None
-        self._csv_row_index = None
-        self._csv_cache_dirty = False
+        # SQLite 报告数据库（替代 CSV 缓存）
+        self.report_db = None  # 在 _run_ai_detection 中初始化
         
         # 性能日志开关（支持 settings 和环境变量）
         env_perf = os.getenv("SUPERPICKY_PERF_LOG", "").strip().lower() in {"1", "true", "yes", "on"}
@@ -660,34 +658,15 @@ class PhotoProcessor:
         return stats
     
     def _get_photo_scores_from_csv(self, prefix: str) -> Optional[Dict]:
-        """从 report.csv 获取照片的评分数据"""
-        # V4.0.5: 优先使用内存缓存（O(1) 查找）
-        if self._csv_cache_rows is not None and self._csv_row_index:
-            for fn_key, idx in self._csv_row_index.items():
-                if os.path.splitext(fn_key)[0] == prefix:
-                    row = self._csv_cache_rows[idx]
-                    sharpness = float(row.get('head_sharp', 0) or 0)
-                    topiq = float(row.get('nima_score', 0) or 0)
-                    return {'sharpness': sharpness, 'topiq': topiq}
+        """从 report.db 获取照片的评分数据"""
+        if self.report_db is None:
             return None
         
-        # 后备：从磁盘读取
-        import csv
-        csv_path = os.path.join(self.dir_path, ".superpicky", "report.csv")
-        if not os.path.exists(csv_path):
-            return None
-        
-        try:
-            with open(csv_path, 'r', encoding='utf-8-sig') as f:
-                reader = csv.DictReader(f)
-                for row in reader:
-                    filename = row.get('filename', '')
-                    if os.path.splitext(filename)[0] == prefix:
-                        sharpness = float(row.get('head_sharp', 0) or 0)
-                        topiq = float(row.get('nima_score', 0) or 0)
-                        return {'sharpness': sharpness, 'topiq': topiq}
-        except:
-            pass
+        photo = self.report_db.get_photo(prefix)
+        if photo:
+            sharpness = float(photo.get('head_sharp') or 0)
+            topiq = float(photo.get('nima_score') or 0)
+            return {'sharpness': sharpness, 'topiq': topiq}
         return None
     
     def _identify_raws_to_convert(self, raw_dict, jpg_dict, files_tbr):
@@ -750,6 +729,9 @@ class PhotoProcessor:
         """处理所有图片 - AI检测、关键点检测与评分"""
         # 获取模型（已在启动时预加载，此处仅获取引用）
         model = load_yolo_model()
+        
+        # 初始化 SQLite 报告数据库
+        self.report_db = ReportDB(self.dir_path)
         
         # 获取关键点检测模型
         keypoint_detector = get_keypoint_detector()
@@ -1036,7 +1018,8 @@ class PhotoProcessor:
             with yolo_infer_lock:
                 return detect_and_draw_birds(
                     in_filepath, model, None, self.dir_path, ui_settings, None,
-                    skip_nima=True, focus_point=focus_point
+                    skip_nima=True, focus_point=focus_point,
+                    report_db=self.report_db
                 )
         
         def read_focus_result_safe(in_raw_path: Optional[str]):
@@ -1925,10 +1908,12 @@ class PhotoProcessor:
             if metadata_writer_errors:
                 self._log(f"  ⚠️ EXIF async writer errors: {len(metadata_writer_errors)}", "warning")
         
-        # 批量落盘 CSV 缓存（避免每张图反复整表 IO）
-        if self._csv_cache_dirty:
-            self._log("💾 正在写入 CSV 报告缓存...")
-        self._flush_csv_cache()
+        # SQLite 数据库会在 _update_csv_keypoint_data 中自动提交
+        # 无需手动 flush
+        
+        # 关闭数据库连接
+        if self.report_db:
+            self.report_db.close()
         
         self._perf_finalize()
         
@@ -2098,129 +2083,47 @@ class PhotoProcessor:
             self.stats['exposure_issue'] += 1
     
     def _update_csv_keypoint_data(
-        self, 
-        filename: str, 
-        head_sharpness: float,
-        has_visible_eye: bool,
-        has_visible_beak: bool,
-        left_eye_vis: float,
-        right_eye_vis: float,
-        beak_vis: float,
-        nima: float,
-        rating: int,
-        is_flying: bool = False,
-        flight_confidence: float = 0.0,
-        focus_status: str = None,  # V3.9: 对焦状态
-        focus_x: float = None,  # V3.9: 对焦点X坐标
-        focus_y: float = None,  # V3.9: 对焦点Y坐标
-        adj_sharpness: float = None,  # V4.1: 调整后锐度
-        adj_topiq: float = None  # V4.1: 调整后美学
+            self, 
+            filename: str, 
+            head_sharpness: float,
+            has_visible_eye: bool,
+            has_visible_beak: bool,
+            left_eye_vis: float,
+            right_eye_vis: float,
+            beak_vis: float,
+            nima: float,
+            rating: int,
+            is_flying: bool = False,
+            flight_confidence: float = 0.0,
+            focus_status: str = None,  # V3.9: 对焦状态
+            focus_x: float = None,  # V3.9: 对焦点X坐标
+            focus_y: float = None,  # V3.9: 对焦点Y坐标
+            adj_sharpness: float = None,  # V4.1: 调整后锐度
+            adj_topiq: float = None  # V4.1: 调整后美学
     ):
-        """更新 CSV 缓存中的关键点数据和评分（V4.1: 添加 adj_sharpness, adj_topiq）"""
-        # 首次调用时加载 CSV 到内存缓存
-        self._load_csv_cache()
-        if not self._csv_cache_rows or not self._csv_row_index:
+        """更新报告数据库中的关键点数据和评分（SQLite 版本）"""
+        if self.report_db is None:
             return
         
-        row_idx = self._csv_row_index.get(filename)
-        if row_idx is None:
-            return
-        
-        row = self._csv_cache_rows[row_idx]
-        # V3.4: 使用英文字段名更新数据
-        row['head_sharp'] = f"{head_sharpness:.0f}" if head_sharpness > 0 else "-"
-        row['left_eye'] = f"{left_eye_vis:.2f}"
-        row['right_eye'] = f"{right_eye_vis:.2f}"
-        row['beak'] = f"{beak_vis:.2f}"
-        row['nima_score'] = f"{nima:.2f}" if nima is not None else "-"
-        # V3.4: 飞版检测字段
-        row['is_flying'] = "yes" if is_flying else "no"
-        row['flight_conf'] = f"{flight_confidence:.2f}"
-        row['rating'] = str(rating)
-        # V3.9: 对焦状态和坐标字段
-        row['focus_status'] = focus_status if focus_status else "-"
-        row['focus_x'] = f"{focus_x:.3f}" if focus_x is not None else "-"
-        row['focus_y'] = f"{focus_y:.3f}" if focus_y is not None else "-"
-        # V4.1: 调整后锐度和美学（用于重新评星一致性）
-        row['adj_sharpness'] = f"{adj_sharpness:.2f}" if adj_sharpness else "-"
-        row['adj_topiq'] = f"{adj_topiq:.2f}" if adj_topiq else "-"
-        self._csv_cache_dirty = True
+        data = {
+            'head_sharp': head_sharpness if head_sharpness > 0 else None,
+            'left_eye': left_eye_vis,
+            'right_eye': right_eye_vis,
+            'beak': beak_vis,
+            'nima_score': nima,
+            'is_flying': 1 if is_flying else 0,
+            'flight_conf': flight_confidence,
+            'rating': rating,
+            'focus_status': focus_status,
+            'focus_x': focus_x,
+            'focus_y': focus_y,
+            'adj_sharpness': adj_sharpness,
+            'adj_topiq': adj_topiq,
+        }
+        self.report_db.update_photo(filename, data)
     
-    def _load_csv_cache(self):
-        """加载 report.csv 到内存缓存，仅在首次更新时执行一次。"""
-        import csv
-        
-        csv_path = os.path.join(self.dir_path, ".superpicky", "report.csv")
-        if not os.path.exists(csv_path):
-            self._csv_cache_rows = []
-            self._csv_cache_fieldnames = []
-            self._csv_row_index = {}
-            return
-        
-        if self._csv_cache_rows is not None:
-            return
-        
-        try:
-            rows = []
-            with open(csv_path, 'r', encoding='utf-8-sig') as f:
-                reader = csv.DictReader(f)
-                fieldnames = list(reader.fieldnames) if reader.fieldnames else []
-                
-                # V3.9: 如果没有对焦相关字段则添加
-                if 'focus_status' not in fieldnames:
-                    rating_idx = fieldnames.index('rating') if 'rating' in fieldnames else len(fieldnames)
-                    fieldnames.insert(rating_idx + 1, 'focus_status')
-                if 'focus_x' not in fieldnames:
-                    focus_status_idx = fieldnames.index('focus_status') if 'focus_status' in fieldnames else len(fieldnames)
-                    fieldnames.insert(focus_status_idx + 1, 'focus_x')
-                if 'focus_y' not in fieldnames:
-                    focus_x_idx = fieldnames.index('focus_x') if 'focus_x' in fieldnames else len(fieldnames)
-                    fieldnames.insert(focus_x_idx + 1, 'focus_y')
-                # V4.1: 添加调整后锐度和美学字段
-                if 'adj_sharpness' not in fieldnames:
-                    focus_y_idx = fieldnames.index('focus_y') if 'focus_y' in fieldnames else len(fieldnames)
-                    fieldnames.insert(focus_y_idx + 1, 'adj_sharpness')
-                if 'adj_topiq' not in fieldnames:
-                    adj_sharp_idx = fieldnames.index('adj_sharpness') if 'adj_sharpness' in fieldnames else len(fieldnames)
-                    fieldnames.insert(adj_sharp_idx + 1, 'adj_topiq')
-                
-                for row in reader:
-                    for extra_field in ['focus_status', 'focus_x', 'focus_y', 'adj_sharpness', 'adj_topiq']:
-                        if extra_field not in row:
-                            row[extra_field] = "-"
-                    rows.append(row)
-
-            self._csv_cache_rows = rows
-            self._csv_cache_fieldnames = fieldnames
-            self._csv_row_index = {}
-            for idx, row in enumerate(rows):
-                key = row.get('filename')
-                if key and key not in self._csv_row_index:
-                    self._csv_row_index[key] = idx
-        except Exception as e:
-            self._log(f"  ⚠️  CSV update failed: {e}", "warning")
-            self._csv_cache_rows = []
-            self._csv_cache_fieldnames = []
-            self._csv_row_index = {}
-    
-    def _flush_csv_cache(self):
-        """将内存中的 CSV 更新一次性写回磁盘。"""
-        import csv
-        
-        if not self._csv_cache_dirty:
-            return
-        if not self._csv_cache_fieldnames or self._csv_cache_rows is None:
-            return
-        
-        csv_path = os.path.join(self.dir_path, ".superpicky", "report.csv")
-        try:
-            with open(csv_path, 'w', newline='', encoding='utf-8-sig') as f:
-                writer = csv.DictWriter(f, fieldnames=self._csv_cache_fieldnames)
-                writer.writeheader()
-                writer.writerows(self._csv_cache_rows)
-            self._csv_cache_dirty = False
-        except Exception as e:
-            self._log(f"  ⚠️  CSV flush failed: {e}", "warning")
+    # _load_csv_cache 和 _flush_csv_cache 已被 SQLite (ReportDB) 替代
+    # 详见 tools/report_db.py
     
     def _calculate_picked_flags(self):
         """Calculate picked flags - intersection of aesthetics + sharpness rankings among 3-star photos"""

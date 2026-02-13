@@ -3,7 +3,7 @@ import time
 import cv2
 import numpy as np
 from ultralytics import YOLO
-from tools.utils import log_message, write_to_csv
+from tools.utils import log_message
 from config import config
 # V3.2: 移除未使用的 sharpness 计算器导入
 from iqa_scorer import get_iqa_scorer
@@ -76,7 +76,7 @@ def _get_iqa_scorer():
     return _iqa_scorer
 
 
-def detect_and_draw_birds(image_path, model, output_path, dir, ui_settings, i18n=None, skip_nima=False, focus_point=None):
+def detect_and_draw_birds(image_path, model, output_path, dir, ui_settings, i18n=None, skip_nima=False, focus_point=None, report_db=None):
     """
     检测并标记鸟类（V4.2 - 支持多鸟对焦点选择）
 
@@ -162,7 +162,8 @@ def detect_and_draw_birds(image_path, model, output_path, dir, ui_settings, i18n
                 "nima_score": "-",
                 "rating": -1
             }
-            write_to_csv(data, dir, False)
+            if report_db:
+                report_db.insert_photo(data)
             return found_bird, bird_result, 0.0, 0.0, None, None, None, None, 0  # V4.2: 9 values including bird_count
 
     yolo_time = (time.time() - step_start) * 1000
@@ -242,7 +243,8 @@ def detect_and_draw_birds(image_path, model, output_path, dir, ui_settings, i18n
             "nima_score": "-",
             "rating": -1
         }
-        write_to_csv(data, dir, False)
+        if report_db:
+            report_db.insert_photo(data)
         return found_bird, bird_result, 0.0, 0.0, None, None, None, None, 0  # V4.2: 9 values including bird_count
     # V3.2: 移除 NIMA 计算（现在由 photo_processor 在裁剪区域上计算）
     # nima_score 设为 None，photo_processor 会重新计算
@@ -328,7 +330,8 @@ def detect_and_draw_birds(image_path, model, output_path, dir, ui_settings, i18n
 
             # Step 5: CSV写入
             step_start = time.time()
-            write_to_csv(data, dir, False)
+            if report_db:
+                report_db.insert_photo(data)
             csv_time = (time.time() - step_start) * 1000
             # V3.3: 简化日志
             # log_message(f"  ⏱️  [4/4] CSV写入: {csv_time:.1f}ms", dir)

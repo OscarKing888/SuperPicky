@@ -7,10 +7,10 @@ SuperPicky V3.3 - Re-Star Engine
 """
 
 import os
-import csv
 from typing import List, Dict, Set, Optional, Tuple
 from constants import RAW_EXTENSIONS, JPG_EXTENSIONS, IMAGE_EXTENSIONS
 from tools.i18n import t
+from tools.report_db import ReportDB
 
 
 def safe_float(value, default=0.0) -> float:
@@ -62,39 +62,35 @@ class PostAdjustmentEngine:
             directory: 照片目录路径
         """
         self.directory = directory
-        self.report_path = os.path.join(directory, ".superpicky", "report.csv")
+        self.report_db = None
         self.photos_data: List[Dict] = []
         self.image_extensions = IMAGE_EXTENSIONS
 
     def load_report(self) -> Tuple[bool, str]:
         """
-        加载 report.csv
+        加载 report.db
 
         Returns:
             (成功标志, 错误消息或成功消息)
         """
-        # 检查文件是否存在
-        if not os.path.exists(self.report_path):
-            return False, t("engine.report_not_found", path=self.report_path)
+        db_path = os.path.join(self.directory, ".superpicky", "report.db")
+        if not os.path.exists(db_path):
+            return False, t("engine.report_not_found", path=db_path)
 
         try:
-            with open(self.report_path, 'r', encoding='utf-8-sig') as f:
-                reader = csv.DictReader(f)
+            self.report_db = ReportDB(self.directory)
+            all_photos = self.report_db.get_all_photos()
 
-                # V3.3: 直接使用英文列名，无需映射
-                # 读取所有数据
-                all_photos = list(reader)
+            # 只加载有鸟的照片
+            self.photos_data = [
+                photo for photo in all_photos
+                if photo.get('has_bird') == 1
+            ]
 
-                # 只加载有鸟的照片
-                self.photos_data = [
-                    photo for photo in all_photos
-                    if photo.get('has_bird') == 'yes'
-                ]
+            total_count = len(all_photos)
+            bird_count = len(self.photos_data)
 
-                total_count = len(all_photos)
-                bird_count = len(self.photos_data)
-
-                return True, t("engine.load_success", bird=bird_count, total=total_count)
+            return True, t("engine.load_success", bird=bird_count, total=total_count)
 
         except Exception as e:
             return False, t("engine.csv_read_failed", error=str(e))
@@ -285,7 +281,7 @@ class PostAdjustmentEngine:
 
     def update_report_csv(self, updated_photos: List[Dict], picked_files: set) -> Tuple[bool, str]:
         """
-        更新 report.csv 中的评分数据
+        更新 report.db 中的评分数据
 
         Args:
             updated_photos: 更新后的照片数据（包含 '新星级' 字段）
@@ -294,30 +290,21 @@ class PostAdjustmentEngine:
         Returns:
             (成功标志, 消息)
         """
+        if self.report_db is None:
+            return False, "Database not loaded"
+        
         try:
-            # 读取现有CSV
-            with open(self.report_path, 'r', encoding='utf-8-sig') as f:
-                reader = csv.DictReader(f)
-                fieldnames = reader.fieldnames
-                all_rows = list(reader)
-
-            # 创建文件名到新评分的映射
-            rating_map = {photo['filename']: photo.get('新星级', 0) for photo in updated_photos}
-
-            # 更新每行的 rating
-            updated_count = 0
-            for row in all_rows:
-                filename = row.get('filename')
-                if filename in rating_map:
-                    row['rating'] = str(rating_map[filename])
-                    updated_count += 1
-
-            # 写回CSV
-            with open(self.report_path, 'w', encoding='utf-8', newline='') as f:
-                writer = csv.DictWriter(f, fieldnames=fieldnames)
-                writer.writeheader()
-                writer.writerows(all_rows)
-
+            updates = []
+            for photo in updated_photos:
+                filename = photo.get('filename')
+                new_rating = photo.get('新星级', 0)
+                if filename:
+                    updates.append({
+                        'filename': filename,
+                        'rating': int(new_rating)
+                    })
+            
+            updated_count = self.report_db.update_ratings_batch(updates)
             return True, t("engine.csv_update_success", count=updated_count)
 
         except Exception as e:

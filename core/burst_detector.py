@@ -461,14 +461,8 @@ class BurstDetector:
     
     def enrich_from_csv(self, photos: List[PhotoTimestamp], csv_path: str) -> List[PhotoTimestamp]:
         """
-        从 CSV 报告中读取锐度和美学分数
-        
-        Args:
-            photos: PhotoTimestamp 列表
-            csv_path: CSV 报告路径
-            
-        Returns:
-            更新后的 PhotoTimestamp 列表
+        [DEPRECATED] 从 CSV 报告中读取锐度和美学分数
+        请使用 enrich_from_db 代替
         """
         import csv
         
@@ -476,7 +470,6 @@ class BurstDetector:
             print(f"⚠️ CSV 报告不存在: {csv_path}")
             return photos
         
-        # 读取 CSV 数据
         csv_data = {}
         try:
             with open(csv_path, 'r', encoding='utf-8-sig') as f:
@@ -496,12 +489,52 @@ class BurstDetector:
             print(f"⚠️ 读取 CSV 失败: {e}")
             return photos
         
-        # 更新照片数据
         for photo in photos:
             basename = os.path.splitext(os.path.basename(photo.filepath))[0]
             if basename in csv_data:
                 photo.sharpness = csv_data[basename]['sharpness']
                 photo.topiq = csv_data[basename]['topiq']
+        
+        return photos
+    
+    def enrich_from_db(self, photos: List[PhotoTimestamp], directory: str) -> List[PhotoTimestamp]:
+        """
+        从 SQLite 报告数据库中读取锐度和美学分数
+        
+        Args:
+            photos: PhotoTimestamp 列表
+            directory: 工作目录路径（report.db 所在目录）
+            
+        Returns:
+            更新后的 PhotoTimestamp 列表
+        """
+        from tools.report_db import ReportDB
+        
+        db_path = os.path.join(directory, '.superpicky', 'report.db')
+        if not os.path.exists(db_path):
+            print(f"⚠️ 报告数据库不存在: {db_path}")
+            return photos
+        
+        try:
+            db = ReportDB(directory)
+            all_data = db.get_all_photos()
+            db.close()
+            
+            # 构建查找字典
+            db_data = {}
+            for row in all_data:
+                filename = row.get('filename', '')
+                sharpness = float(row.get('head_sharp') or 0)
+                topiq = float(row.get('nima_score') or 0)
+                db_data[filename] = {'sharpness': sharpness, 'topiq': topiq}
+            
+            for photo in photos:
+                basename = os.path.splitext(os.path.basename(photo.filepath))[0]
+                if basename in db_data:
+                    photo.sharpness = db_data[basename]['sharpness']
+                    photo.topiq = db_data[basename]['topiq']
+        except Exception as e:
+            print(f"⚠️ 读取报告数据库失败: {e}")
         
         return photos
     
@@ -647,9 +680,8 @@ class BurstDetector:
             photos = self.read_timestamps(filepaths)
             results['photos_with_subsec'] += sum(1 for p in photos if p.has_subsec)
             
-            # 从 CSV 读取锐度和美学
-            csv_path = os.path.join(directory, '.superpicky', 'report.csv')
-            photos = self.enrich_from_csv(photos, csv_path)
+            # 从 SQLite 数据库读取锐度和美学
+            photos = self.enrich_from_db(photos, directory)
             
             # 检测连拍组
             groups = self.detect_groups(photos)

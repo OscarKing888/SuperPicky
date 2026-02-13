@@ -135,7 +135,7 @@ def format_info_summary(
     格式化目录信息摘要
     
     Args:
-        has_report: 是否存在 report.csv
+        has_report: 是否存在 report.db
         total_records: 总记录数
         rating_counts: 各星级数量 {3: 100, 2: 200, ...}
         flying_count: 飞鸟数量
@@ -150,7 +150,7 @@ def format_info_summary(
     lines.append("📋 文件状态:")
     
     if has_report:
-        lines.append(f"  ✅ report.csv 存在 (共 {total_records} 条记录)")
+        lines.append(f"  ✅ report.db 存在 (共 {total_records} 条记录)")
         
         if rating_counts:
             lines.append("")
@@ -167,7 +167,7 @@ def format_info_summary(
             lines.append("")
             lines.append(f"🦅 飞鸟照片: {flying_count} 张")
     else:
-        lines.append("  ❌ report.csv 不存在")
+        lines.append("  ❌ report.db 不存在")
     
     if has_manifest:
         lines.append("  ✅ manifest 文件存在 (可重置)")

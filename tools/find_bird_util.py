@@ -111,7 +111,7 @@ def reset(directory, log_callback=None, i18n=None):
                     log(f"  ❌ 强制删除也失败: {e2}")
 
     # 1.2 清理旧版本的日志和CSV文件（如果存在于根目录）
-    files_to_clean = [".report.csv", ".process_log.txt"]
+    files_to_clean = [".report.csv", ".report.db", ".process_log.txt"]
     for name in files_to_clean:
         path = os.path.join(directory, name)
         if os.path.exists(path) and os.path.isfile(path):
