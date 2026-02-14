@@ -43,7 +43,7 @@ class AdvancedSettingsDialog(QDialog):
 
         # 主布局
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setContentsMargins(0, 8, 0, 0)
         main_layout.setSpacing(0)
 
         # 标签页
@@ -389,7 +389,7 @@ class AdvancedSettingsDialog(QDialog):
         """)
 
         btn_layout = QHBoxLayout(btn_container)
-        btn_layout.setContentsMargins(24, 12, 24, 12)
+        btn_layout.setContentsMargins(24, 20, 24, 20)
 
         # 恢复默认
         reset_btn = QPushButton(self.i18n.t("advanced_settings.reset_defaults"))
@@ -406,10 +406,23 @@ class AdvancedSettingsDialog(QDialog):
         cancel_btn.clicked.connect(self.reject)
         btn_layout.addWidget(cancel_btn)
 
-        # 保存
+        # 保存 - 使用绿色主色调
         save_btn = QPushButton(self.i18n.t("advanced_settings.save"))
-        save_btn.setObjectName("secondary")
         save_btn.setMinimumWidth(80)
+        save_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COLORS['accent']};
+                color: {COLORS['bg_void']};
+                border: none;
+                border-radius: 6px;
+                padding: 10px 20px;
+                font-size: 13px;
+                font-weight: 500;
+            }}
+            QPushButton:hover {{
+                background-color: #00e6b8;
+            }}
+        """)
         save_btn.clicked.connect(self._save_settings)
         btn_layout.addWidget(save_btn)
 

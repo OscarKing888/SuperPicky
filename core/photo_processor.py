@@ -34,6 +34,7 @@ from tools.find_bird_util import raw_to_jpeg
 from ai_model import load_yolo_model, detect_and_draw_birds
 from tools.report_db import ReportDB
 from tools.exiftool_manager import get_exiftool_manager
+from tools.file_utils import ensure_hidden_directory
 from advanced_config import get_advanced_config
 from core.rating_engine import RatingEngine, create_rating_engine_from_config
 from core.keypoint_detector import KeypointDetector, get_keypoint_detector
@@ -328,6 +329,117 @@ class PhotoProcessor:
         except Exception:
             pass
         return None
+    
+    def _read_all_exif_metadata(self, filepath: str) -> dict:
+        """
+        V2: 一次性读取所有需要的 EXIF 元数据
+        
+        复用 focus_detector 的常驻 ExifTool 进程，一次性读取所有字段，
+        避免多次启动 ExifTool 进程，大幅提升性能。
+        
+        Args:
+            filepath: 图片文件路径（RAW 或 JPEG）
+            
+        Returns:
+            包含所有 EXIF 字段的字典，读取失败的字段值为 None
+        """
+        exif_fields = [
+            # 相机设置
+            'ISO', 'ShutterSpeed', 'Aperture', 'FocalLength',
+            'FocalLengthIn35mmFormat', 'Model', 'LensModel',
+            # GPS
+            'GPSLatitude', 'GPSLongitude', 'GPSAltitude',
+            # IPTC 元数据
+            'Title', 'Caption-Abstract', 'City', 'State', 'Country',
+            # 时间
+            'DateTimeOriginal',
+        ]
+        
+        result = {
+            'iso': None,
+            'shutter_speed': None,
+            'aperture': None,
+            'focal_length': None,
+            'focal_length_35mm': None,
+            'camera_model': None,
+            'lens_model': None,
+            'gps_latitude': None,
+            'gps_longitude': None,
+            'gps_altitude': None,
+            'title': None,
+            'caption': None,
+            'city': None,
+            'state_province': None,
+            'country': None,
+            'date_time_original': None,
+        }
+        
+        try:
+            focus_detector = get_focus_detector()
+            exif_data = focus_detector._read_exif(filepath, exif_fields)
+            
+            if exif_data:
+                # 相机设置
+                if 'ISO' in exif_data:
+                    try:
+                        result['iso'] = int(exif_data['ISO'])
+                    except:
+                        pass
+                
+                result['shutter_speed'] = exif_data.get('ShutterSpeed')
+                result['aperture'] = exif_data.get('Aperture')
+                
+                if 'FocalLength' in exif_data:
+                    try:
+                        # FocalLength 可能是 "500.0 mm" 格式
+                        fl_str = str(exif_data['FocalLength']).replace('mm', '').strip()
+                        result['focal_length'] = float(fl_str)
+                    except:
+                        pass
+                
+                if 'FocalLengthIn35mmFormat' in exif_data:
+                    try:
+                        result['focal_length_35mm'] = int(exif_data['FocalLengthIn35mmFormat'])
+                    except:
+                        pass
+                
+                result['camera_model'] = exif_data.get('Model')
+                result['lens_model'] = exif_data.get('LensModel')
+                
+                # GPS
+                if 'GPSLatitude' in exif_data:
+                    try:
+                        result['gps_latitude'] = float(exif_data['GPSLatitude'])
+                    except:
+                        pass
+                
+                if 'GPSLongitude' in exif_data:
+                    try:
+                        result['gps_longitude'] = float(exif_data['GPSLongitude'])
+                    except:
+                        pass
+                
+                if 'GPSAltitude' in exif_data:
+                    try:
+                        result['gps_altitude'] = float(exif_data['GPSAltitude'])
+                    except:
+                        pass
+                
+                # IPTC 元数据
+                result['title'] = exif_data.get('Title')
+                result['caption'] = exif_data.get('Caption-Abstract')
+                result['city'] = exif_data.get('City')
+                result['state_province'] = exif_data.get('State')
+                result['country'] = exif_data.get('Country')
+                
+                # 时间
+                result['date_time_original'] = exif_data.get('DateTimeOriginal')
+        
+        except Exception as e:
+            # 静默失败，返回空值
+            pass
+        
+        return result
     
     def _get_iso_sharpness_factor(self, iso_value: int) -> float:
         """
@@ -1090,43 +1202,46 @@ class PhotoProcessor:
             else:
                 self._log(f"  ⚙️ YOLO prefetch: off (auto, mps={'on' if mps_available else 'off'})")
         
-        # ISO 异步预取：把 EXIF ISO 读取与主流程并行，减少主线程等待
-        env_iso_prefetch = os.getenv("SUPERPICKY_ISO_PREFETCH", "1").strip().lower()
-        iso_prefetch_enabled = env_iso_prefetch not in {"0", "false", "no", "off"}
-        iso_prefetch_thread = None
-        iso_prefetch_results = {}
-        iso_prefetch_done = False
-        iso_prefetch_cond = threading.Condition()
+        # EXIF 异步预取：把 EXIF 元数据读取与主流程并行，减少主线程等待
+        # V2: 扩展为读取所有 EXIF 字段（相机设置、GPS、IPTC、时间等）
+        env_exif_prefetch = os.getenv("SUPERPICKY_EXIF_PREFETCH", "1").strip().lower()
+        exif_prefetch_enabled = env_exif_prefetch not in {"0", "false", "no", "off"}
+        exif_prefetch_thread = None
+        exif_prefetch_results = {}
+        exif_prefetch_done = False
+        exif_prefetch_cond = threading.Condition()
         
-        if iso_prefetch_enabled:
-            def iso_prefetch_worker():
-                nonlocal iso_prefetch_done
+        if exif_prefetch_enabled:
+            def exif_prefetch_worker():
+                nonlocal exif_prefetch_done
                 try:
                     for idx, queued_filename in enumerate(files_tbr, 1):
                         ctx = resolve_file_context(queued_filename)
-                        prefetched_iso = None
+                        prefetched_exif = None
+                        # 优先从 RAW 文件读取
                         if ctx['raw_path'] and os.path.exists(ctx['raw_path']):
-                            prefetched_iso = read_iso_safe(ctx['raw_path'])
-                        if prefetched_iso is None:
-                            prefetched_iso = read_iso_safe(ctx['filepath'])
-                        with iso_prefetch_cond:
-                            iso_prefetch_results[idx] = prefetched_iso
-                            iso_prefetch_cond.notify_all()
+                            prefetched_exif = self._read_all_exif_metadata(ctx['raw_path'])
+                        # 回退到 JPEG
+                        if prefetched_exif is None or prefetched_exif.get('iso') is None:
+                            prefetched_exif = self._read_all_exif_metadata(ctx['filepath'])
+                        with exif_prefetch_cond:
+                            exif_prefetch_results[idx] = prefetched_exif
+                            exif_prefetch_cond.notify_all()
                 finally:
-                    with iso_prefetch_cond:
-                        iso_prefetch_done = True
-                        iso_prefetch_cond.notify_all()
+                    with exif_prefetch_cond:
+                        exif_prefetch_done = True
+                        exif_prefetch_cond.notify_all()
             
-            iso_prefetch_thread = threading.Thread(
-                target=iso_prefetch_worker,
+            exif_prefetch_thread = threading.Thread(
+                target=exif_prefetch_worker,
                 daemon=True,
-                name="sp-iso-prefetch"
+                name="sp-exif-prefetch"
             )
-            iso_prefetch_thread.start()
+            exif_prefetch_thread.start()
             if self._perf_enabled:
-                self._log("  ⚙️ ISO prefetch: on")
+                self._log("  ⚙️ EXIF prefetch: on (v2: full metadata)")
         elif self._perf_enabled:
-            self._log("  ⚙️ ISO prefetch: off")
+            self._log("  ⚙️ EXIF prefetch: off")
 
         for i in range(1, total_files + 1):
             photo_stage_ms = {}
@@ -1150,19 +1265,24 @@ class PhotoProcessor:
                 filename_inline = files_tbr[i - 1]
                 yolo_item = build_yolo_item(i, filename_inline)
             
+            prefetched_exif = None
+            exif_prefetched = False
+            if exif_prefetch_enabled:
+                exif_wait_start = time.time()
+                with exif_prefetch_cond:
+                    while i not in exif_prefetch_results and not exif_prefetch_done:
+                        exif_prefetch_cond.wait(timeout=0.01)
+                    if i in exif_prefetch_results:
+                        prefetched_exif = exif_prefetch_results.pop(i)
+                        exif_prefetched = True
+                exif_wait_ms = (time.time() - exif_wait_start) * 1000
+                if exif_wait_ms > 0.1:
+                    add_photo_stage('exif_prefetch_wait', exif_wait_ms)
+            
+            # 从预取结果中提取 ISO（用于锐度归一化）
             prefetched_iso_value = None
-            iso_prefetched = False
-            if iso_prefetch_enabled:
-                iso_wait_start = time.time()
-                with iso_prefetch_cond:
-                    while i not in iso_prefetch_results and not iso_prefetch_done:
-                        iso_prefetch_cond.wait(timeout=0.01)
-                    if i in iso_prefetch_results:
-                        prefetched_iso_value = iso_prefetch_results.pop(i)
-                        iso_prefetched = True
-                iso_wait_ms = (time.time() - iso_wait_start) * 1000
-                if iso_wait_ms > 0.1:
-                    add_photo_stage('iso_prefetch_wait', iso_wait_ms)
+            if prefetched_exif and prefetched_exif.get('iso'):
+                prefetched_iso_value = prefetched_exif['iso']
             
             yolo_ms = yolo_item.get('yolo_ms', 0.0) or 0.0
             add_photo_stage('yolo', yolo_ms)
@@ -1463,11 +1583,11 @@ class PhotoProcessor:
             # V4.3: ISO 锐度归一化 - 高 ISO 噪点会虚高锐度值，需要补偿
             # 从 RAW 或 JPEG 读取 ISO 值并计算归一化系数
             iso_start = time.time()
-            iso_value = prefetched_iso_value if iso_prefetched else None
+            iso_value = prefetched_iso_value if exif_prefetched else None
             iso_sharpness_factor = 1.0
             
             # 未命中预取时回退为同步读取
-            if not iso_prefetched:
+            if not exif_prefetched:
                 # 优先从 RAW 文件读取 ISO（更可靠）
                 if raw_path and os.path.exists(raw_path):
                     iso_value = read_iso_safe(raw_path)
@@ -1825,6 +1945,7 @@ class PhotoProcessor:
                     focus_y,  # V3.9: 对焦点Y坐标
                     adj_sharpness_csv,  # V4.1: 调整后锐度
                     adj_topiq_csv,  # V4.1: 调整后美学
+                    prefetched_exif,  # V2: EXIF 元数据
                 )
                 add_photo_stage('csv_update', (time.time() - csv_update_start) * 1000)
                 
@@ -2010,8 +2131,9 @@ class PhotoProcessor:
         """
         import cv2
         
-        # 创建调试目录
+        # 创建调试目录（Windows 下自动隐藏）
         debug_dir = os.path.join(self.dir_path, ".superpicky", "debug_crops")
+        ensure_hidden_directory(os.path.join(self.dir_path, ".superpicky"))
         os.makedirs(debug_dir, exist_ok=True)
         
         # 复制原图
@@ -2101,7 +2223,8 @@ class PhotoProcessor:
             focus_x: float = None,  # V3.9: 对焦点X坐标
             focus_y: float = None,  # V3.9: 对焦点Y坐标
             adj_sharpness: float = None,  # V4.1: 调整后锐度
-            adj_topiq: float = None  # V4.1: 调整后美学
+            adj_topiq: float = None,  # V4.1: 调整后美学
+            exif_data: dict = None  # V2: EXIF 元数据
     ):
         """更新报告数据库中的关键点数据和评分（SQLite 版本）"""
         if self.report_db is None:
@@ -2122,6 +2245,11 @@ class PhotoProcessor:
             'adj_sharpness': adj_sharpness,
             'adj_topiq': adj_topiq,
         }
+        
+        # V2: 合并 EXIF 元数据
+        if exif_data:
+            data.update(exif_data)
+        
         self.report_db.update_photo(filename, data)
     
     # _load_csv_cache 和 _flush_csv_cache 已被 SQLite (ReportDB) 替代

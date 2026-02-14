@@ -5,6 +5,7 @@
 import os
 import csv
 from datetime import datetime
+from .file_utils import ensure_hidden_directory
 
 
 def log_message(message: str, directory: str = None, file_only: bool = False):
@@ -22,9 +23,9 @@ def log_message(message: str, directory: str = None, file_only: bool = False):
 
     # 如果提供了目录，写入日志文件到_tmp子目录
     if directory:
-        # 确保_tmp目录存在
+        # 确保_tmp目录存在并隐藏（Windows 下设置 Hidden 属性）
         tmp_dir = os.path.join(directory, ".superpicky")
-        os.makedirs(tmp_dir, exist_ok=True)
+        ensure_hidden_directory(tmp_dir)
 
         log_file = os.path.join(tmp_dir, "process_log.txt")
         try:
@@ -44,9 +45,9 @@ def write_to_csv(data: dict, directory: str, header: bool = False):
         directory: 工作目录
         header: 是否写入表头（第一次写入时为True）
     """
-    # 确保_tmp目录存在
+    # 确保_tmp目录存在并隐藏（Windows 下设置 Hidden 属性）
     tmp_dir = os.path.join(directory, ".superpicky")
-    os.makedirs(tmp_dir, exist_ok=True)
+    ensure_hidden_directory(tmp_dir)
 
     report_file = os.path.join(tmp_dir, "report.csv")
 

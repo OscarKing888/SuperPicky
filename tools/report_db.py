@@ -16,10 +16,11 @@ import sqlite3
 import time
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
+from .file_utils import ensure_hidden_directory
 
 
 # Schema 版本，用于未来升级
-SCHEMA_VERSION = "1"
+SCHEMA_VERSION = "2"
 
 # 所有列定义（有序），用于 CREATE TABLE 和数据验证
 PHOTO_COLUMNS = [
@@ -40,6 +41,39 @@ PHOTO_COLUMNS = [
     ("focus_y",       "REAL", None),
     ("adj_sharpness", "REAL", None),
     ("adj_topiq",     "REAL", None),
+    
+    # V2: 相机设置
+    ("iso",              "INTEGER", None),
+    ("shutter_speed",    "TEXT", None),
+    ("aperture",         "TEXT", None),
+    ("focal_length",     "REAL", None),
+    ("focal_length_35mm","INTEGER", None),
+    ("camera_model",     "TEXT", None),
+    ("lens_model",       "TEXT", None),
+    
+    # V2: GPS
+    ("gps_latitude",     "REAL", None),
+    ("gps_longitude",    "REAL", None),
+    ("gps_altitude",     "REAL", None),
+    
+    # V2: IPTC 元数据
+    ("title",            "TEXT", None),
+    ("caption",          "TEXT", None),
+    ("city",             "TEXT", None),
+    ("state_province",   "TEXT", None),
+    ("country",          "TEXT", None),
+    
+    # V2: 时间
+    ("date_time_original", "TEXT", None),
+    
+    # V2: 鸟种识别
+    ("bird_species_cn",  "TEXT", None),
+    ("bird_species_en",  "TEXT", None),
+    ("birdid_confidence","REAL", None),
+    
+    # V2: 曝光状态
+    ("exposure_status",  "TEXT", None),
+    
     ("created_at",    "TEXT", None),
     ("updated_at",    "TEXT", None),
 ]
@@ -71,8 +105,8 @@ class ReportDB:
         self._superpicky_dir = os.path.join(directory, ".superpicky")
         self.db_path = os.path.join(self._superpicky_dir, self.DB_FILENAME)
 
-        # 确保 .superpicky 目录存在
-        os.makedirs(self._superpicky_dir, exist_ok=True)
+        # 确保 .superpicky 目录存在并隐藏（Windows 下设置 Hidden 属性）
+        ensure_hidden_directory(self._superpicky_dir)
 
         # 连接数据库
         self._conn = sqlite3.connect(
@@ -128,6 +162,9 @@ class ReportDB:
                 )
             """)
 
+            # 检查并执行 Schema 升级
+            self._upgrade_schema_if_needed()
+            
             # 初始化元数据
             self._conn.execute(
                 "INSERT OR IGNORE INTO meta (key, value) VALUES (?, ?)",
@@ -137,6 +174,65 @@ class ReportDB:
                 "INSERT OR IGNORE INTO meta (key, value) VALUES (?, ?)",
                 ("directory_path", self.directory)
             )
+    
+    def _upgrade_schema_if_needed(self):
+        """检查并升级数据库 Schema（v1 → v2）"""
+        # 获取当前 schema 版本
+        cursor = self._conn.execute(
+            "SELECT value FROM meta WHERE key = 'schema_version'"
+        )
+        row = cursor.fetchone()
+        current_version = row[0] if row else "1"
+        
+        if current_version == "1" and SCHEMA_VERSION == "2":
+            print("🔄 Upgrading database schema from v1 to v2...")
+            
+            # V2 新增字段
+            new_columns = [
+                # 相机设置
+                ("iso", "INTEGER"),
+                ("shutter_speed", "TEXT"),
+                ("aperture", "TEXT"),
+                ("focal_length", "REAL"),
+                ("focal_length_35mm", "INTEGER"),
+                ("camera_model", "TEXT"),
+                ("lens_model", "TEXT"),
+                # GPS
+                ("gps_latitude", "REAL"),
+                ("gps_longitude", "REAL"),
+                ("gps_altitude", "REAL"),
+                # IPTC
+                ("title", "TEXT"),
+                ("caption", "TEXT"),
+                ("city", "TEXT"),
+                ("state_province", "TEXT"),
+                ("country", "TEXT"),
+                # 时间
+                ("date_time_original", "TEXT"),
+                # 鸟种
+                ("bird_species_cn", "TEXT"),
+                ("bird_species_en", "TEXT"),
+                ("birdid_confidence", "REAL"),
+                # 曝光
+                ("exposure_status", "TEXT"),
+            ]
+            
+            for col_name, col_type in new_columns:
+                try:
+                    self._conn.execute(
+                        f"ALTER TABLE photos ADD COLUMN {col_name} {col_type}"
+                    )
+                except sqlite3.OperationalError:
+                    # 列已存在，跳过
+                    pass
+            
+            # 更新版本号
+            self._conn.execute(
+                "UPDATE meta SET value = ? WHERE key = 'schema_version'",
+                (SCHEMA_VERSION,)
+            )
+            self._conn.commit()
+            print("✅ Database schema upgraded to v2")
 
     # ==========================================================================
     #  写入操作
@@ -499,21 +595,28 @@ class ReportDB:
             # 数值字段
             if key in ("confidence", "head_sharp", "left_eye", "right_eye",
                         "beak", "nima_score", "flight_conf", "focus_x",
-                        "focus_y", "adj_sharpness", "adj_topiq"):
+                        "focus_y", "adj_sharpness", "adj_topiq",
+                        # V2: 新增数值字段
+                        "focal_length", "gps_latitude", "gps_longitude",
+                        "gps_altitude", "birdid_confidence"):
                 try:
                     cleaned[key] = float(value)
                 except (ValueError, TypeError):
                     cleaned[key] = None
                 continue
 
-            if key == "rating":
+            # 整数字段
+            if key in ("rating", "iso", "focal_length_35mm"):
                 try:
                     cleaned[key] = int(float(value))
                 except (ValueError, TypeError):
-                    cleaned[key] = 0
+                    cleaned[key] = 0 if key == "rating" else None
                 continue
 
-            # 文本字段直接使用
+            # 文本字段直接使用（包括 V2 新增的文本字段）
+            # shutter_speed, aperture, camera_model, lens_model,
+            # title, caption, city, state_province, country,
+            # date_time_original, bird_species_cn, bird_species_en, exposure_status
             cleaned[key] = value
 
         return cleaned
