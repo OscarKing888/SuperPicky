@@ -59,7 +59,7 @@
 
 ### macOS
 **Apple Silicon (M1/M2/M3/M4)**
-- [GitHub 下载](https://github.com/jamesphotography/SuperPicky/releases/download/v4.0.5/SuperPicky_arm64_V4.0.5.dmg) | [Google Drive](https://drive.google.com/file/d/1ykFNcV9rOpp_w04lOer0dyel7chGkS_Q/view?usp=sharing)
+- [GitHub 下载](https://github.com/jamesphotography/SuperPicky/releases/download/v4.0.5/SuperPicky_arm64_V4.0.5.dmg) | [Google Drive](https://drive.google.com/file/d/1ykFNcV9rOpp_w04lOer0dyel7chGkS_Q/view?usp=sharing) | [百度网盘](https://pan.baidu.com/s/1QcBZvhwYn0W2n_vkA4gNaA?pwd=mx69) 提取码: mx69
 
 **Intel (2020年前 Mac)**
 - [GitHub 下载 (v4.0.4)](https://github.com/jamesphotography/SuperPicky/releases/download/v4.0.4/SuperPicky4.0.4_Intel.dmg)

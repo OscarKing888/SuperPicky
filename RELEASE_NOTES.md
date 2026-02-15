@@ -30,6 +30,7 @@ This release brings a major architectural overhaul, migrating from CSV to SQLite
 **macOS Apple Silicon (M1/M2/M3/M4)**: 
 - GitHub: [SuperPicky_arm64_V4.0.5.dmg](https://github.com/jamesphotography/SuperPicky/releases/download/v4.0.5/SuperPicky_arm64_V4.0.5.dmg)
 - Google Drive: [SuperPicky_arm64_V4.0.5.dmg](https://drive.google.com/file/d/1ykFNcV9rOpp_w04lOer0dyel7chGkS_Q/view?usp=sharing)
+- 百度网盘: [SuperPicky_arm64_V4.0.5.dmg](https://pan.baidu.com/s/1QcBZvhwYn0W2n_vkA4gNaA?pwd=mx69) 提取码: mx69
 
 ---
 
