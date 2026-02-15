@@ -106,8 +106,8 @@ fi
 log_step "步骤 3/8: 代码签名"
 
 log_info "签名嵌入的库和框架..."
-find "${APP_PATH}/Contents" -type f \( -name "*.dylib" -o -name "*.so" -o -perm +111 \) \
-    -exec codesign --force --sign "${DEVELOPER_ID}" --timestamp --options runtime {} \; 2>/dev/null || true
+find "${APP_PATH}/Contents" -type f \( -name "*.dylib" -o -name "*.so" -o -perm +111 \) -print0 | \
+    xargs -0 -P 8 -I {} codesign --force --sign "${DEVELOPER_ID}" --timestamp --options runtime {} 2>/dev/null || true
 
 log_info "签名主应用..."
 codesign --force --deep --sign "${DEVELOPER_ID}" \

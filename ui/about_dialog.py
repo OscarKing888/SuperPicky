@@ -95,7 +95,7 @@ class AboutDialog(QDialog):
         """)
         brand_layout.addWidget(title)
 
-        subtitle = QLabel(self.i18n.t("about.subtitle") if self.i18n else "AI Photo Selector")
+        subtitle = QLabel(self.i18n.t("about.subtitle") if self.i18n else "AI Bird Photo Culling Tool")
         subtitle.setStyleSheet(f"color: {COLORS['text_tertiary']}; font-size: 13px;")
         brand_layout.addWidget(subtitle)
 

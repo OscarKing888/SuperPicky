@@ -34,7 +34,7 @@ all_datas = [
     (os.path.join(base_path, 'models'), 'models'),
     # ExifTool 完整打包
     (os.path.join(base_path, 'exiftools_mac'), 'exiftools_mac'),
-    (os.path.join(base_path, 'exiftools_win'), 'exiftools_win'),
+    # (os.path.join(base_path, 'exiftools_win'), 'exiftools_win'), # Windows ExifTool (Excluded on Mac to speed up signing)
     # 图片资源
     (os.path.join(base_path, 'img'), 'img'),
     # 国际化语言包

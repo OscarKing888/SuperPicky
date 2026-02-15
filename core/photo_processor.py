@@ -2170,7 +2170,7 @@ class PhotoProcessor:
         import cv2
         
         # 创建调试目录（Windows 下自动隐藏）
-        debug_dir = os.path.join(self.dir_path, ".superpicky", "debug_crops")
+        debug_dir = os.path.join(self.dir_path, ".superpicky", "cache", "crop_debug")
         ensure_hidden_directory(os.path.join(self.dir_path, ".superpicky"))
         os.makedirs(debug_dir, exist_ok=True)
         
@@ -2213,11 +2213,18 @@ class PhotoProcessor:
         # 保存调试图
         # V4.0.5: filename 可能包含子目录前缀（如 .superpicky/cache/_Z9W1029.jpg），需取 basename
         file_prefix = os.path.splitext(os.path.basename(filename))[0]
-        debug_path = os.path.join(debug_dir, f"{file_prefix}_debug.jpg")
+        debug_path = os.path.join(debug_dir, f"{file_prefix}.jpg")
         cv2.imwrite(debug_path, debug_img, [cv2.IMWRITE_JPEG_QUALITY, 85])
         
         # NOTE: debug_crop_path 由 ai_model.py 的 insert_photo() 统一写入数据库
-        # 此处不再重复写入，避免路径格式不一致
+        # V4.2: 现在 debug_crop_path 专门指代 crop_debug 图片，此处需要回写数据库
+        if hasattr(self, 'report_db') and self.report_db:
+             try:
+                 rel_path = os.path.relpath(debug_path, self.dir_path)
+                 # 更新数据库中的 debug_crop_path 字段
+                 self.report_db.update_photo(file_prefix, {"debug_crop_path": rel_path})
+             except Exception:
+                 pass
         
         # V4.2: 返回标注后的图像，用于 UI 实时预览
         return debug_img
@@ -2498,21 +2505,29 @@ class PhotoProcessor:
             self._log(f"  ⚠️  Manifest save failed: {e}", "warning")
     
     def _cleanup_temp_files(self, files_tbr, raw_dict):
-        """V4.0.3: Clean up temporary JPG files (tmp_*.jpg pattern)"""
+        """V4.0.6: Clean up entire cache directory (temp_preview + yolo_debug + crop_debug)"""
+        import shutil
         self._log(self.i18n.t("logs.cleaning_temp"))
-        deleted_count = 0
-        
-        # V4.0.5: 删除 cache 中的临时转换 JPEG
-        for filename in self.temp_converted_jpegs:
-            jpg_path = os.path.join(self.dir_path, filename)
+
+        cache_dir = os.path.join(self.dir_path, ".superpicky", "cache")
+        if os.path.exists(cache_dir):
             try:
-                if os.path.exists(jpg_path):
-                    os.remove(jpg_path)
-                    deleted_count += 1
-            except Exception:
-                pass
-        
-        self._log(self.i18n.t("logs.temp_files_cleaned", count=deleted_count))
+                shutil.rmtree(cache_dir)
+                self._log(self.i18n.t("logs.temp_files_cleaned", count=len(self.temp_converted_jpegs)))
+                
+                # 清除数据库中已删除的 debug_crop_path
+                if hasattr(self, 'report_db') and self.report_db:
+                    try:
+                        self.report_db._conn.execute(
+                            "UPDATE photos SET debug_crop_path = NULL, temp_jpeg_path = NULL, yolo_debug_path = NULL"
+                        )
+                        self.report_db._conn.commit()
+                    except Exception as e:
+                        self._log(f"⚠️ Failed to clear DB paths: {e}", "warning")
+            except Exception as e:
+                self._log(f"⚠️ Failed to remove cache directory: {e}", "warning")
+        else:
+            self._log(self.i18n.t("logs.temp_files_cleaned", count=0))
     
     def _save_temp_paths_to_db(self):
         """V4.0.5: 保留临时文件时，将路径写入数据库的 temp_jpeg_path 列"""

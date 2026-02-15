@@ -543,7 +543,15 @@
     "settings_saved_title": "Success",
     "settings_save_failed": "Failed to save settings: {error}",
     "settings_reset": "Settings reset to defaults",
-    "settings_reset_title": "Reset"
+    "settings_reset_title": "Reset",
+    "preview_management": "Preview Management",
+    "keep_preview": "Keep preview images",
+    "keep_preview_hint": "Retain AI crop previews and temp files (cache/debug_crops)",
+    "auto_cleanup": "Auto cleanup period",
+    "cleanup_3_days": "3 days",
+    "cleanup_7_days": "7 days",
+    "cleanup_30_days": "30 days (recommended)",
+    "cleanup_forever": "Keep forever"
   },
   "normalization_modes": {
     "log_compression": "Log Compression(V3.1)",
@@ -710,7 +718,7 @@
   },
   "about": {
     "window_title": "About James",
-    "subtitle": "AI Photo Selector",
+    "subtitle": "AI Bird Photo Culling Tool",
     "content": "James Yu\nAustralian-Chinese Professional Photographer, Author of \"James' Landscape Photography Notes\" Trilogy\n\nModel Training: Jordan Yu\nDevelopment Team: Xiaoping, Lyapunov, osk.sh\n\nOpen Source Models\nYOLO11 - Bird Detection (AGPL-3.0)\nTOPIQ - Aesthetic Scoring by Chaofeng Chen et al. (IEEE TIP 2024)\n  github.com/chaofengc/IQA-PyTorch\n  License: CC BY-NC-SA 4.0\n\n© 2024-2025 James Yu"
   },
   "birdid": {

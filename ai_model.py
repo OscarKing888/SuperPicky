@@ -328,8 +328,8 @@ def detect_and_draw_birds(image_path, model, output_path, dir, ui_settings, i18n
                 
                 superpicky_dir = os.path.join(dir, ".superpicky")
                 cache_dir = os.path.join(superpicky_dir, "cache")
-                # V4.1: Rename to debug_crops for clarity
-                debug_dir = os.path.join(cache_dir, "debug_crops")
+                # V4.2: Rename to yolo_debug for clarity
+                debug_dir = os.path.join(cache_dir, "yolo_debug")
                 
                 try:
                     ensure_hidden_directory(superpicky_dir)
@@ -337,7 +337,7 @@ def detect_and_draw_birds(image_path, model, output_path, dir, ui_settings, i18n
                     
                     filename = os.path.basename(image_path)
                     prefix, ext = os.path.splitext(filename)
-                    output_path = os.path.join(debug_dir, f"crop_{prefix}.jpg")
+                    output_path = os.path.join(debug_dir, f"{prefix}.jpg")
                 except Exception:
                     pass
 
@@ -355,15 +355,16 @@ def detect_and_draw_birds(image_path, model, output_path, dir, ui_settings, i18n
                 "rating": rating_value,
                 # V4.1 Paths
                 "current_path": rel_current_path,
-                "debug_crop_path": None # Will fill below
+                "debug_crop_path": None, # Will be filled by photo_processor
+                "yolo_debug_path": None  # Will fill below
             }
             
-            # Update debug_crop_path if we generated it
+            # Update yolo_debug_path if we generated it
             if found_bird and save_crop and output_path:
                 try:
-                    data["debug_crop_path"] = os.path.relpath(output_path, dir)
+                    data["yolo_debug_path"] = os.path.relpath(output_path, dir)
                 except ValueError:
-                    data["debug_crop_path"] = output_path
+                    data["yolo_debug_path"] = output_path
 
             # Step 5: CSV写入
             step_start = time.time()

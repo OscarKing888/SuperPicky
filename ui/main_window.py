@@ -1341,7 +1341,7 @@ class SuperPickyMainWindow(QMainWindow):
 
         # V4.2: 通知 BirdIDDock 显示完成信息
         if hasattr(self, 'birdid_dock') and self.birdid_dock:
-            debug_dir = os.path.join(self.directory_path, ".superpicky", "debug_crops")
+            debug_dir = os.path.join(self.directory_path, ".superpicky", "cache", "crop_debug")
             self.birdid_dock.show_completion_message(debug_dir)
 
         # 播放完成音效

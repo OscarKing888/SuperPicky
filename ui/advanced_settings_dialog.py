@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout,
     QLabel, QSlider, QPushButton,
     QWidget, QFrame, QRadioButton,
-    QButtonGroup, QTabWidget
+    QButtonGroup, QTabWidget, QCheckBox, QComboBox
 )
 from PySide6.QtCore import Qt, Slot
 
@@ -143,7 +143,10 @@ class AdvancedSettingsDialog(QDialog):
             QRadioButton {{
                 color: {COLORS['text_secondary']};
                 font-size: 13px;
+                color: {COLORS['text_secondary']};
+                font-size: 13px;
                 spacing: 8px;
+                padding: 2px;
             }}
             QRadioButton::indicator {{
                 width: 16px;
@@ -241,8 +244,9 @@ class AdvancedSettingsDialog(QDialog):
 
         # XMP 写入方式 - 使用单选按钮组
         xmp_group_widget = QWidget()
+        xmp_group_widget.setObjectName("xmpGroup")
         xmp_group_widget.setStyleSheet(f"""
-            QWidget {{
+            #xmpGroup {{
                 background-color: {COLORS['bg_card']};
                 border: 1px solid {COLORS['border_subtle']};
                 border-radius: 8px;
@@ -288,13 +292,7 @@ class AdvancedSettingsDialog(QDialog):
         sidecar_layout.setSpacing(4)
 
         sidecar_option = QRadioButton(self.i18n.t("advanced_settings.xmp_mode_sidecar"))
-        sidecar_option.setStyleSheet(f"""
-            QRadioButton {{
-                color: {COLORS['text_primary']};
-                font-size: 13px;
-                font-weight: 500;
-            }}
-        """)
+        # 使用全局样式，移除由于覆盖样式导致的 indicator 丢失问题
         self.vars["xmp_sidecar"] = sidecar_option
         self.xmp_button_group.addButton(sidecar_option, 1)
         sidecar_layout.addWidget(sidecar_option)
@@ -319,6 +317,74 @@ class AdvancedSettingsDialog(QDialog):
         xmp_layout.addWidget(sidecar_container)
 
         layout.addWidget(xmp_group_widget)
+
+        # 预览图管理
+        preview_group_widget = QWidget()
+        preview_group_widget.setObjectName("previewGroup")
+        preview_group_widget.setStyleSheet(f"""
+            #previewGroup {{
+                background-color: {COLORS['bg_card']};
+                border: 1px solid {COLORS['border_subtle']};
+                border-radius: 8px;
+            }}
+        """)
+        preview_layout = QVBoxLayout(preview_group_widget)
+        preview_layout.setContentsMargins(16, 12, 16, 12)
+        preview_layout.setSpacing(12)
+
+        # 标题
+        preview_title = QLabel(self.i18n.t("advanced_settings.preview_management"))
+        preview_title.setStyleSheet(f"""
+            color: {COLORS['text_primary']};
+            font-size: 13px;
+            font-weight: 500;
+        """)
+        preview_layout.addWidget(preview_title)
+
+        # 1. Checkbox: 保留预览图片
+        keep_preview_check = QCheckBox(self.i18n.t("advanced_settings.keep_preview"))
+        # 使用全局样式，移除由于覆盖样式导致的 indicator 丢失问题
+        self.vars["keep_temp_files"] = keep_preview_check
+        preview_layout.addWidget(keep_preview_check)
+
+        keep_preview_hint = QLabel(self.i18n.t("advanced_settings.keep_preview_hint"))
+        keep_preview_hint.setStyleSheet(f"""
+            color: {COLORS['text_muted']};
+            font-size: 11px;
+            margin-left: 24px;
+        """)
+        preview_layout.addWidget(keep_preview_hint)
+
+        # 2. Combo: 自动清理周期
+        cleanup_container = QWidget()
+        cleanup_layout = QHBoxLayout(cleanup_container)
+        cleanup_layout.setContentsMargins(0, 4, 0, 0)
+        cleanup_layout.setSpacing(10)
+
+        cleanup_label = QLabel(self.i18n.t("advanced_settings.auto_cleanup"))
+        cleanup_label.setStyleSheet(f"""
+            color: {COLORS['text_primary']};
+            font-size: 13px;
+            margin-left: 24px;
+        """)
+        cleanup_layout.addWidget(cleanup_label)
+
+        cleanup_combo = QComboBox()
+        cleanup_combo.addItem(self.i18n.t("advanced_settings.cleanup_3_days"), 3)
+        cleanup_combo.addItem(self.i18n.t("advanced_settings.cleanup_7_days"), 7)
+        cleanup_combo.addItem(self.i18n.t("advanced_settings.cleanup_30_days"), 30)
+        cleanup_combo.addItem(self.i18n.t("advanced_settings.cleanup_forever"), 0)
+        
+        self.vars["auto_cleanup_days"] = cleanup_combo
+        cleanup_layout.addWidget(cleanup_combo)
+        cleanup_layout.addStretch()
+
+        preview_layout.addWidget(cleanup_container)
+        
+        # 联动逻辑：不保留预览图时，禁用清理周期设置
+        keep_preview_check.toggled.connect(cleanup_container.setEnabled)
+
+        layout.addWidget(preview_group_widget)
 
         layout.addStretch()
         return page
@@ -446,6 +512,18 @@ class AdvancedSettingsDialog(QDialog):
         except Exception:
             self.vars["xmp_embedded"].setChecked(True)
 
+        # 加载预览图设置
+        keep_temp = self.config.keep_temp_files
+        self.vars["keep_temp_files"].setChecked(keep_temp)
+        
+        cleanup_days = self.config.auto_cleanup_days
+        combo = self.vars["auto_cleanup_days"]
+        index = combo.findData(cleanup_days)
+        if index >= 0:
+            combo.setCurrentIndex(index)
+        else:
+            combo.setCurrentIndex(2) # Default to 30 days if not found
+
     @Slot()
     def _reset_to_default(self):
         """恢复默认设置"""
@@ -485,7 +563,12 @@ class AdvancedSettingsDialog(QDialog):
         # 保存 XMP 设置
         xmp_mode = "sidecar" if self.vars["xmp_sidecar"].isChecked() else "embedded"
         self.config.set_arw_write_mode(xmp_mode)
+        self.config.set_arw_write_mode(xmp_mode)
         self.config.set_save_csv(True)
+
+        # 保存预览图设置
+        self.config.set_keep_temp_files(self.vars["keep_temp_files"].isChecked())
+        self.config.set_auto_cleanup_days(self.vars["auto_cleanup_days"].currentData())
 
         if self.config.save():
             StyledMessageBox.information(

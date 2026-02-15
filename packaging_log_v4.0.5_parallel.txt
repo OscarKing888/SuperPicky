@@ -1,0 +1,1375 @@
+
+[0;35m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;35m步骤 1/8: 清理旧构建[0m
+[0;35m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;32m[SUCCESS][0m 清理完成
+
+[0;35m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;35m步骤 2/8: PyInstaller 打包应用[0m
+[0;35m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;34m[INFO][0m 激活 .venv 虚拟环境...
+[0;34m[INFO][0m 开始 PyInstaller 打包...
+60 WARNING: Assuming this is not an Anaconda environment or an additional venv/pipenv/... environment manager is being used on top, because the conda-meta folder /Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/conda-meta does not exist.
+70 INFO: PyInstaller: 6.16.0, contrib hooks: 2025.8
+70 INFO: Python: 3.12.8 (conda)
+76 INFO: Platform: macOS-26.3-arm64-arm-64bit
+76 INFO: Python environment: /Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv
+79 INFO: Removing temporary files and cleaning cache in /Users/jameszhenyu/Library/Application Support/pyinstaller
+199 INFO: Module search paths (PYTHONPATH):
+['/opt/miniconda3/lib/python312.zip',
+ '/opt/miniconda3/lib/python3.12',
+ '/opt/miniconda3/lib/python3.12/lib-dynload',
+ '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages',
+ '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/setuptools/_vendor',
+ '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026',
+ '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026',
+ '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026']
+44 WARNING: Assuming this is not an Anaconda environment or an additional venv/pipenv/... environment manager is being used on top, because the conda-meta folder /Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/conda-meta does not exist.
+358 INFO: Appending 'datas' from .spec
+363 INFO: checking Analysis
+363 INFO: Building Analysis because Analysis-00.toc is non existent
+363 INFO: Looking for Python shared library...
+364 INFO: Using Python shared library: /opt/miniconda3/lib/libpython3.12.dylib
+364 INFO: Running Analysis Analysis-00.toc
+364 INFO: Target bytecode optimization level: 0
+364 INFO: Initializing module dependency graph...
+367 INFO: Initializing module graph hook caches...
+372 INFO: Analyzing modules for base_library.zip ...
+39 WARNING: Assuming this is not an Anaconda environment or an additional venv/pipenv/... environment manager is being used on top, because the conda-meta folder /Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/conda-meta does not exist.
+39 WARNING: Assuming this is not an Anaconda environment or an additional venv/pipenv/... environment manager is being used on top, because the conda-meta folder /Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/conda-meta does not exist.
+40 WARNING: Assuming this is not an Anaconda environment or an additional venv/pipenv/... environment manager is being used on top, because the conda-meta folder /Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/conda-meta does not exist.
+773 INFO: Processing standard module hook 'hook-heapq.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+810 INFO: Processing standard module hook 'hook-encodings.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+39 WARNING: Assuming this is not an Anaconda environment or an additional venv/pipenv/... environment manager is being used on top, because the conda-meta folder /Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/conda-meta does not exist.
+1499 INFO: Processing standard module hook 'hook-pickle.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+2041 INFO: Caching module dependency graph...
+2058 INFO: Analyzing /Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/main.py
+2073 INFO: Processing standard module hook 'hook-multiprocessing.util.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+2143 INFO: Processing standard module hook 'hook-xml.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+2259 INFO: Processing standard module hook 'hook-_ctypes.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+2270 INFO: Processing standard module hook 'hook-PySide6.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+2378 INFO: Processing standard module hook 'hook-shiboken6.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+2446 INFO: Processing standard module hook 'hook-PySide6.QtNetwork.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+2879 INFO: Processing standard module hook 'hook-PySide6.QtCore.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+3269 INFO: Processing standard module hook 'hook-PySide6.QtWidgets.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+3674 INFO: Processing standard module hook 'hook-PySide6.QtGui.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+4033 INFO: Processing standard module hook 'hook-numpy.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+4153 INFO: Processing standard module hook 'hook-platform.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+4220 INFO: Processing standard module hook 'hook-sysconfig.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+4226 INFO: Processing standard module hook 'hook-_osx_support.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+4705 INFO: Processing standard module hook 'hook-difflib.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+5027 INFO: Processing standard module hook 'hook-psutil.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+5492 INFO: Processing pre-safe-import-module hook 'hook-typing_extensions.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks/pre_safe_import_module'
+5493 INFO: SetuptoolsInfo: initializing cached setuptools info...
+69 WARNING: Assuming this is not an Anaconda environment or an additional venv/pipenv/... environment manager is being used on top, because the conda-meta folder /Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/conda-meta does not exist.
+7281 INFO: Processing standard module hook 'hook-charset_normalizer.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+7448 INFO: Processing standard module hook 'hook-rawpy.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+7449 INFO: Processing standard module hook 'hook-imageio.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+39 WARNING: Assuming this is not an Anaconda environment or an additional venv/pipenv/... environment manager is being used on top, because the conda-meta folder /Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/conda-meta does not exist.
+7790 INFO: Processing standard module hook 'hook-pkg_resources.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+39 WARNING: Assuming this is not an Anaconda environment or an additional venv/pipenv/... environment manager is being used on top, because the conda-meta folder /Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/conda-meta does not exist.
+7898 INFO: Processing pre-safe-import-module hook 'hook-packaging.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks/pre_safe_import_module'
+7941 INFO: Processing pre-safe-import-module hook 'hook-jaraco.text.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks/pre_safe_import_module'
+7941 INFO: Setuptools: 'jaraco.text' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.jaraco.text'!
+7944 INFO: Processing standard module hook 'hook-setuptools.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+7949 INFO: Processing pre-safe-import-module hook 'hook-distutils.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks/pre_safe_import_module'
+7960 INFO: Processing pre-safe-import-module hook 'hook-jaraco.functools.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks/pre_safe_import_module'
+7960 INFO: Setuptools: 'jaraco.functools' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.jaraco.functools'!
+7964 INFO: Processing pre-safe-import-module hook 'hook-more_itertools.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks/pre_safe_import_module'
+7964 INFO: Setuptools: 'more_itertools' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.more_itertools'!
+8099 INFO: Processing pre-safe-import-module hook 'hook-importlib_metadata.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks/pre_safe_import_module'
+8099 INFO: Setuptools: 'importlib_metadata' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.importlib_metadata'!
+8109 INFO: Processing standard module hook 'hook-setuptools._vendor.importlib_metadata.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+8110 INFO: Processing pre-safe-import-module hook 'hook-zipp.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks/pre_safe_import_module'
+8110 INFO: Setuptools: 'zipp' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.zipp'!
+8236 INFO: Processing pre-safe-import-module hook 'hook-tomli.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks/pre_safe_import_module'
+8236 INFO: Setuptools: 'tomli' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.tomli'!
+8433 INFO: Processing pre-safe-import-module hook 'hook-wheel.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks/pre_safe_import_module'
+8433 INFO: Setuptools: 'wheel' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.wheel'!
+8503 INFO: Processing standard module hook 'hook-setuptools._vendor.jaraco.text.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+8504 INFO: Processing pre-safe-import-module hook 'hook-importlib_resources.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks/pre_safe_import_module'
+8504 INFO: Processing pre-safe-import-module hook 'hook-jaraco.context.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks/pre_safe_import_module'
+8504 INFO: Setuptools: 'jaraco.context' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.jaraco.context'!
+8507 INFO: Processing pre-safe-import-module hook 'hook-backports.tarfile.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks/pre_safe_import_module'
+8507 INFO: Setuptools: 'backports.tarfile' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.backports.tarfile'!
+8543 INFO: Processing standard module hook 'hook-backports.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+8543 INFO: Processing pre-safe-import-module hook 'hook-platformdirs.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks/pre_safe_import_module'
+8547 INFO: Processing standard module hook 'hook-platformdirs.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+8649 INFO: Processing standard module hook 'hook-cv2.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+39 WARNING: Assuming this is not an Anaconda environment or an additional venv/pipenv/... environment manager is being used on top, because the conda-meta folder /Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/conda-meta does not exist.
+8833 INFO: Processing standard module hook 'hook-ultralytics.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+8906 INFO: Processing standard module hook 'hook-torch.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+39 WARNING: Assuming this is not an Anaconda environment or an additional venv/pipenv/... environment manager is being used on top, because the conda-meta folder /Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/conda-meta does not exist.
+1355 WARNING: Failed to collect submodules for 'torch.testing._internal.opinfo' because importing 'torch.testing._internal.opinfo' raised: ModuleNotFoundError: No module named 'expecttest'
+W0215 12:47:17.851000 44547 torch/distributed/elastic/multiprocessing/redirects.py:29] NOTE: Redirects are currently not supported in Windows or MacOs.
+/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/utils/hooks/__init__.py:665: DeprecationWarning: `torch.distributed._sharding_spec` will be deprecated, use `torch.distributed._shard.sharding_spec` instead
+  __import__(name)
+/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/utils/hooks/__init__.py:665: DeprecationWarning: `torch.distributed._sharded_tensor` will be deprecated, use `torch.distributed._shard.sharded_tensor` instead
+  __import__(name)
+/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/utils/hooks/__init__.py:665: DeprecationWarning: `torch.distributed._shard.checkpoint` will be deprecated, use `torch.distributed.checkpoint` instead
+  __import__(name)
+14323 INFO: Processing standard module hook 'hook-matplotlib.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+14488 INFO: Processing pre-safe-import-module hook 'hook-gi.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks/pre_safe_import_module'
+14591 INFO: Processing standard module hook 'hook-matplotlib.backend_bases.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+14658 INFO: Processing standard module hook 'hook-PIL.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+14708 INFO: Processing standard module hook 'hook-PIL.Image.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+40 WARNING: Assuming this is not an Anaconda environment or an additional venv/pipenv/... environment manager is being used on top, because the conda-meta folder /Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/conda-meta does not exist.
+14862 INFO: Processing standard module hook 'hook-xml.etree.cElementTree.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+14933 INFO: Processing standard module hook 'hook-PIL.ImageFilter.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+15266 INFO: Processing standard module hook 'hook-jinja2.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+15467 INFO: Processing standard module hook 'hook-matplotlib.backends.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+15506 INFO: Processing standard module hook 'hook-matplotlib.pyplot.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+15937 INFO: Processing standard module hook 'hook-dateutil.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+16005 INFO: Processing pre-safe-import-module hook 'hook-six.moves.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks/pre_safe_import_module'
+16642 INFO: Processing standard module hook 'hook-certifi.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+16709 INFO: Processing standard module hook 'hook-py.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+16836 INFO: Processing standard module hook 'hook-pygments.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+39 WARNING: Assuming this is not an Anaconda environment or an additional venv/pipenv/... environment manager is being used on top, because the conda-meta folder /Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/conda-meta does not exist.
+39 WARNING: Assuming this is not an Anaconda environment or an additional venv/pipenv/... environment manager is being used on top, because the conda-meta folder /Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/conda-meta does not exist.
+39 WARNING: Assuming this is not an Anaconda environment or an additional venv/pipenv/... environment manager is being used on top, because the conda-meta folder /Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/conda-meta does not exist.
+17581 INFO: Processing standard module hook 'hook-pytest.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+21446 INFO: Processing standard module hook 'hook-scipy.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+39 WARNING: Assuming this is not an Anaconda environment or an additional venv/pipenv/... environment manager is being used on top, because the conda-meta folder /Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/conda-meta does not exist.
+22970 INFO: Processing standard module hook 'hook-pycparser.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+23385 INFO: Processing standard module hook 'hook-scipy.linalg.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+23558 INFO: Processing standard module hook 'hook-scipy.special._ufuncs.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+23633 INFO: Processing standard module hook 'hook-scipy.special._ellip_harm_2.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+24443 INFO: Processing standard module hook 'hook-scipy.spatial._ckdtree.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+24609 INFO: Processing standard module hook 'hook-scipy.spatial.transform.rotation.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+25168 INFO: Processing standard module hook 'hook-scipy.stats._stats.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+25391 INFO: Processing standard module hook 'hook-scipy.sparse.csgraph.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+26293 INFO: Processing standard module hook 'hook-xml.dom.domreg.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+27236 INFO: Processing pre-safe-import-module hook 'hook-tensorflow.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/pre_safe_import_module'
+27518 INFO: Processing standard module hook 'hook-fsspec.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+39 WARNING: Assuming this is not an Anaconda environment or an additional venv/pipenv/... environment manager is being used on top, because the conda-meta folder /Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/conda-meta does not exist.
+27695 INFO: Processing standard module hook 'hook-pandas.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+39 WARNING: Assuming this is not an Anaconda environment or an additional venv/pipenv/... environment manager is being used on top, because the conda-meta folder /Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/conda-meta does not exist.
+28499 INFO: Processing standard module hook 'hook-pytz.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+29191 INFO: Processing standard module hook 'hook-pyarrow.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+40 WARNING: Assuming this is not an Anaconda environment or an additional venv/pipenv/... environment manager is being used on top, because the conda-meta folder /Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/conda-meta does not exist.
+29491 INFO: Processing standard module hook 'hook-urllib3.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+29512 INFO: Processing pre-safe-import-module hook 'hook-urllib3.packages.six.moves.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks/pre_safe_import_module'
+29780 INFO: Processing standard module hook 'hook-cryptography.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+39 WARNING: Assuming this is not an Anaconda environment or an additional venv/pipenv/... environment manager is being used on top, because the conda-meta folder /Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/conda-meta does not exist.
+39 WARNING: Assuming this is not an Anaconda environment or an additional venv/pipenv/... environment manager is being used on top, because the conda-meta folder /Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/conda-meta does not exist.
+30121 INFO: hook-cryptography: cryptography does not seem to be using dynamically linked OpenSSL.
+30413 INFO: Processing standard module hook 'hook-numba.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+30421 INFO: Processing standard module hook 'hook-llvmlite.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+32378 INFO: Processing pre-safe-import-module hook 'hook-win32com.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/pre_safe_import_module'
+33186 INFO: Processing standard module hook 'hook-pandas.io.formats.style.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+34319 INFO: Processing standard module hook 'hook-pandas.plotting.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+34791 INFO: Processing standard module hook 'hook-sqlite3.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+39 WARNING: Assuming this is not an Anaconda environment or an additional venv/pipenv/... environment manager is being used on top, because the conda-meta folder /Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/conda-meta does not exist.
+34917 INFO: Processing standard module hook 'hook-pandas.io.clipboard.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+38281 INFO: Processing standard module hook 'hook-shelve.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+40256 INFO: Processing standard module hook 'hook-wcwidth.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+44604 INFO: Processing standard module hook 'hook-torchvision.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+44636 INFO: Processing standard module hook 'hook-torchvision.io.image.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+44991 INFO: Processing standard module hook 'hook-transformers.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+47372 INFO: Processing standard module hook 'hook-datasets.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+47974 INFO: Processing standard module hook 'hook-anyio.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+39 WARNING: Assuming this is not an Anaconda environment or an additional venv/pipenv/... environment manager is being used on top, because the conda-meta folder /Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/conda-meta does not exist.
+48897 INFO: Processing standard module hook 'hook-scipy.io.matlab.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+49005 INFO: Processing standard module hook 'hook-regex.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+49254 INFO: Processing standard module hook 'hook-zoneinfo.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+51744 INFO: Processing standard module hook 'hook-timm.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+63599 INFO: Processing standard module hook 'hook-shapely.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+64196 INFO: Processing standard module hook 'hook-pywt.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+64372 INFO: Analyzing hidden import 'core.config_manager'
+64374 INFO: Analyzing hidden import 'core.file_manager'
+64379 INFO: Analyzing hidden import 'core.stats_formatter'
+64382 INFO: Analyzing hidden import 'update_checker'
+64382 ERROR: Hidden import 'update_checker' not found
+64382 INFO: Analyzing hidden import 'cryptography.fernet'
+64387 INFO: Processing module hooks (post-graph stage)...
+68534 WARNING: Hidden import "numba.core.datamodel.old_models" not found!
+68534 WARNING: Hidden import "numba.core.old_boxing" not found!
+68534 WARNING: Hidden import "numba.core.types.old_scalars" not found!
+68534 WARNING: Hidden import "numba.core.typing.old_builtins" not found!
+68534 WARNING: Hidden import "numba.core.typing.old_cmathdecl" not found!
+68534 WARNING: Hidden import "numba.core.typing.old_mathdecl" not found!
+68534 WARNING: Hidden import "numba.cpython.old_builtins" not found!
+68534 WARNING: Hidden import "numba.cpython.old_hashing" not found!
+68534 WARNING: Hidden import "numba.cpython.old_mathimpl" not found!
+68534 WARNING: Hidden import "numba.cpython.old_numbers" not found!
+68534 WARNING: Hidden import "numba.cpython.old_tupleobj" not found!
+68534 WARNING: Hidden import "numba.np.old_arraymath" not found!
+68534 WARNING: Hidden import "numba.np.random.old_distributions" not found!
+68534 WARNING: Hidden import "numba.np.random.old_random_methods" not found!
+68534 WARNING: Hidden import "numba.core.datamodel.new_models" not found!
+68534 WARNING: Hidden import "numba.core.new_boxing" not found!
+68534 WARNING: Hidden import "numba.core.typing.new_builtins" not found!
+68535 WARNING: Hidden import "numba.core.typing.new_cmathdecl" not found!
+68535 WARNING: Hidden import "numba.core.typing.new_mathdecl" not found!
+68535 WARNING: Hidden import "numba.cpython.new_builtins" not found!
+68535 WARNING: Hidden import "numba.cpython.new_hashing" not found!
+68535 WARNING: Hidden import "numba.cpython.new_mathimpl" not found!
+68535 WARNING: Hidden import "numba.cpython.new_numbers" not found!
+68535 WARNING: Hidden import "numba.cpython.new_tupleobj" not found!
+68535 WARNING: Hidden import "numba.np.new_arraymath" not found!
+68535 WARNING: Hidden import "numba.np.random.new_distributions" not found!
+68535 WARNING: Hidden import "numba.np.random.new_random_methods" not found!
+68594 WARNING: Hidden import "scipy.special._cdflib" not found!
+68818 INFO: Processing standard module hook 'hook-PIL.SpiderImagePlugin.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+68834 INFO: Processing standard module hook 'hook-matplotlib.backends.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+68834 INFO: Matplotlib backend selection method: automatic discovery of used backends
+68848 INFO: Discovered Matplotlib backend(s) via `matplotlib.use()` call in module 'sympy.testing.runtests': ['Agg', 'Agg']
+68870 INFO: Discovered Matplotlib backend(s) via `matplotlib.use()` call in module 'imageio.plugins._tifffile': ['TkAgg']
+68903 INFO: The following Matplotlib backends were discovered by scanning for `matplotlib.use()` calls: ['Agg', 'TkAgg']. If your backend of choice is not in this list, either add a `matplotlib.use()` call to your code, or configure the backend collection via hook options (see: https://pyinstaller.org/en/stable/hooks-config.html#matplotlib-hooks).
+68903 INFO: Selected matplotlib backends: ['Agg', 'TkAgg']
+68951 INFO: Processing standard module hook 'hook-PySide6.QtDBus.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+69997 INFO: Performing binary vs. data reclassification (2207 entries)
+70138 INFO: Looking for ctypes DLLs
+70158 WARNING: Library user32 required via ctypes not found
+70302 WARNING: Library msvcrt required via ctypes not found
+70314 WARNING: Ignoring /usr/lib64/libgomp.so.1 imported from /Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/torch/_inductor/codecache.py - only basenames are supported with ctypes imports!
+70333 WARNING: Library libcuda.so.1 required via ctypes not found
+70334 WARNING: Library libnvrtc.so required via ctypes not found
+70336 WARNING: Library libc.so.6 required via ctypes not found
+70386 WARNING: Library libnvidia-ml.so.1 required via ctypes not found
+70471 INFO: Analyzing run-time hooks ...
+70471 INFO: Including custom run-time hook 'pyi_rth_cv2.py'
+70493 INFO: Including run-time hook 'pyi_rth_inspect.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks/rthooks'
+70494 INFO: Including run-time hook 'pyi_rth_cryptography_openssl.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/rthooks'
+70495 INFO: Including run-time hook 'pyi_rth_setuptools.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks/rthooks'
+70495 INFO: Including run-time hook 'pyi_rth_pkgutil.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks/rthooks'
+70496 INFO: Including run-time hook 'pyi_rth_pkgres.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks/rthooks'
+70499 INFO: Including run-time hook 'pyi_rth_pyside6.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks/rthooks'
+70500 INFO: Processing pre-find-module-path hook 'hook-_pyi_rth_utils.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks/pre_find_module_path'
+70501 INFO: Processing standard module hook 'hook-_pyi_rth_utils.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+70502 INFO: Including run-time hook 'pyi_rth_mplconfig.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks/rthooks'
+70503 INFO: Including run-time hook 'pyi_rth_multiprocessing.py' from '/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/hooks/rthooks'
+70597 INFO: Creating base_library.zip...
+70608 INFO: Looking for dynamic libraries
+73311 INFO: Warnings written to /Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/build/SuperPicky/warn-SuperPicky.txt
+73535 INFO: Graph cross-reference written to /Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/build/SuperPicky/xref-SuperPicky.html
+74060 INFO: checking PYZ
+74060 INFO: Building PYZ because PYZ-00.toc is non existent
+74060 INFO: Building PYZ (ZlibArchive) /Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/build/SuperPicky/PYZ-00.pyz
+78758 INFO: Building PYZ (ZlibArchive) /Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/build/SuperPicky/PYZ-00.pyz completed successfully.
+78823 INFO: EXE target arch: arm64
+78823 INFO: Code signing identity: None
+78823 INFO: checking PKG
+78823 INFO: Building PKG because PKG-00.toc is non existent
+78823 INFO: Building PKG (CArchive) SuperPicky.pkg
+78848 INFO: Building PKG (CArchive) SuperPicky.pkg completed successfully.
+78848 INFO: Bootloader /Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/.venv/lib/python3.12/site-packages/PyInstaller/bootloader/Darwin-64bit/runw
+78848 INFO: checking EXE
+78848 INFO: Building EXE because EXE-00.toc is non existent
+78848 INFO: Building EXE from EXE-00.toc
+78848 INFO: Copying bootloader EXE to /Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/build/SuperPicky/SuperPicky
+78852 INFO: Converting EXE to target arch (arm64)
+78884 INFO: Removing signature(s) from EXE
+78915 INFO: Modifying Mach-O image UUID(s) in EXE
+78953 INFO: Appending PKG archive to EXE
+78969 INFO: Fixing EXE headers for code signing
+78972 INFO: Rewriting the executable's macOS SDK version (15.5.0) to match the SDK version of the Python library (11.1.0) in order to avoid inconsistent behavior and potential UI issues in the frozen application.
+78972 INFO: Re-signing the EXE
+79064 INFO: Building EXE from EXE-00.toc completed successfully.
+79091 INFO: checking COLLECT
+79091 INFO: Building COLLECT because COLLECT-00.toc is non existent
+79091 INFO: Building COLLECT COLLECT-00.toc
+119939 INFO: Building COLLECT COLLECT-00.toc completed successfully.
+120013 INFO: checking BUNDLE
+120013 INFO: Building BUNDLE because BUNDLE-00.toc is non existent
+120013 INFO: Building BUNDLE BUNDLE-00.toc
+143730 INFO: Signing the BUNDLE...
+145621 INFO: Building BUNDLE BUNDLE-00.toc completed successfully.
+145674 INFO: Build complete! The results are available in: /Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist
+[0;34m[INFO][0m 创建 macOS 应用包...
+[0;32m[SUCCESS][0m PyInstaller 打包完成
+[0;34m[INFO][0m 整理资源文件...
+
+[0;35m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;35m步骤 3/8: 代码签名[0m
+[0;35m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;34m[INFO][0m 签名嵌入的库和框架...
+[0;34m[INFO][0m 签名主应用...
+dist/SuperPicky.app: replacing existing signature
+[0;34m[INFO][0m 验证签名...
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/array.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/array.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_sha3.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_sha3.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_struct.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_struct.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_hashlib.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_hashlib.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_queue.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_queue.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_csv.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_csv.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_decimal.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_decimal.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/grp.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/grp.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_zoneinfo.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_zoneinfo.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_sha1.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_sha1.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_blake2.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_blake2.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_socket.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_socket.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_posixshmem.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_posixshmem.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_statistics.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_statistics.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_ssl.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_ssl.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/fcntl.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/fcntl.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/termios.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/termios.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/zlib.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/zlib.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/unicodedata.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/unicodedata.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_bisect.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_bisect.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/xxsubtype.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/xxsubtype.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_testcapi.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_testcapi.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_multibytecodec.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_multibytecodec.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_asyncio.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_asyncio.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_posixsubprocess.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_posixsubprocess.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/syslog.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/syslog.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/select.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/select.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_lzma.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_lzma.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_codecs_cn.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_codecs_cn.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_pickle.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_pickle.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/pyexpat.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/pyexpat.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_ctypes.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_ctypes.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/mmap.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/mmap.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_bz2.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_bz2.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_codecs_jp.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_codecs_jp.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/readline.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/readline.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_datetime.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_datetime.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/math.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/math.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_curses.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_curses.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_sha2.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_sha2.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_codecs_iso2022.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_codecs_iso2022.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_dbm.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_dbm.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_uuid.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_uuid.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_codecs_tw.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_codecs_tw.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_testinternalcapi.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_testinternalcapi.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_codecs_kr.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_codecs_kr.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_heapq.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_heapq.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_scproxy.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_scproxy.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_opcode.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_opcode.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_multiprocessing.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_multiprocessing.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_random.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_random.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/cmath.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/cmath.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_md5.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_md5.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_sqlite3.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_sqlite3.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_elementtree.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_elementtree.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_codecs_hk.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_codecs_hk.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_contextvars.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_contextvars.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_lsprof.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_lsprof.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/resource.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/resource.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/binascii.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/binascii.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_json.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/python3__dot__12/lib-dynload/_json.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/aiohttp/_http_writer.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/aiohttp/_http_writer.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/aiohttp/_http_parser.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/aiohttp/_http_parser.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/aiohttp/_websocket/mask.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/aiohttp/_websocket/mask.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/aiohttp/_websocket/reader_c.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/aiohttp/_websocket/reader_c.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/libffi.8.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/libffi.8.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/libsqlite3.0.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/libsqlite3.0.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/shapely/__dot__dylibs/libgeos_c.1.19.2.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/shapely/__dot__dylibs/libgeos_c.1.19.2.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/shapely/lib.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/shapely/lib.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/shapely/_geometry_helpers.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/shapely/_geometry_helpers.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/shapely/_geos.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/shapely/_geos.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/shapely/__dot__dylibs/libgeos.3.13.1.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/shapely/__dot__dylibs/libgeos.3.13.1.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/markupsafe/_speedups.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/markupsafe/_speedups.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/tokenizers/tokenizers.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/tokenizers/tokenizers.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/libpython3.12.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/libpython3.12.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/shiboken6/Shiboken.abi3.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/shiboken6/Shiboken.abi3.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/hf_xet/hf_xet.abi3.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/hf_xet/hf_xet.abi3.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/shiboken6/libshiboken6.abi3.6.10.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/shiboken6/libshiboken6.abi3.6.10.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/propcache/_helpers_c.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/propcache/_helpers_c.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libmbedcrypto.3.5.1.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libmbedcrypto.3.5.1.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libtheoraenc.1.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libtheoraenc.1.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libp11-kit.0.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libp11-kit.0.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libhwy.1.0.7.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libhwy.1.0.7.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libsodium.26.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libsodium.26.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libvmaf.1.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libvmaf.1.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libx264.164.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libswscale.7.1.100.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libx264.164.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libswscale.7.1.100.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/libOrbbecSDK.1.9.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/libOrbbecSDK.1.9.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libgnutls.30.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libgnutls.30.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libvorbisenc.2.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libvorbisenc.2.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libtasn1.6.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libtasn1.6.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libavcodec.60.3.100.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libavcodec.60.3.100.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libidn2.0.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libidn2.0.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libsoxr.0.1.2.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libsoxr.0.1.2.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libjxl.0.8.2.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libjxl.0.8.2.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libtheoradec.1.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libtheoradec.1.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libdav1d.7.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libdav1d.7.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libcjson.1.7.17.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libcjson.1.7.17.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libavformat.60.3.100.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libavformat.60.3.100.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libpng16.16.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libpng16.16.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/liblcms2.2.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/liblcms2.2.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libX11.6.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libX11.6.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libaom.3.8.0.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libaom.3.8.0.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libssl.3.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libssl.3.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libopencore-amrnb.0.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libopencore-amrnb.0.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libjxl_threads.0.8.2.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libjxl_threads.0.8.2.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libxcb.1.1.0.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libxcb.1.1.0.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libmp3lame.0.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libmp3lame.0.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libbrotlidec.1.1.0.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libbrotlidec.1.1.0.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libXau.6.0.0.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libXau.6.0.0.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libx265.199.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libx265.199.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libcrypto.3.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libcrypto.3.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libfreetype.6.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libfreetype.6.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libbrotlicommon.1.1.0.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libbrotlicommon.1.1.0.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/librav1e.0.6.6.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/librav1e.0.6.6.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libsharpyuv.0.0.1.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libsharpyuv.0.0.1.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libwebp.7.1.8.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libwebp.7.1.8.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libSvtAv1Enc.1.8.0.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libSvtAv1Enc.1.8.0.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libhogweed.6.8.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libhogweed.6.8.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libintl.8.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libintl.8.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/librist.4.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/librist.4.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libfontconfig.1.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libfontconfig.1.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libswresample.4.10.100.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libswresample.4.10.100.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libsnappy.1.1.10.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libsnappy.1.1.10.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libwebpmux.3.0.13.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libwebpmux.3.0.13.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libvorbis.0.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libvorbis.0.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libnettle.8.8.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libnettle.8.8.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libopenjp2.2.5.0.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libopenjp2.2.5.0.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/liblzma.5.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/liblzma.5.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libXdmcp.6.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libXdmcp.6.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libvpx.8.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libvpx.8.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libsrt.1.5.3.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libsrt.1.5.3.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libzmq.5.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libzmq.5.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libgmp.10.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libgmp.10.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libunistring.5.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libunistring.5.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libspeex.1.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libspeex.1.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libopencore-amrwb.0.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libopencore-amrwb.0.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libbluray.2.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libbluray.2.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libavutil.58.2.100.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libavutil.58.2.100.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libaribb24.0.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libaribb24.0.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libogg.0.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libogg.0.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libopus.0.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libopus.0.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libbrotlienc.1.1.0.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/__dot__dylibs/libbrotlienc.1.1.0.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/libbz2.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/libbz2.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/frozenlist/_frozenlist.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/frozenlist/_frozenlist.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/google/_upb/_message.abi3.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/google/_upb/_message.abi3.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/torchvision/__dot__dylibs/libz.1.2.13.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/torchvision/__dot__dylibs/libz.1.2.13.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cryptography/hazmat/bindings/_rust.abi3.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cryptography/hazmat/bindings/_rust.abi3.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/torchvision/_C.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/torchvision/_C.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/torchvision/__dot__dylibs/libpng16.16.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/torchvision/__dot__dylibs/libpng16.16.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/torchvision/__dot__dylibs/libsharpyuv.0.0.1.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/torchvision/__dot__dylibs/libsharpyuv.0.0.1.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/torchvision/__dot__dylibs/libc++.1.0.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/torchvision/__dot__dylibs/libc++.1.0.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/torchvision/__dot__dylibs/libwebp.7.1.8.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/torchvision/__dot__dylibs/libwebp.7.1.8.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/torchvision/__dot__dylibs/libjpeg.8.2.2.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/torchvision/__dot__dylibs/libjpeg.8.2.2.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/torchvision/image.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/torchvision/image.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pycocotools/_mask.abi3.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pycocotools/_mask.abi3.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/Cython/Utils.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/Cython/Utils.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/Cython/Tempita/_tempita.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/Cython/Tempita/_tempita.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/cv2.abi3.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/cv2/cv2.abi3.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/Cython/Plex/Scanners.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/Cython/Plex/Scanners.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/Cython/Plex/Machines.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/Cython/Plex/Machines.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/Cython/Plex/DFA.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/Cython/Plex/DFA.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/Cython/Plex/Actions.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/Cython/Plex/Actions.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/Cython/Compiler/LineTable.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/Cython/Compiler/LineTable.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/Cython/Compiler/FlowControl.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/Cython/Compiler/FlowControl.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/Cython/Compiler/FusedNode.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/Cython/Compiler/FusedNode.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/Cython/Plex/Transitions.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/Cython/Plex/Transitions.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/Cython/Compiler/Scanning.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/Cython/Compiler/Code.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/Cython/Compiler/Scanning.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/Cython/Compiler/Code.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/Cython/Compiler/Visitor.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/Cython/Compiler/Visitor.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pywt/_extensions/_cwt.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pywt/_extensions/_cwt.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/Cython/Compiler/Parsing.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/Cython/Compiler/Parsing.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/Cython/StringIOTree.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/Cython/StringIOTree.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pywt/_extensions/_dwt.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pywt/_extensions/_dwt.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pywt/_extensions/_pywt.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pywt/_extensions/_pywt.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pywt/_extensions/_swt.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pywt/_extensions/_swt.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/torch/bin/torch_shm_manager
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/torch/bin/torch_shm_manager
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/torch/bin/protoc
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/torch/bin/protoc
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/torch/_C.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/torch/_C.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/torch/bin/protoc-3.13.0.0
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/torch/bin/protoc-3.13.0.0
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/torch/lib/libtorch.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/torch/lib/libtorch.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/torch/lib/libtorch_global_deps.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/torch/lib/libtorch_global_deps.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/torch/lib/libomp.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/torch/lib/libomp.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/torch/lib/libshm.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/torch/lib/libshm.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/torch/lib/libc10.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/torch/lib/libc10.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/libtinfow.6.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/libtinfow.6.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/regex/_regex.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/regex/_regex.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/numpy/linalg/_umath_linalg.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/numpy/linalg/_umath_linalg.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/numpy/_core/_multiarray_tests.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/numpy/_core/_multiarray_tests.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/numpy/fft/_pocketfft_umath.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/numpy/fft/_pocketfft_umath.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/numpy/random/_pcg64.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/numpy/random/_pcg64.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/numpy/random/_philox.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/numpy/random/_philox.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/numpy/random/bit_generator.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/numpy/random/bit_generator.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/numpy/random/_common.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/numpy/_core/_multiarray_umath.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/numpy/random/_common.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/numpy/_core/_multiarray_umath.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/numpy/random/_mt19937.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/numpy/random/_mt19937.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/numpy/random/_generator.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/numpy/random/_generator.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/numpy/random/_bounded_integers.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/numpy/random/_bounded_integers.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/numpy/random/_sfc64.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/numpy/random/_sfc64.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/charset_normalizer/md__mypyc.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/charset_normalizer/md__mypyc.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/torch/lib/libtorch_python.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/torch/lib/libtorch_python.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/numpy/random/mtrand.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/numpy/random/mtrand.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/charset_normalizer/md.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/charset_normalizer/md.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PIL/_webp.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PIL/_webp.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PIL/_imagingft.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PIL/_imagingft.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PIL/_imagingcms.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PIL/_imagingcms.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PIL/__dot__dylibs/libpng16.16.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PIL/__dot__dylibs/libpng16.16.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PIL/__dot__dylibs/libbrotlicommon.1.1.0.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PIL/__dot__dylibs/libbrotlicommon.1.1.0.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PIL/__dot__dylibs/libavif.16.3.0.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PIL/__dot__dylibs/libavif.16.3.0.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PIL/__dot__dylibs/libjpeg.62.4.0.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PIL/__dot__dylibs/libjpeg.62.4.0.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PIL/__dot__dylibs/liblcms2.2.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PIL/__dot__dylibs/liblcms2.2.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PIL/__dot__dylibs/libxcb.1.1.0.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PIL/__dot__dylibs/libxcb.1.1.0.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PIL/__dot__dylibs/libbrotlidec.1.1.0.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PIL/__dot__dylibs/libbrotlidec.1.1.0.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PIL/__dot__dylibs/libfreetype.6.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PIL/__dot__dylibs/libfreetype.6.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PIL/__dot__dylibs/libsharpyuv.0.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PIL/__dot__dylibs/libsharpyuv.0.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PIL/__dot__dylibs/libz.1.3.1.zlib-ng.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PIL/__dot__dylibs/libz.1.3.1.zlib-ng.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PIL/__dot__dylibs/libharfbuzz.0.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PIL/__dot__dylibs/libharfbuzz.0.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PIL/__dot__dylibs/libwebp.7.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PIL/__dot__dylibs/libwebp.7.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PIL/__dot__dylibs/libwebpmux.3.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PIL/__dot__dylibs/libwebpmux.3.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PIL/__dot__dylibs/libwebpdemux.2.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PIL/__dot__dylibs/libwebpdemux.2.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PIL/__dot__dylibs/libXau.6.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PIL/__dot__dylibs/libXau.6.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PIL/__dot__dylibs/liblzma.5.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PIL/__dot__dylibs/liblzma.5.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PIL/__dot__dylibs/libtiff.6.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PIL/__dot__dylibs/libtiff.6.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PIL/_imagingmath.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PIL/_imagingmath.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/llvmlite/binding/libllvmlite.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/llvmlite/binding/libllvmlite.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PIL/__dot__dylibs/libopenjp2.2.5.3.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PIL/__dot__dylibs/libopenjp2.2.5.3.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PIL/_avif.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PIL/_avif.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PIL/_imaging.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PIL/_imaging.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PIL/_imagingtk.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PIL/_imagingtk.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/multidict/_multidict.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/multidict/_multidict.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/rawpy/__dot__dylibs/libjpeg.9.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/rawpy/__dot__dylibs/libjpeg.9.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/rawpy/__dot__dylibs/liblcms2.2.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/rawpy/__dot__dylibs/liblcms2.2.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/rawpy/__dot__dylibs/libraw_r.23.0.0.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/rawpy/__dot__dylibs/libraw_r.23.0.0.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/rawpy/__dot__dylibs/libjasper.7.0.0.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/rawpy/__dot__dylibs/libjasper.7.0.0.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/sentencepiece/_sentencepiece.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/sentencepiece/_sentencepiece.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/rawpy/_rawpy.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/rawpy/_rawpy.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/contourpy/_contourpy.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/contourpy/_contourpy.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/lmdb/cpython.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/lmdb/cpython.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/plugins/platforminputcontexts/libqtvirtualkeyboardplugin.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/plugins/platforminputcontexts/libqtvirtualkeyboardplugin.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/plugins/platforms/libqoffscreen.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/plugins/platforms/libqoffscreen.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/plugins/platforms/libqminimal.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/plugins/platforms/libqminimal.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/plugins/styles/libqmacstyle.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/plugins/styles/libqmacstyle.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/plugins/platforms/libqcocoa.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/plugins/platforms/libqcocoa.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/plugins/tls/libqsecuretransportbackend.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/plugins/tls/libqsecuretransportbackend.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/plugins/tls/libqopensslbackend.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/plugins/tls/libqopensslbackend.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/QtGui.abi3.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/QtGui.abi3.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/plugins/tls/libqcertonlybackend.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/plugins/tls/libqcertonlybackend.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/QtWidgets.abi3.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/QtWidgets.abi3.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/plugins/iconengines/libqsvgicon.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/plugins/iconengines/libqsvgicon.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/plugins/imageformats/libqgif.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/plugins/imageformats/libqgif.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/plugins/imageformats/libqwbmp.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/plugins/imageformats/libqwbmp.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/plugins/imageformats/libqwebp.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/plugins/imageformats/libqwebp.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/plugins/imageformats/libqmacheif.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/plugins/imageformats/libqmacheif.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/plugins/imageformats/libqico.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/plugins/imageformats/libqico.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/plugins/imageformats/libqjpeg.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/plugins/imageformats/libqjpeg.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/plugins/imageformats/libqtiff.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/plugins/imageformats/libqtiff.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/plugins/imageformats/libqpdf.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/plugins/imageformats/libqpdf.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/plugins/imageformats/libqsvg.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/plugins/imageformats/libqsvg.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/plugins/imageformats/libqtga.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/plugins/imageformats/libqtga.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/plugins/imageformats/libqicns.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/plugins/imageformats/libqicns.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/plugins/imageformats/libqmacjp2.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/plugins/imageformats/libqmacjp2.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/plugins/generic/libqtuiotouchplugin.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/plugins/generic/libqtuiotouchplugin.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/plugins/networkinformation/libqapplenetworkinformation.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/plugins/networkinformation/libqapplenetworkinformation.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/lib/QtVirtualKeyboardQml.framework/Versions/Current/.
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/lib/QtVirtualKeyboardQml.framework/Versions/Current/.
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/lib/QtQmlMeta.framework/Versions/Current/.
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/lib/QtQmlMeta.framework/Versions/Current/.
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/lib/QtPdf.framework/Versions/Current/.
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/lib/QtPdf.framework/Versions/Current/.
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/libpyside6.abi3.6.10.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/libpyside6.abi3.6.10.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/QtNetwork.abi3.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/QtNetwork.abi3.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/lib/QtDBus.framework/Versions/Current/.
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/lib/QtDBus.framework/Versions/Current/.
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/lib/QtOpenGL.framework/Versions/Current/.
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/lib/QtOpenGL.framework/Versions/Current/.
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/lib/QtVirtualKeyboard.framework/Versions/Current/.
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/lib/QtQmlWorkerScript.framework/Versions/Current/.
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/lib/QtVirtualKeyboard.framework/Versions/Current/.
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/lib/QtQmlWorkerScript.framework/Versions/Current/.
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/lib/QtSvg.framework/Versions/Current/.
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/lib/QtSvg.framework/Versions/Current/.
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/lib/QtQmlModels.framework/Versions/Current/.
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/lib/QtCore.framework/Versions/Current/.
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/lib/QtQmlModels.framework/Versions/Current/.
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/lib/QtGui.framework/Versions/Current/.
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/lib/QtCore.framework/Versions/Current/.
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/lib/QtNetwork.framework/Versions/Current/.
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/lib/QtGui.framework/Versions/Current/.
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/lib/QtNetwork.framework/Versions/Current/.
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/lib/QtQml.framework/Versions/Current/.
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/lib/QtQml.framework/Versions/Current/.
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/lib/QtWidgets.framework/Versions/Current/.
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/lib/QtWidgets.framework/Versions/Current/.
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/QtDBus.abi3.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/QtDBus.abi3.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/kiwisolver/_cext.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/kiwisolver/_cext.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/lib/QtQuick.framework/Versions/Current/.
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/libncursesw.6.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/safetensors/_safetensors_rust.abi3.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/libncursesw.6.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/safetensors/_safetensors_rust.abi3.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/Qt/lib/QtQuick.framework/Versions/Current/.
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/QtCore.abi3.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/PySide6/QtCore.abi3.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/matplotlib/backends/_backend_agg.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/matplotlib/backends/_backend_agg.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/matplotlib/backends/_tkagg.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/matplotlib/backends/_tkagg.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/matplotlib/_image.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/matplotlib/_image.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/matplotlib/_path.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/matplotlib/_path.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/matplotlib/_qhull.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/matplotlib/_qhull.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/matplotlib/_tri.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/matplotlib/_tri.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/yaml/_yaml.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/yaml/_yaml.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/matplotlib/_c_internal_utils.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/matplotlib/ft2font.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/matplotlib/_c_internal_utils.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/matplotlib/ft2font.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/xxhash/_xxhash.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/xxhash/_xxhash.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/numba/experimental/jitclass/_box.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/numba/experimental/jitclass/_box.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/numba/_dispatcher.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/numba/_dispatcher.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/numba/core/typeconv/_typeconv.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/numba/core/typeconv/_typeconv.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/numba/core/runtime/_nrt_python.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/numba/core/runtime/_nrt_python.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/numba/cuda/cudadrv/_extras.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/numba/cuda/cudadrv/_extras.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/numba/_devicearray.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/numba/_devicearray.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/numba/_dynfunc.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/numba/_dynfunc.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/numba/_helperlib.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/numba/_helperlib.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/numba/mviewbuf.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/numba/mviewbuf.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/numba/np/ufunc/workqueue.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/numba/np/ufunc/workqueue.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/numba/np/ufunc/omppool.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/numba/np/ufunc/omppool.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/numba/np/ufunc/_internal.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/numba/np/ufunc/_internal.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/_cffi_backend.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/_cffi_backend.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/libreadline.8.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/libreadline.8.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/psutil/_psutil_posix.abi3.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/psutil/_psutil_posix.abi3.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/libexpat.1.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/libexpat.1.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/psutil/_psutil_osx.abi3.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/psutil/_psutil_osx.abi3.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/torch/lib/libtorch_cpu.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/torch/lib/libtorch_cpu.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/ndimage/_ni_label.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/ndimage/_ni_label.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/ndimage/_nd_image.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/ndimage/_nd_image.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/linalg/_matfuncs_sqrtm_triu.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/linalg/_matfuncs_sqrtm_triu.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/linalg/_linalg_pythran.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/linalg/_linalg_pythran.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/linalg/_solve_toeplitz.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/linalg/_solve_toeplitz.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/linalg/_matfuncs_schur_sqrtm.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/linalg/_matfuncs_schur_sqrtm.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/ndimage/_rank_filter_1d.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/ndimage/_rank_filter_1d.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/linalg/_decomp_update.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/linalg/_decomp_update.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/linalg/_cythonized_array_utils.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/linalg/_cythonized_array_utils.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/linalg/_matfuncs_expm.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/linalg/_matfuncs_expm.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/linalg/_decomp_interpolative.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/linalg/_decomp_interpolative.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/linalg/cython_blas.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/linalg/cython_blas.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/linalg/cython_lapack.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/linalg/cython_lapack.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/linalg/_flapack.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/linalg/_flapack.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/linalg/_fblas.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/linalg/_fblas.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/linalg/_decomp_lu_cython.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/linalg/_decomp_lu_cython.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/optimize/_zeros.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/optimize/_zeros.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/optimize/_slsqplib.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/optimize/_slsqplib.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/optimize/_trlib/_trlib.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/optimize/_trlib/_trlib.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/optimize/_minpack.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/optimize/_minpack.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/optimize/_bglu_dense.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/optimize/_bglu_dense.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/optimize/_direct.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/optimize/_direct.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/optimize/_group_columns.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/optimize/_group_columns.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/optimize/_highspy/_highs_options.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/optimize/_highspy/_highs_options.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/optimize/_lsq/givens_elimination.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/optimize/_lsq/givens_elimination.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/optimize/_lsap.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/optimize/_lsap.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/optimize/_pava_pybind.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/optimize/_pava_pybind.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/integrate/_lsoda.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/integrate/_lsoda.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/optimize/_highspy/_core.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/optimize/_highspy/_core.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/optimize/_lbfgsb.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/optimize/_lbfgsb.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/optimize/_moduleTNC.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/optimize/_moduleTNC.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/integrate/_odepack.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/integrate/_odepack.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/__dot__dylibs/libgfortran.5.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/__dot__dylibs/libgfortran.5.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/integrate/_dop.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/integrate/_dop.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/integrate/_vode.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/integrate/_vode.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/integrate/_quadpack.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/integrate/_quadpack.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/__dot__dylibs/libgcc_s.1.1.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/__dot__dylibs/libgcc_s.1.1.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/__dot__dylibs/libquadmath.0.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/__dot__dylibs/libquadmath.0.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/io/matlab/_mio5_utils.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/io/matlab/_mio5_utils.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/_lib/_uarray/_uarray.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/_lib/_uarray/_uarray.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/io/_fast_matrix_market/_fmm_core.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/io/_fast_matrix_market/_fmm_core.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/io/matlab/_mio_utils.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/io/matlab/_mio_utils.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/io/matlab/_streams.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/io/matlab/_streams.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/_lib/_fpumode.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/_lib/_fpumode.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/special/_specfun.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/special/_specfun.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/special/_comb.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/special/_comb.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/_lib/messagestream.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/_lib/messagestream.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/_lib/_ccallback_c.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/_lib/_ccallback_c.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/special/_ufuncs.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/special/_ufuncs.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/special/_ufuncs_cxx.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/special/_ufuncs_cxx.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/special/_ellip_harm_2.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/special/_ellip_harm_2.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/special/cython_special.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/special/cython_special.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/special/_gufuncs.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/special/_gufuncs.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/fftpack/convolve.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/fftpack/convolve.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/special/_special_ufuncs.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/special/_special_ufuncs.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/interpolate/_dierckx.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/interpolate/_dierckx.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/interpolate/_dfitpack.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/interpolate/_dfitpack.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/interpolate/_ppoly.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/interpolate/_ppoly.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/interpolate/_rgi_cython.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/interpolate/_rgi_cython.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/interpolate/_fitpack.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/interpolate/_fitpack.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/polars/polars.abi3.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/polars/polars.abi3.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/interpolate/_rbfinterp_pythran.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/interpolate/_rbfinterp_pythran.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/interpolate/_interpnd.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/interpolate/_interpnd.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/fft/_pocketfft/pypocketfft.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/fft/_pocketfft/pypocketfft.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/_cyutility.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/_cyutility.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/sparse/linalg/_eigen/arpack/_arpack.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/sparse/linalg/_eigen/arpack/_arpack.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/sparse/linalg/_propack/_cpropack.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/sparse/linalg/_propack/_cpropack.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/sparse/linalg/_propack/_dpropack.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/sparse/linalg/_propack/_dpropack.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/sparse/linalg/_propack/_zpropack.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/sparse/linalg/_propack/_zpropack.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/sparse/linalg/_dsolve/_superlu.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/sparse/linalg/_dsolve/_superlu.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/sparse/csgraph/_reordering.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/sparse/csgraph/_reordering.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/sparse/csgraph/_min_spanning_tree.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/sparse/csgraph/_min_spanning_tree.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/sparse/_sparsetools.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/sparse/_sparsetools.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/sparse/csgraph/_flow.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/sparse/csgraph/_flow.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/sparse/linalg/_propack/_spropack.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/sparse/linalg/_propack/_spropack.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/sparse/csgraph/_tools.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/sparse/csgraph/_tools.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/sparse/csgraph/_traversal.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/sparse/csgraph/_traversal.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/sparse/csgraph/_shortest_path.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/sparse/csgraph/_shortest_path.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/sparse/csgraph/_matching.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/sparse/csgraph/_matching.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/sparse/_csparsetools.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/sparse/_csparsetools.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/spatial/_hausdorff.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/spatial/_hausdorff.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/spatial/_ckdtree.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/spatial/_ckdtree.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/spatial/_distance_pybind.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/spatial/_distance_pybind.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/spatial/_qhull.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/spatial/_qhull.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/spatial/_voronoi.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/spatial/_voronoi.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/signal/_sigtools.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/signal/_sigtools.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/signal/_upfirdn_apply.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/signal/_upfirdn_apply.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/spatial/transform/_rotation.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/spatial/transform/_rotation.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/spatial/_distance_wrap.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/spatial/_distance_wrap.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/spatial/transform/_rigid_transform.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/spatial/transform/_rigid_transform.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/signal/_peak_finding_utils.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/signal/_peak_finding_utils.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/signal/_spline.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/signal/_spline.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/signal/_max_len_seq_inner.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/signal/_max_len_seq_inner.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/signal/_sosfilt.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/signal/_sosfilt.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/stats/_levy_stable/levyst.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/stats/_levy_stable/levyst.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/stats/_rcont/rcont.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/stats/_rcont/rcont.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/stats/_sobol.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/stats/_sobol.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/stats/_biasedurn.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/stats/_biasedurn.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/stats/_qmc_cy.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/stats/_qmc_cy.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/stats/_stats.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/stats/_stats.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/stats/_ansari_swilk_statistics.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/stats/_ansari_swilk_statistics.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/stats/_stats_pythran.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/stats/_stats_pythran.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/stats/_qmvnt_cy.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/scipy/stats/_qmvnt_cy.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/yarl/_quoting_c.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/yarl/_quoting_c.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/properties.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/properties.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/writers.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/writers.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/pandas_datetime.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/pandas_datetime.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/ops_dispatch.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/ops_dispatch.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/interval.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/interval.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/reshape.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/reshape.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/lib.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/lib.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/join.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/join.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/testing.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/testing.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/pandas_parser.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/pandas_parser.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/window/indexers.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/window/indexers.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/window/aggregations.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/window/aggregations.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/internals.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/internals.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/tslibs/ccalendar.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/tslibs/ccalendar.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/ops.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/ops.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/parsers.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/parsers.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/byteswap.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/byteswap.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/indexing.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/indexing.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/missing.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/missing.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/hashing.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/hashing.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/algos.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/algos.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/sas.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/sas.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/sparse.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/sparse.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/arrays.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/arrays.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/groupby.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/groupby.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/tslibs/fields.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/tslibs/fields.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/tslibs/nattype.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/tslibs/nattype.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/tslibs/conversion.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/tslibs/conversion.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/tslibs/offsets.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/tslibs/offsets.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/tslibs/tzconversion.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/tslibs/tzconversion.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/tslibs/period.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/tslibs/period.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/tslibs/timezones.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/tslibs/timezones.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/tslibs/np_datetime.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/tslibs/np_datetime.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/tslibs/base.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/tslibs/base.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/tslibs/parsing.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/tslibs/parsing.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/tslibs/timestamps.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/tslibs/timestamps.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/tslibs/dtypes.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/tslibs/dtypes.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/tslibs/vectorized.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/tslibs/vectorized.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/tslibs/timedeltas.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/tslibs/timedeltas.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/tslibs/strptime.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/tslibs/strptime.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/json.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/json.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/hashtable.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/hashtable.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/index.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/index.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/tslib.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pandas/_libs/tslib.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/libarrow_substrait.2100.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/libarrow_substrait.2100.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/_s3fs.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/_s3fs.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/_dataset_orc.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/_dataset_orc.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/_csv.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/_csv.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/libarrow_python.2100.0.0.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/libarrow_python.2100.0.0.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/libarrow_python.2100.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/libarrow_python.2100.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/libparquet.2100.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/libparquet.2100.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/_fs.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/_fs.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/libarrow_python_parquet_encryption.2100.0.0.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/libarrow_python_parquet_encryption.2100.0.0.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/libarrow_python_flight.2100.0.0.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/libarrow_python_flight.2100.0.0.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/_orc.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/_orc.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/_parquet.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/_parquet.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/_acero.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/_acero.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/lib.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/libarrow_compute.2100.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/lib.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/libarrow_compute.2100.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/libarrow_flight.2100.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/libarrow_flight.2100.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/_azurefs.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/_azurefs.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/libarrow_python_flight.2100.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/libarrow_python_flight.2100.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/libarrow_dataset.2100.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/libarrow_dataset.2100.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/libarrow_python_flight.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/libarrow_python_flight.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/_dataset.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/_dataset.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/libarrow_python_parquet_encryption.2100.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/libarrow_python_parquet_encryption.2100.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/_gcsfs.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/_gcsfs.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/_dataset_parquet.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/_dataset_parquet.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/_hdfs.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/_hdfs.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/_substrait.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/_substrait.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/_feather.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/_feather.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/_dataset_parquet_encryption.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/_dataset_parquet_encryption.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/libarrow_python.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/libarrow_python.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/libarrow_acero.2100.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/libarrow_acero.2100.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/_parquet_encryption.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/_parquet_encryption.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/_flight.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/_flight.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/_json.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/_json.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/_compute.cpython-312-darwin.so
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/_compute.cpython-312-darwin.so
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/libarrow_python_parquet_encryption.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/libarrow_python_parquet_encryption.dylib
+--prepared:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/libarrow.2100.dylib
+--validated:/Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky.app/Contents/Frameworks/pyarrow/libarrow.2100.dylib
+dist/SuperPicky.app: valid on disk
+dist/SuperPicky.app: satisfies its Designated Requirement
+[0;32m[SUCCESS][0m 代码签名完成
+
+[0;35m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;35m步骤 4/8: 创建 PKG 组件包[0m
+[0;35m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;34m[INFO][0m 复制应用到安装目录...
+[0;34m[INFO][0m 复制应用到安装目录...
+[0;34m[INFO][0m 创建 postinstall 脚本...
+[0;34m[INFO][0m 创建组件 plist (禁用 relocation)...
+[0;34m[INFO][0m 构建 PKG 组件包...
+pkgbuild: Reading components from pkg_components.plist
+pkgbuild: Adding component at Applications/SuperPicky.app
+pkgbuild: Adding top-level postinstall script
+pkgbuild: Wrote package to SuperPicky-component.pkg
+[0;32m[SUCCESS][0m PKG 组件包创建完成
+
+[0;35m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;35m步骤 5/8: 创建 Distribution PKG[0m
+[0;35m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;34m[INFO][0m 构建 Distribution PKG...
+productbuild: Wrote product to SuperPicky_v4.0.5_Installer.pkg
+[0;32m[SUCCESS][0m Distribution PKG 创建完成
+
+[0;35m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;35m步骤 6/8: 签名 PKG[0m
+[0;35m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;34m[INFO][0m 签名 PKG 安装包...
+productsign: using timestamp authority for signature
+productsign: signing product with identity "Developer ID Installer: James Zhen Yu (JWR6FDB52H)" from keychain /Users/jameszhenyu/Library/Keychains/login.keychain-db
+productsign: adding certificate "Developer ID Certification Authority"
+productsign: adding certificate "Apple Root CA"
+productsign: Wrote signed product archive to SuperPicky_v4.0.5_Installer-signed.pkg
+[0;34m[INFO][0m 验证 PKG 签名...
+Package "SuperPicky_v4.0.5_Installer.pkg":
+   Status: signed by a developer certificate issued by Apple for distribution
+   Signed with a trusted timestamp on: 2026-02-15 02:21:12 +0000
+   Certificate Chain:
+    1. Developer ID Installer: James Zhen Yu (JWR6FDB52H)
+       Expires: 2027-02-01 22:12:15 +0000
+       SHA256 Fingerprint:
+           05 3B E1 B5 1B E7 2C B8 BA 5D 59 A2 9C 3D 01 CA 21 FE 66 CF A0 37 
+           A1 2A BE B2 35 3E 54 74 0A 6C
+       ------------------------------------------------------------------------
+    2. Developer ID Certification Authority
+       Expires: 2027-02-01 22:12:15 +0000
+       SHA256 Fingerprint:
+           7A FC 9D 01 A6 2F 03 A2 DE 96 37 93 6D 4A FE 68 09 0D 2D E1 8D 03 
+           F2 9C 88 CF B0 B1 BA 63 58 7F
+       ------------------------------------------------------------------------
+    3. Apple Root CA
+       Expires: 2035-02-09 21:40:36 +0000
+       SHA256 Fingerprint:
+           B0 B1 73 0E CB C7 FF 45 05 14 2C 49 F1 29 5E 6E DA 6B CA ED 7E 2C 
+           68 C5 BE 91 B5 A1 10 01 F0 24
+
+[0;32m[SUCCESS][0m PKG 签名完成
+
+[0;35m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;35m步骤 7/8: 创建 DMG[0m
+[0;35m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;34m[INFO][0m 复制 Lightroom 插件副本...
+[0;34m[INFO][0m 生成 PDF 安装指南...
+[0;34m[INFO][0m   已复制 HTML 安装指南（可在浏览器中打印为 PDF）
+[0;34m[INFO][0m 创建网站快捷方式...
+[0;34m[INFO][0m 创建 DMG 镜像...
+created: /Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky_v4.0.5.dmg
+[0;32m[SUCCESS][0m DMG 创建完成
+
+[0;35m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;35m步骤 8/8: 提交公证[0m
+[0;35m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;34m[INFO][0m 签名 DMG...
+[0;34m[INFO][0m 提交到 Apple 公证服务...
+Conducting pre-submission checks for SuperPicky_v4.0.5.dmg and initiating connection to the Apple notary service...
+Submission ID received
+  id: 7a7a8b5d-48cd-4550-b71e-45ae69fd3ab8
+Successfully uploaded file
+  id: 7a7a8b5d-48cd-4550-b71e-45ae69fd3ab8
+  path: /Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky_v4.0.5.dmg
+Waiting for processing to complete.
+Current status: In Progress...Current status: In Progress....Current status: In Progress.....Current status: In Progress......Current status: In Progress.......Current status: In Progress........Current status: In Progress.........Current status: In Progress..........Current status: In Progress...........Current status: In Progress............Current status: In Progress.............Current status: In Progress..............Current status: In Progress...............Current status: In Progress................Current status: In Progress.................Current status: In Progress..................Current status: In Progress...................Current status: In Progress....................Current status: In Progress.....................Current status: In Progress......................Current status: In Progress.......................Current status: In Progress........................Current status: In Progress.........................Current status: In Progress..........................Current status: Accepted...........................Processing complete
+  id: 7a7a8b5d-48cd-4550-b71e-45ae69fd3ab8
+  status: Accepted
+[0;32m[SUCCESS][0m 公证成功！
+[0;34m[INFO][0m 装订公证票据...
+Processing: /Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky_v4.0.5.dmg
+Processing: /Users/jameszhenyu/Documents/JamesAPPS/SuperPicky2026/dist/SuperPicky_v4.0.5.dmg
+The staple and validate action worked!
+[0;32m[SUCCESS][0m ✅ V4.0.4 打包发布全部完成！
+[0;34m[INFO][0m 最终文件: dist/SuperPicky_v4.0.5.dmg

@@ -15,7 +15,7 @@ def raw_to_jpeg(raw_file_path):
     
     # V4.1.0: 使用 .superpicky/cache 目录存储临时 JPEG
     superpicky_dir = os.path.join(directory_path, ".superpicky")
-    cache_dir = os.path.join(superpicky_dir, "cache")
+    cache_dir = os.path.join(superpicky_dir, "cache", "temp_preview")
     
     # 确保目录存在并隐藏
     ensure_hidden_directory(superpicky_dir)

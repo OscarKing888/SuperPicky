@@ -20,7 +20,7 @@ from .file_utils import ensure_hidden_directory
 
 
 # Schema 版本，用于未来升级
-SCHEMA_VERSION = "3"
+SCHEMA_VERSION = "4"
 
 # 所有列定义（有序），用于 CREATE TABLE 和数据验证
 PHOTO_COLUMNS = [
@@ -78,7 +78,8 @@ PHOTO_COLUMNS = [
     ("original_path",    "TEXT", None),
     ("current_path",     "TEXT", None),
     ("temp_jpeg_path",   "TEXT", None),
-    ("debug_crop_path",  "TEXT", None),
+    ("debug_crop_path",  "TEXT", None),   # 裁切鸟+mask (crop_debug/)
+    ("yolo_debug_path",  "TEXT", None),   # 全图+YOLO框 (yolo_debug/)
     
     ("created_at",    "TEXT", None),
     ("updated_at",    "TEXT", None),
@@ -263,6 +264,29 @@ class ReportDB:
             current_version = "3"
             self._update_schema_version(current_version)
             print("✅ Database schema upgraded to v3")
+
+        # ----------------------------------------------------------------------
+        #  Upgrade: v3 -> v4 (Check debug images)
+        # ----------------------------------------------------------------------
+        if current_version == "3":
+            print("🔄 Upgrading database schema from v3 to v4...")
+            
+            # V4 新增字段
+            new_columns_v4 = [
+                ("yolo_debug_path", "TEXT"),
+            ]
+            
+            for col_name, col_type in new_columns_v4:
+                try:
+                    self._conn.execute(
+                        f"ALTER TABLE photos ADD COLUMN {col_name} {col_type}"
+                    )
+                except sqlite3.OperationalError:
+                    pass # 列已存在，跳过
+            
+            current_version = "4"
+            self._update_schema_version(current_version)
+            print("✅ Database schema upgraded to v4")
 
     def _update_schema_version(self, version):
         """更新数据库中的版本号"""
