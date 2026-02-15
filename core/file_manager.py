@@ -305,27 +305,21 @@ class FileManager:
                     print(f"警告: 无法处理文件 {filename}: {e}")
                     
             elif os.path.isdir(child_path):
-                # V4.0: 处理 burst_XXX 子目录 - 将文件移回当前目录（评分目录），不保留子目录结构
-                if filename.startswith('burst_'):
-                    print(f"处理连拍子目录: {filename}")
-                    # 将 burst_XXX 中的文件移回当前评分目录（child_dir）
-                    self._flatten_burst_subdir(child_path, child_dir)
-                    # 删除空的 burst_XXX 目录
-                    try:
-                        if os.path.exists(child_path) and not os.listdir(child_path):
-                            os.rmdir(child_path)
-                            print(f"  已删除空连拍目录: {filename}")
-                        elif os.path.exists(child_path):
-                            shutil.rmtree(child_path)
-                            print(f"  已强制删除连拍目录: {filename}")
-                    except Exception as e:
-                        print(f"  警告: 删除连拍目录失败: {e}")
-                else:
-                    # 其他子目录：递归处理（保留原逻辑）
-                    new_parent = os.path.join(parent_dir, filename)
-                    if not os.path.exists(new_parent):
-                        os.makedirs(new_parent)
-                    self._move_files_back_to_parent_force(child_path, new_parent)
+                # V4.0.5: 将所有子目录（连拍组 burst_XXX、鸟种 Other_Birds 等）
+                # 的文件打平移回当前评分目录，不保留子目录结构
+                print(f"处理子目录: {filename}")
+                # 将子目录中的文件移回当前评分目录（child_dir）
+                self._flatten_burst_subdir(child_path, child_dir)
+                # 删除空的子目录
+                try:
+                    if os.path.exists(child_path) and not os.listdir(child_path):
+                        os.rmdir(child_path)
+                        print(f"  已删除空子目录: {filename}")
+                    elif os.path.exists(child_path):
+                        shutil.rmtree(child_path)
+                        print(f"  已强制删除子目录: {filename}")
+                except Exception as e:
+                    print(f"  警告: 删除子目录失败: {e}")
     
     def _flatten_burst_subdir(self, burst_dir: str, target_dir: str) -> None:
         """将 burst_XXX 子目录中的文件移回目标目录（评分目录）"""

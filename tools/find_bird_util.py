@@ -6,20 +6,33 @@ from .exiftool_manager import get_exiftool_manager
 import glob
 import shutil
 
+from .file_utils import ensure_hidden_directory
+
 def raw_to_jpeg(raw_file_path):
     filename = os.path.basename(raw_file_path)
     file_prefix, _ = os.path.splitext(filename)
-    directory_path = raw_file_path[:-len(filename)]
-    # V4.0.3: 使用 tmp_ 前缀命名临时 JPEG，便于识别和清理
-    jpg_file_path = os.path.join(directory_path, f"tmp_{file_prefix}.jpg")
-    log_message(f"CONVERSION: Filename is [{filename}], Destination file path is [{jpg_file_path}]", directory_path)
+    directory_path = os.path.dirname(raw_file_path)
+    
+    # V4.1.0: 使用 .superpicky/cache 目录存储临时 JPEG
+    superpicky_dir = os.path.join(directory_path, ".superpicky")
+    cache_dir = os.path.join(superpicky_dir, "cache")
+    
+    # 确保目录存在并隐藏
+    ensure_hidden_directory(superpicky_dir)
+    ensure_hidden_directory(cache_dir)
+    
+    # 文件名不带 tmp_ 前缀，直接使用原名前缀
+    jpg_file_path = os.path.join(cache_dir, f"{file_prefix}.jpg")
+    
+    log_message(f"CONVERSION: Filename is [{filename}], Cache path is [{jpg_file_path}]", directory_path)
 
     if os.path.exists(jpg_file_path):
-        log_message(f"TEMP JPEG already exists: [{jpg_file_path}]", directory_path)
-        return True  # 临时文件已存在，视为成功
+        log_message(f"CACHE JPEG already exists: [{jpg_file_path}]", directory_path)
+        return jpg_file_path  # 返回完整路径
+        
     if not os.path.exists(raw_file_path):
         log_message(f"ERROR, file [{filename}] cannot be found in RAW form", directory_path)
-        return False
+        return None
 
     try:
         with rawpy.imread(raw_file_path) as raw:
@@ -30,10 +43,13 @@ def raw_to_jpeg(raw_file_path):
                 with open(jpg_file_path, 'wb') as f:
                     f.write(thumbnail.data)
             elif thumbnail.format == rawpy.ThumbFormat.BITMAP:
-                imageio.imsave(filename + '.jpg', thumbnail.data)
+                imageio.imsave(jpg_file_path, thumbnail.data)
             log_message(f"CONVERSION: RAW extract to JPEG: {raw_file_path} -> {jpg_file_path}", directory_path)
+            
+            return jpg_file_path  # 返回完整路径
     except Exception as e:
         log_message(f"Error occurred while converting the RAW file:{raw_file_path}, Error: {e}", directory_path)
+        raise e  # 抛出异常供调用者捕获
 
 def reset(directory, log_callback=None, i18n=None):
     """

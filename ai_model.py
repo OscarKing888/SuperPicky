@@ -98,9 +98,7 @@ def detect_and_draw_birds(image_path, model, output_path, dir, ui_settings, i18n
     ai_confidence = ui_settings[0] / 100  # AI置信度：50-100 -> 0.5-1.0（仅用于过滤）
     sharpness_threshold = ui_settings[1]  # 锐度阈值：6000-9000
     nima_threshold = ui_settings[2]       # NIMA美学阈值：5.0-6.0
-
-    # V3.1: 不再保存Crop图片（移除预览功能）
-    save_crop = False
+    save_crop = ui_settings[3]            # 是否保存裁切（V4.1: 恢复支持）
 
     # V3.2: 移除未使用的 normalization_mode 和 sharpness_calculator
     # 锐度现在由 photo_processor 中的 keypoint_detector 计算
@@ -316,6 +314,35 @@ def detect_and_draw_birds(image_path, model, output_path, dir, ui_settings, i18n
             rating_value = 0
 
             # V3.3: 使用英文列名
+            # V4.1: 添加路径信息
+            try:
+                rel_current_path = os.path.relpath(image_path, dir)
+            except ValueError:
+                rel_current_path = image_path # Fallback to absolute if different drive
+                
+            rel_debug_path = None
+            
+            # V4.1: 如果启用了保存裁切 (save_crop) 且没有指定 output_path，自动保存到 cache/debug
+            if save_crop and not output_path:
+                from tools.file_utils import ensure_hidden_directory
+                
+                superpicky_dir = os.path.join(dir, ".superpicky")
+                cache_dir = os.path.join(superpicky_dir, "cache")
+                # V4.1: Rename to debug_crops for clarity
+                debug_dir = os.path.join(cache_dir, "debug_crops")
+                
+                try:
+                    ensure_hidden_directory(superpicky_dir)
+                    ensure_hidden_directory(debug_dir)
+                    
+                    filename = os.path.basename(image_path)
+                    prefix, ext = os.path.splitext(filename)
+                    output_path = os.path.join(debug_dir, f"crop_{prefix}.jpg")
+                except Exception:
+                    pass
+
+
+            
             data = {
                 "filename": os.path.splitext(os.path.basename(image_path))[0],
                 "has_bird": "yes" if found_bird else "no",
@@ -325,8 +352,18 @@ def detect_and_draw_birds(image_path, model, output_path, dir, ui_settings, i18n
                 "right_eye": "-",         # 将由 photo_processor 填充
                 "beak": "-",              # 将由 photo_processor 填充
                 "nima_score": float(f"{nima_score:.2f}") if nima_score is not None else "-",
-                "rating": rating_value
+                "rating": rating_value,
+                # V4.1 Paths
+                "current_path": rel_current_path,
+                "debug_crop_path": None # Will fill below
             }
+            
+            # Update debug_crop_path if we generated it
+            if found_bird and save_crop and output_path:
+                try:
+                    data["debug_crop_path"] = os.path.relpath(output_path, dir)
+                except ValueError:
+                    data["debug_crop_path"] = output_path
 
             # Step 5: CSV写入
             step_start = time.time()
@@ -336,7 +373,7 @@ def detect_and_draw_birds(image_path, model, output_path, dir, ui_settings, i18n
             # V3.3: 简化日志
             # log_message(f"  ⏱️  [4/4] CSV写入: {csv_time:.1f}ms", dir)
 
-    # --- 修改开始 ---
+
     # 只有在 found_bird 为 True 且 output_path 有效时，才保存带框的图片
     if found_bird and output_path:
         cv2.imwrite(output_path, image)

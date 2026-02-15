@@ -54,6 +54,10 @@ class AdvancedConfig:
         #   inplace: 尝试 in-place 写入 ARW（可能失败）
         #   auto: 尝试 embedded/inplace，若检测到结构变化则回退 sidecar
         "arw_write_mode": "embedded",
+        
+        # 临时文件管理 V4.1
+        "keep_temp_files": True,        # 保留临时预览图片（统一控制 tmp JPG + debug crops）
+        "auto_cleanup_days": 30,        # 自动清理周期：3/7/30/0(永久)
     }
 
     def __init__(self, config_file=None):
@@ -255,6 +259,26 @@ class AdvancedConfig:
     def set_custom_aesthetics(self, value):
         """设置自选模式下的美学阈值 (4.0-7.0)"""
         self.config["custom_aesthetics"] = max(4.0, min(7.0, float(value)))
+
+    # V4.1: 临时文件管理 getter/setter
+    @property
+    def keep_temp_files(self):
+        return self.config.get("keep_temp_files", True)
+
+    @property
+    def auto_cleanup_days(self):
+        return self.config.get("auto_cleanup_days", 30)
+
+    def set_keep_temp_files(self, value):
+        self.config["keep_temp_files"] = bool(value)
+
+    def set_auto_cleanup_days(self, value):
+        """设置自动清理周期 (0=永久, 或天数)"""
+        try:
+            days = int(value)
+            self.config["auto_cleanup_days"] = max(0, days)
+        except ValueError:
+            pass
 
     def get_dict(self):
         """获取配置字典（用于传递给其他模块）"""

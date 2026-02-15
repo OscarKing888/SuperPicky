@@ -508,9 +508,15 @@ class PhotoProcessor:
             self.stats['burst_groups'] = burst_stats.get('groups', 0)
             self.stats['burst_moved'] = burst_stats.get('moved', 0)
         
-        # 阶段7: 清理临时文件
+        # 阶段7: 临时文件处理
         if cleanup_temp:
             self._cleanup_temp_files(files_tbr, raw_dict)
+        else:
+            # V4.0.5: 保留临时文件时，将路径写入数据库
+            self._save_temp_paths_to_db()
+            
+        # 阶段8: 清理过期缓存 (V4.1)
+        self._cleanup_expired_cache()
         
         # 记录结束时间
         end_time = time.time()
@@ -544,7 +550,14 @@ class PhotoProcessor:
         for filename in os.listdir(self.dir_path):
             if filename.startswith('.'):
                 continue
+                
+            # V4.0.5: 忽略临时文件（tmp_ 或 temp_ 开头）
+            if filename.lower().startswith(('tmp_', 'temp_')):
+                continue
 
+            # V3.9: 忽略 Windows 系统文件
+            if filename.lower() == 'desktop.ini' or filename.lower() == 'thumbs.db':
+                continue
             
             file_prefix, file_ext = os.path.splitext(filename)
             if file_ext.lower() in RAW_EXTENSIONS:
@@ -810,8 +823,8 @@ class PhotoProcessor:
         def convert_single(args):
             key, raw_path = args
             try:
-                raw_to_jpeg(raw_path)
-                return (key, True, None)
+                jpg_path = raw_to_jpeg(raw_path)
+                return (key, True, jpg_path)
             except Exception as e:
                 return (key, False, str(e))
         
@@ -823,12 +836,13 @@ class PhotoProcessor:
             converted_count = 0
             
             for future in as_completed(future_to_raw):
-                key, success, error = future.result()
+                key, success, result = future.result()
                 if success:
-                    # V4.0.3: 临时 JPEG 使用 tmp_ 前缀
-                    jpeg_filename = f"tmp_{key}.jpg"
+                    # V4.1.0: result 是生成的 JPEG 绝对路径
+                    # 计算相对路径添加到 files_tbr
+                    jpeg_filename = os.path.relpath(result, self.dir_path)
                     files_tbr.append(jpeg_filename)
-                    self.temp_converted_jpegs.add(jpeg_filename)  # V4.0: 标记为临时转换的 JPEG
+                    self.temp_converted_jpegs.add(jpeg_filename)  # 标记为临时文件
                     converted_count += 1
                     if converted_count % 5 == 0 or converted_count == len(raw_files_to_convert):
                         self._log(self.i18n.t("logs.raw_converted", current=converted_count, total=len(raw_files_to_convert)))
@@ -1108,10 +1122,13 @@ class PhotoProcessor:
             in_file_prefix, _ = os.path.splitext(in_filename)
             
             # V4.0.4: 从 tmp_*.jpg 提取原始文件前缀用于匹配 raw_dict
-            # 例如: tmp__Z9W0898.jpg -> tmp__Z9W0898 -> _Z9W0898
+            # V4.1.0: 兼容 .superpicky/cache/ 下的临时文件
             in_original_prefix = in_file_prefix
             if in_file_prefix.startswith('tmp_'):
                 in_original_prefix = in_file_prefix[4:]  # 去掉 "tmp_" 前缀
+            elif '.superpicky/cache' in in_filename:
+                # 处理缓存文件路径: .superpicky/cache/_Z9W0291.jpg -> _Z9W0291
+                in_original_prefix = os.path.splitext(os.path.basename(in_filename))[0]
             
             in_raw_ext = raw_dict.get(in_original_prefix)
             in_raw_path = os.path.join(self.dir_path, in_original_prefix + in_raw_ext) if in_raw_ext else None
@@ -1220,10 +1237,12 @@ class PhotoProcessor:
                         prefetched_exif = None
                         # 优先从 RAW 文件读取
                         if ctx['raw_path'] and os.path.exists(ctx['raw_path']):
-                            prefetched_exif = self._read_all_exif_metadata(ctx['raw_path'])
+                            with focus_exif_lock:
+                                prefetched_exif = self._read_all_exif_metadata(ctx['raw_path'])
                         # 回退到 JPEG
                         if prefetched_exif is None or prefetched_exif.get('iso') is None:
-                            prefetched_exif = self._read_all_exif_metadata(ctx['filepath'])
+                            with focus_exif_lock:
+                                prefetched_exif = self._read_all_exif_metadata(ctx['filepath'])
                         with exif_prefetch_cond:
                             exif_prefetch_results[idx] = prefetched_exif
                             exif_prefetch_cond.notify_all()
@@ -1290,7 +1309,26 @@ class PhotoProcessor:
             filename = yolo_item['filename']
             filepath = yolo_item['filepath']
             file_prefix = yolo_item['file_prefix']
+            file_prefix = yolo_item['file_prefix']
             original_prefix = yolo_item['original_prefix']
+            
+            # V4.1: 更新路径信息到数据库
+            path_update_data = {}
+            
+            # 1. original_path
+            if yolo_item.get('raw_path'):
+                 path_update_data['original_path'] = os.path.relpath(yolo_item['raw_path'], self.dir_path)
+            elif not str(yolo_item.get('file_prefix', '')).startswith('tmp_') and '.superpicky/cache' not in str(yolo_item.get('filename', '')):
+                 path_update_data['original_path'] = os.path.relpath(yolo_item['filepath'], self.dir_path)
+            
+            # 2. temp_jpeg_path
+            if '.superpicky/cache' in str(yolo_item.get('filepath', '')):
+                 path_update_data['temp_jpeg_path'] = os.path.relpath(yolo_item['filepath'], self.dir_path)
+            elif str(yolo_item.get('file_prefix', '')).startswith('tmp_'):
+                 path_update_data['temp_jpeg_path'] = yolo_item['filename']
+                 
+            if path_update_data and self.report_db:
+                 self.report_db.update_photo(original_prefix, path_update_data)
             raw_ext = yolo_item['raw_ext']
             raw_path = yolo_item['raw_path']
             can_read_focus_raw = yolo_item['can_read_focus_raw']
@@ -1804,7 +1842,7 @@ class PhotoProcessor:
                     if debug_img is not None and self.callbacks.crop_preview:
                         self.callbacks.crop_preview(debug_img)
                 except Exception as e:
-                    pass  # 调试图生成失败不影响主流程
+                    print(f"  ⚠️ debug_crop 保存失败 [{filename}]: {e}")  # 调试图生成失败不影响主流程
                 add_photo_stage('debug_viz', (time.time() - debug_start) * 1000)
             
             # 计算真正总耗时并输出简化日志
@@ -1982,9 +2020,9 @@ class PhotoProcessor:
                 yolo_prefetch_thread.join(timeout=30)
             except Exception:
                 pass
-        if iso_prefetch_thread is not None:
+        if exif_prefetch_thread is not None:
             try:
-                iso_prefetch_thread.join(timeout=30)
+                exif_prefetch_thread.join(timeout=30)
             except Exception:
                 pass
         
@@ -2173,9 +2211,13 @@ class PhotoProcessor:
                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
         
         # 保存调试图
-        file_prefix = os.path.splitext(filename)[0]
+        # V4.0.5: filename 可能包含子目录前缀（如 .superpicky/cache/_Z9W1029.jpg），需取 basename
+        file_prefix = os.path.splitext(os.path.basename(filename))[0]
         debug_path = os.path.join(debug_dir, f"{file_prefix}_debug.jpg")
         cv2.imwrite(debug_path, debug_img, [cv2.IMWRITE_JPEG_QUALITY, 85])
+        
+        # NOTE: debug_crop_path 由 ai_model.py 的 insert_photo() 统一写入数据库
+        # 此处不再重复写入，避免路径格式不一致
         
         # V4.2: 返回标注后的图像，用于 UI 实时预览
         return debug_img
@@ -2414,6 +2456,25 @@ class PhotoProcessor:
             except Exception as e:
                 self._log(self.i18n.t("logs.delete_failed", filename=file_info['filename'], error=str(e)), "warning")
         
+        # V4.0.5: 更正 current_path - 更新数据库中所有移动文件的位置
+        # 这确保 current_path 指向最新的原始文件位置 (如 3star_excellent/Bird/DSC_1234.NEF)
+        if hasattr(self, 'report_db') and self.report_db:
+            try:
+                for file_info in files_to_move:
+                    # 原文件名（带后缀）
+                    orig_filename = file_info['filename']
+                    # 文件前缀（不带后缀，也是数据库的主键/索引）
+                    file_prefix = os.path.splitext(orig_filename)[0]
+                    # 新的相对路径
+                    new_rel_path = os.path.join(file_info['folder'], orig_filename)
+                    
+                    self.report_db.update_photo(file_prefix, {
+                        'current_path': new_rel_path
+                    })
+            except Exception as e:
+                self._log(f"  ⚠️  Failed to update current_path in DB: {e}", "warning")
+
+        
         # 生成manifest（V4.0: 增加鸟种分类信息和临时 JPEG 列表）
         manifest = {
             "version": "2.0",  # V4.0: 更新版本号
@@ -2441,18 +2502,69 @@ class PhotoProcessor:
         self._log(self.i18n.t("logs.cleaning_temp"))
         deleted_count = 0
         
-        # V4.0.3: 临时 JPEG 使用 tmp_ 前缀，直接在原目录删除
-        # 不会被移动到分类目录，因为只移动 RAW 文件
+        # V4.0.5: 删除 cache 中的临时转换 JPEG
         for filename in self.temp_converted_jpegs:
             jpg_path = os.path.join(self.dir_path, filename)
             try:
                 if os.path.exists(jpg_path):
                     os.remove(jpg_path)
                     deleted_count += 1
-            except Exception as e:
-                self._log(f"  ⚠️ 清理失败: {filename} ({e})", "warning")
+            except Exception:
+                pass
         
+        self._log(self.i18n.t("logs.temp_files_cleaned", count=deleted_count))
+    
+    def _save_temp_paths_to_db(self):
+        """V4.0.5: 保留临时文件时，将路径写入数据库的 temp_jpeg_path 列"""
+        if not self.temp_converted_jpegs:
+            return
+        
+        saved_count = 0
+        for rel_path in self.temp_converted_jpegs:
+            # rel_path 格式: .superpicky/cache/XXXX.jpg
+            # 提取原始文件前缀 (去掉路径和扩展名)
+            basename = os.path.basename(rel_path)
+            file_prefix = os.path.splitext(basename)[0]
+            
+            try:
+                if hasattr(self, 'report_db') and self.report_db:
+                    self.report_db.update_photo(file_prefix, {
+                        'temp_jpeg_path': rel_path
+                    })
+                    saved_count += 1
+            except Exception as e:
+                self._log(f"  ⚠️  保存临时路径失败 {file_prefix}: {e}", "warning")
+        
+        if saved_count > 0:
+            self._log(f"  ✅ 已保存 {saved_count} 个临时预览路径到数据库")
+
+    def _cleanup_expired_cache(self):
+        """V4.1: 清理过期的缓存文件"""
+        # Fix: use get_advanced_config() local instance
+        days = get_advanced_config().auto_cleanup_days
+        if days <= 0:
+            return  # 0 = 永久保存
+            
+        cache_dir = os.path.join(self.dir_path, ".superpicky", "cache")
+        if not os.path.exists(cache_dir):
+            return
+            
+        self._log(self.i18n.t("logs.cleaning_expired", days=days))
+        deleted_count = 0
+        now = time.time()
+        expiry_seconds = days * 86400
+        
+        # 递归遍历缓存目录
+        for root, dirs, files in os.walk(cache_dir):
+            for filename in files:
+                file_path = os.path.join(root, filename)
+                try:
+                    mtime = os.path.getmtime(file_path)
+                    if now - mtime > expiry_seconds:
+                        os.remove(file_path)
+                        deleted_count += 1
+                except Exception:
+                    pass
+                    
         if deleted_count > 0:
-            self._log(self.i18n.t("logs.temp_deleted", count=deleted_count))
-        else:
-            self._log("  ℹ️  No temp files to clean")
+            self._log(self.i18n.t("logs.expired_files_cleaned", count=deleted_count))

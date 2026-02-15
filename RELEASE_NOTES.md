@@ -25,8 +25,13 @@
 - [Fix] 修复跨目录连拍合并时的数据库连接错误 ('NoneType' object error)
 - [Fix] 修复识鸟模型在包含中文路径（如 `/Volumes/我的硬盘/`）下无法加载的问题
 - [Fix] 修正识鸟日志显示，明确标记来源文件名
+- [Fix] 修复 ExifTool 多线程并发死锁问题 (导致处理卡住)
 
 ### Improvements
+- [Core] **统一临时文件管理**: 
+  - 所有生成的预览图存于 `.superpicky/cache/`
+  - 调试裁剪图存于 `.superpicky/cache/debug_crops/`
+  - 自动清理过期缓存 (默认 7 天)
 - [Log] 优化识鸟日志输出为非阻塞模式，实时反馈进度
 - [Build] 统一版本号管理，确保各模块同步
 

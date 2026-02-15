@@ -20,7 +20,7 @@ from .file_utils import ensure_hidden_directory
 
 
 # Schema 版本，用于未来升级
-SCHEMA_VERSION = "2"
+SCHEMA_VERSION = "3"
 
 # 所有列定义（有序），用于 CREATE TABLE 和数据验证
 PHOTO_COLUMNS = [
@@ -73,6 +73,12 @@ PHOTO_COLUMNS = [
     
     # V2: 曝光状态
     ("exposure_status",  "TEXT", None),
+    
+    # V3: 文件路径（相对路径）
+    ("original_path",    "TEXT", None),
+    ("current_path",     "TEXT", None),
+    ("temp_jpeg_path",   "TEXT", None),
+    ("debug_crop_path",  "TEXT", None),
     
     ("created_at",    "TEXT", None),
     ("updated_at",    "TEXT", None),
@@ -176,7 +182,7 @@ class ReportDB:
             )
     
     def _upgrade_schema_if_needed(self):
-        """检查并升级数据库 Schema（v1 → v2）"""
+        """检查并升级数据库 Schema（支持连续升级 v1 -> v2 -> v3）"""
         # 获取当前 schema 版本
         cursor = self._conn.execute(
             "SELECT value FROM meta WHERE key = 'schema_version'"
@@ -184,7 +190,10 @@ class ReportDB:
         row = cursor.fetchone()
         current_version = row[0] if row else "1"
         
-        if current_version == "1" and SCHEMA_VERSION == "2":
+        # ----------------------------------------------------------------------
+        #  Upgrade: v1 -> v2 (EXIF metadata)
+        # ----------------------------------------------------------------------
+        if current_version == "1":
             print("🔄 Upgrading database schema from v1 to v2...")
             
             # V2 新增字段
@@ -223,16 +232,45 @@ class ReportDB:
                         f"ALTER TABLE photos ADD COLUMN {col_name} {col_type}"
                     )
                 except sqlite3.OperationalError:
-                    # 列已存在，跳过
-                    pass
+                    pass # 列已存在，跳过
             
-            # 更新版本号
-            self._conn.execute(
-                "UPDATE meta SET value = ? WHERE key = 'schema_version'",
-                (SCHEMA_VERSION,)
-            )
-            self._conn.commit()
+            current_version = "2"
+            self._update_schema_version(current_version)
             print("✅ Database schema upgraded to v2")
+
+        # ----------------------------------------------------------------------
+        #  Upgrade: v2 -> v3 (File paths)
+        # ----------------------------------------------------------------------
+        if current_version == "2":
+            print("🔄 Upgrading database schema from v2 to v3...")
+            
+            # V3 新增字段
+            new_columns_v3 = [
+                ("original_path", "TEXT"),
+                ("current_path", "TEXT"),
+                ("temp_jpeg_path", "TEXT"),
+                ("debug_crop_path", "TEXT"),
+            ]
+            
+            for col_name, col_type in new_columns_v3:
+                try:
+                    self._conn.execute(
+                        f"ALTER TABLE photos ADD COLUMN {col_name} {col_type}"
+                    )
+                except sqlite3.OperationalError:
+                    pass # 列已存在，跳过
+            
+            current_version = "3"
+            self._update_schema_version(current_version)
+            print("✅ Database schema upgraded to v3")
+
+    def _update_schema_version(self, version):
+        """更新数据库中的版本号"""
+        self._conn.execute(
+            "UPDATE meta SET value = ? WHERE key = 'schema_version'",
+            (version,)
+        )
+        self._conn.commit()
 
     # ==========================================================================
     #  写入操作

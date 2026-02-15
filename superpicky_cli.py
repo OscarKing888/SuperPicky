@@ -166,6 +166,19 @@ def cmd_process(args):
     # 更新 ARW 写入策略
     adv_config = get_advanced_config()
     adv_config.config["arw_write_mode"] = "sidecar" if args.xmp else "embedded"
+    
+    # V4.1: 更新临时文件配置
+    # 如果指定了 --keep-temp-files 或 --no-keep-temp-files，优先使用
+    # 如果没指定，检查 --no-cleanup (args.cleanup=False) -> keep_temp=True
+    if hasattr(args, 'keep_temp'):
+        adv_config.config["keep_temp_files"] = args.keep_temp
+    elif not args.cleanup:
+        # 兼容旧参数：--no-cleanup 意味着保留临时文件
+        adv_config.config["keep_temp_files"] = True
+        
+    if hasattr(args, 'cleanup_days'):
+        adv_config.config["auto_cleanup_days"] = args.cleanup_days
+        
     adv_config.save()
 
     # V4.0: 构建 ProcessingSettings（与 GUI 完全一致）
@@ -173,13 +186,14 @@ def cmd_process(args):
         ai_confidence=args.confidence,
         sharpness_threshold=args.sharpness,
         nima_threshold=args.nima_threshold,
-        save_crop=False,
         normalization_mode='log_compression',
         detect_flight=args.flight,
         detect_exposure=True,
         detect_burst=args.burst,
         # V4.0: BirdID 自动识别设置
         auto_identify=auto_identify,
+        # V4.1: Crop
+        save_crop=args.save_crop,
         birdid_use_ebird=True,
         birdid_country_code=getattr(args, 'birdid_country', None),
         birdid_region_code=getattr(args, 'birdid_region', None),
@@ -194,9 +208,12 @@ def cmd_process(args):
     )
     
     # 执行处理（PhotoProcessor 内部会处理自动识鸟）
+    # 执行处理（PhotoProcessor 内部会处理自动识鸟）
+    # V4.1: cleanup_temp 参数现在由 AdvancedConfig.keep_temp_files 控制
+    # 但为了兼容性，如果显式传递了参数，我们还是传递下去，不过 PhotoProcessor 内部会使用统一逻辑
     stats = processor.process(
         organize_files=args.organize,
-        cleanup_temp=args.cleanup
+        cleanup_temp=not adv_config.keep_temp_files  # 如果保留，则不清理
     )
     
     # V4.0.5: 连拍检测已移至 PhotoProcessor 内部
@@ -224,49 +241,49 @@ def cmd_reset(args):
             print("❌ 已取消")
             return 1
     
-    # V4.0: 先处理 burst_XXX 子目录（将文件移回评分目录）
-    print("\n📂 步骤0: 清理连拍子目录...")
+    # V4.0.5: 先处理所有子目录（burst_XXX、鸟种 Other_Birds 等）
+    # 将文件移回评分目录，然后由步骤1的 manifest 恢复到根目录
+    print("\n📂 步骤0: 清理评分目录中的子目录...")
     rating_dirs = ['3star_excellent', '2star_good', '1star_average', '0star_reject',
                    '3星_优选', '2星_良好', '1星_普通', '0星_放弃']  # Support both languages
-    burst_stats = {'dirs_removed': 0, 'files_restored': 0}
+    subdir_stats = {'dirs_removed': 0, 'files_restored': 0}
     
     for rating_dir in rating_dirs:
         rating_path = os.path.join(args.directory, rating_dir)
         if not os.path.exists(rating_path):
             continue
         
-        # 查找 burst_XXX 子目录
+        # 查找所有子目录（burst_XXX、鸟种目录等）
         for entry in os.listdir(rating_path):
-            if entry.startswith('burst_'):
-                burst_path = os.path.join(rating_path, entry)
-                if os.path.isdir(burst_path):
-                    # 将文件移回评分目录
-                    for filename in os.listdir(burst_path):
-                        src = os.path.join(burst_path, filename)
+            entry_path = os.path.join(rating_path, entry)
+            if os.path.isdir(entry_path):
+                print(f"  📁 打平子目录: {rating_dir}/{entry}")
+                # 递归将所有文件移回评分目录
+                for root, dirs, files in os.walk(entry_path):
+                    for filename in files:
+                        src = os.path.join(root, filename)
                         dst = os.path.join(rating_path, filename)
                         if os.path.isfile(src):
                             try:
                                 if os.path.exists(dst):
                                     os.remove(dst)
                                 shutil.move(src, dst)
-                                burst_stats['files_restored'] += 1
+                                subdir_stats['files_restored'] += 1
                             except Exception as e:
                                 print(f"    ⚠️ 移动失败: {filename}: {e}")
                     
-                    # 删除空的 burst 目录
-                    try:
-                        if not os.listdir(burst_path):
-                            os.rmdir(burst_path)
-                        else:
-                            shutil.rmtree(burst_path)
-                        burst_stats['dirs_removed'] += 1
-                    except Exception as e:
-                        print(f"    ⚠️ 删除目录失败: {entry}: {e}")
+                # 删除子目录
+                try:
+                    if os.path.exists(entry_path):
+                        shutil.rmtree(entry_path)
+                    subdir_stats['dirs_removed'] += 1
+                except Exception as e:
+                    print(f"    ⚠️ 删除目录失败: {entry}: {e}")
     
-    if burst_stats['dirs_removed'] > 0:
-        print(f"  ✅ 已清理 {burst_stats['dirs_removed']} 个连拍目录，恢复 {burst_stats['files_restored']} 个文件")
+    if subdir_stats['dirs_removed'] > 0:
+        print(f"  ✅ 已清理 {subdir_stats['dirs_removed']} 个子目录，恢复 {subdir_stats['files_restored']} 个文件")
     else:
-        print("  ℹ️  无连拍子目录需要清理")
+        print("  ℹ️  无子目录需要清理")
     
     print("\n📂 步骤1: 恢复文件到主目录...")
     exiftool_mgr = get_exiftool_manager()
@@ -274,32 +291,86 @@ def cmd_reset(args):
     
     restored = restore_stats.get('restored', 0)
     if restored > 0:
-        print(f"  ✅ 已恢复 {restored} 个文件")
-    else:
+        print(f"  ✅ 已通过 Manifest 恢复 {restored} 个文件")
+    
+    # V4.0.5: Manifest 可能不包含所有文件（来自上次运行的残留文件）
+    # 扫描评分目录，将所有文件强制移回根目录
+    fallback_restored = 0
+    for rating_dir in rating_dirs:
+        rating_path = os.path.join(args.directory, rating_dir)
+        if not os.path.exists(rating_path):
+            continue
+        
+        for filename in os.listdir(rating_path):
+            src = os.path.join(rating_path, filename)
+            dst = os.path.join(args.directory, filename)
+            if os.path.isfile(src):
+                try:
+                    if os.path.exists(dst):
+                        os.remove(dst)
+                    shutil.move(src, dst)
+                    fallback_restored += 1
+                except Exception as e:
+                    print(f"    ⚠️ 回迁失败: {filename}: {e}")
+    
+    if fallback_restored > 0:
+        print(f"  ✅ 额外恢复了 {fallback_restored} 个残留文件到根目录")
+    
+    total_restored = restored + fallback_restored
+    if total_restored == 0:
         print("  ℹ️  无需恢复文件")
     
     print("\n📝 步骤2: 清理并重置 EXIF 元数据...")
     i18n = get_i18n('zh_CN')
     success = reset(args.directory, i18n=i18n)
     
-    # V3.9: 删除空的评分目录
-    print("\n🗑️  步骤3: 清理空目录...")
+    # V4.0.5: 删除评分目录（所有文件已移走）
+    print("\n🗑️  步骤3: 清理目录...")
     deleted_dirs = 0
     for rating_dir in rating_dirs:
         rating_path = os.path.join(args.directory, rating_dir)
         if os.path.exists(rating_path) and os.path.isdir(rating_path):
-            # 检查是否为空（或只包含隐藏文件/目录）
-            contents = [f for f in os.listdir(rating_path) if not f.startswith('.')]
-            if len(contents) == 0:
-                try:
-                    shutil.rmtree(rating_path)
-                    print(f"  🗑️ 已删除空目录: {rating_dir}")
-                    deleted_dirs += 1
-                except Exception as e:
-                    print(f"  ⚠️ 删除目录失败: {rating_dir}: {e}")
+            try:
+                shutil.rmtree(rating_path)
+                print(f"  🗑️ 已删除: {rating_dir}")
+                deleted_dirs += 1
+            except Exception as e:
+                print(f"  ⚠️ 删除目录失败: {rating_dir}: {e}")
+    
+    # V4.0.5: 清理 .superpicky 隐藏目录和 manifest 文件
+    superpicky_dir = os.path.join(args.directory, ".superpicky")
+    if os.path.exists(superpicky_dir):
+        try:
+            shutil.rmtree(superpicky_dir)
+            print("  🗑️ 已删除: .superpicky/")
+            deleted_dirs += 1
+        except Exception:
+            try:
+                import subprocess
+                subprocess.run(['rm', '-rf', superpicky_dir], check=True)
+                print("  🗑️ 已删除: .superpicky/ (force)")
+                deleted_dirs += 1
+            except Exception as e2:
+                print(f"  ⚠️ .superpicky 删除失败: {e2}")
+    
+    manifest_file = os.path.join(args.directory, ".superpicky_manifest.json")
+    if os.path.exists(manifest_file):
+        try:
+            os.remove(manifest_file)
+            print("  🗑️ 已删除: .superpicky_manifest.json")
+        except Exception as e:
+            print(f"  ⚠️ manifest 删除失败: {e}")
+    
+    # 清理 macOS ._burst_XXX 残留文件
+    for filename in os.listdir(args.directory):
+        if filename.startswith('._burst_') or filename.startswith('._其他') or filename.startswith('._栗'):
+            try:
+                os.remove(os.path.join(args.directory, filename))
+            except Exception:
+                pass
     
     if deleted_dirs > 0:
-        print(f"  ✅ 已清理 {deleted_dirs} 个空评分目录")
+        print(f"  ✅ 已清理 {deleted_dirs} 个目录")
     else:
         print("  ℹ️  无空目录需要清理")
     
@@ -749,8 +820,19 @@ Examples:
                           help='BirdID 区域代码 (如 AU-SA, CN-31)')
     p_process.add_argument('--birdid-threshold', type=float, default=70.0,
                           help='BirdID 置信度阈值 (默认: 70%%)')
+    # V4.1: 临时文件管理
+    p_process.add_argument('--keep-temp-files', action='store_true', dest='keep_temp',
+                          help='保留临时预览图片（默认: 开启）')
+    p_process.add_argument('--no-keep-temp-files', action='store_false', dest='keep_temp',
+                          help='不保留临时预览图片')
+    p_process.add_argument('--cleanup-days', type=int, default=30,
+                          help='自动清理周期（天），0=永久 (默认: 30)')
+    p_process.add_argument('--save-crop', action='store_true',
+                          help='保留 bird/debug 裁剪图片 (保存到 .superpicky/cache/debug)')
+                          
     # V3.9: 使用 set_defaults 确保 flight, burst 默认为 True
-    p_process.set_defaults(organize=True, cleanup=True, burst=True, flight=True, auto_identify=False, xmp=False)
+    # V4.1: keep_temp 默认为 True
+    p_process.set_defaults(organize=True, cleanup=True, burst=True, flight=True, auto_identify=False, xmp=False, keep_temp=True)
     
     # ===== reset 命令 =====
     p_reset = subparsers.add_parser('reset', help=t("cli.cmd_reset"))

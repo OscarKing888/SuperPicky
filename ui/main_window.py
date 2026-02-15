@@ -282,9 +282,13 @@ class WorkerThread(threading.Thread):
             callbacks=callbacks
         )
 
+        # V4.0.5: 读取 keep_temp_files 配置，决定是否清理临时文件
+        from advanced_config import get_advanced_config
+        adv_config = get_advanced_config()
+        
         result = processor.process(
             organize_files=True,
-            cleanup_temp=True
+            cleanup_temp=not adv_config.keep_temp_files
         )
 
         # V4.0.4: 连拍检测已移至 PhotoProcessor 内部
@@ -1274,7 +1278,7 @@ class SuperPickyMainWindow(QMainWindow):
             self.ai_confidence,
             self.sharp_slider.value(),
             self.nima_slider.value() / 10.0,
-            False,
+            True,  # V4.0.5: 始终保存裁切，用于 debug_crop_path 持久化
             self.norm_mode,
             self.flight_check.isChecked(),
             self.exposure_check.isChecked(),  # V3.8: 曝光检测开关
@@ -1436,10 +1440,11 @@ class SuperPickyMainWindow(QMainWindow):
 
                 exiftool_mgr = get_exiftool_manager()
                 
-                # V3.9: 先清理 burst_XXX 子目录
+                # V4.0.5: 先清理所有子目录（burst_XXX、鸟种目录等）
                 emit_log(i18n.t("logs.reset_step0"))
-                rating_dirs = ['3星_优选', '2星_良好', '1星_普通', '0星_放弃']
-                burst_stats = {'dirs_removed': 0, 'files_restored': 0}
+                rating_dirs = ['3star_excellent', '2star_good', '1star_average', '0star_reject',
+                               '3星_优选', '2星_良好', '1星_普通', '0星_放弃']
+                subdir_stats = {'dirs_removed': 0, 'files_restored': 0}
                 
                 for rating_dir in rating_dirs:
                     rating_path = os.path.join(directory_path, rating_dir)
@@ -1447,34 +1452,32 @@ class SuperPickyMainWindow(QMainWindow):
                         continue
                     
                     for entry in os.listdir(rating_path):
-                        if entry.startswith('burst_'):
-                            burst_path = os.path.join(rating_path, entry)
-                            if os.path.isdir(burst_path):
-                                # 将文件移回评分目录
-                                for filename in os.listdir(burst_path):
-                                    src = os.path.join(burst_path, filename)
+                        entry_path = os.path.join(rating_path, entry)
+                        if os.path.isdir(entry_path):
+                            # 递归将所有文件移回评分目录
+                            for root, dirs, files in os.walk(entry_path):
+                                for filename in files:
+                                    src = os.path.join(root, filename)
                                     dst = os.path.join(rating_path, filename)
                                     if os.path.isfile(src):
                                         try:
                                             if os.path.exists(dst):
                                                 os.remove(dst)
                                             shutil.move(src, dst)
-                                            burst_stats['files_restored'] += 1
+                                            subdir_stats['files_restored'] += 1
                                         except Exception as e:
                                             emit_log(i18n.t("logs.move_failed", filename=filename, error=e))
-                                
-                                # 删除空的 burst 目录
-                                try:
-                                    if not os.listdir(burst_path):
-                                        os.rmdir(burst_path)
-                                    else:
-                                        shutil.rmtree(burst_path)
-                                    burst_stats['dirs_removed'] += 1
-                                except Exception as e:
-                                    emit_log(i18n.t("logs.burst_clean_failed", entry=entry, error=e))
+                            
+                            # 删除子目录
+                            try:
+                                if os.path.exists(entry_path):
+                                    shutil.rmtree(entry_path)
+                                subdir_stats['dirs_removed'] += 1
+                            except Exception as e:
+                                emit_log(i18n.t("logs.burst_clean_failed", entry=entry, error=e))
                 
-                if burst_stats['dirs_removed'] > 0:
-                    emit_log(i18n.t("logs.burst_cleaned", dirs=burst_stats['dirs_removed'], files=burst_stats['files_restored']))
+                if subdir_stats['dirs_removed'] > 0:
+                    emit_log(i18n.t("logs.burst_cleaned", dirs=subdir_stats['dirs_removed'], files=subdir_stats['files_restored']))
                 else:
                     emit_log(i18n.t("logs.burst_no_clean"))
 
@@ -1486,7 +1489,31 @@ class SuperPickyMainWindow(QMainWindow):
                 restored_count = restore_stats.get('restored', 0)
                 if restored_count > 0:
                     emit_log(i18n.t("logs.restored_files", count=restored_count))
-                else:
+                
+                # V4.0.5: Manifest 可能不包含所有文件，扫描评分目录将残留文件移回根目录
+                fallback_restored = 0
+                for rating_dir in rating_dirs:
+                    rating_path = os.path.join(directory_path, rating_dir)
+                    if not os.path.exists(rating_path):
+                        continue
+                    
+                    for filename in os.listdir(rating_path):
+                        src = os.path.join(rating_path, filename)
+                        dst = os.path.join(directory_path, filename)
+                        if os.path.isfile(src):
+                            try:
+                                if os.path.exists(dst):
+                                    os.remove(dst)
+                                shutil.move(src, dst)
+                                fallback_restored += 1
+                            except Exception as e:
+                                emit_log(i18n.t("logs.move_failed", filename=filename, error=e))
+                
+                if fallback_restored > 0:
+                    emit_log(i18n.t("logs.restored_files", count=fallback_restored))
+                
+                total_restored = restored_count + fallback_restored
+                if total_restored == 0:
                     emit_log(i18n.t("logs.no_files_to_restore"))
 
                 # V4.0.4: 根据模式决定是否重置EXIF
@@ -1497,21 +1524,51 @@ class SuperPickyMainWindow(QMainWindow):
                     emit_log("\n" + i18n.t("logs.reset_step2"))
                     success = reset(directory_path, log_callback=emit_log, i18n=i18n)
                 
-                # V3.9: 删除空的评分目录
+                # V3.9: 删除评分目录（所有文件已移走）
                 emit_log(i18n.t("logs.reset_step3"))
                 deleted_dirs = 0
                 for rating_dir in rating_dirs:
                     rating_path = os.path.join(directory_path, rating_dir)
                     if os.path.exists(rating_path) and os.path.isdir(rating_path):
-                        # 检查是否为空（或只包含隐藏文件/目录）
-                        contents = [f for f in os.listdir(rating_path) if not f.startswith('.')]
-                        if len(contents) == 0:
-                            try:
-                                shutil.rmtree(rating_path)
-                                emit_log(i18n.t("logs.empty_dir_deleted", dir=rating_dir))
-                                deleted_dirs += 1
-                            except Exception as e:
-                                emit_log(i18n.t("logs.empty_dir_delete_failed", dir=rating_dir, error=e))
+                        try:
+                            shutil.rmtree(rating_path)
+                            emit_log(i18n.t("logs.empty_dir_deleted", dir=rating_dir))
+                            deleted_dirs += 1
+                        except Exception as e:
+                            emit_log(i18n.t("logs.empty_dir_delete_failed", dir=rating_dir, error=e))
+                
+                # V4.0.5: 清理 .superpicky 隐藏目录和 manifest 文件
+                superpicky_dir = os.path.join(directory_path, ".superpicky")
+                if os.path.exists(superpicky_dir):
+                    try:
+                        shutil.rmtree(superpicky_dir)
+                        emit_log("  ✅ .superpicky/")
+                        deleted_dirs += 1
+                    except Exception:
+                        # 尝试系统命令强制删除
+                        try:
+                            import subprocess
+                            subprocess.run(['rm', '-rf', superpicky_dir], check=True)
+                            emit_log("  ✅ .superpicky/ (force)")
+                            deleted_dirs += 1
+                        except Exception as e2:
+                            emit_log(f"  ⚠️ .superpicky 删除失败: {e2}")
+                
+                manifest_file = os.path.join(directory_path, ".superpicky_manifest.json")
+                if os.path.exists(manifest_file):
+                    try:
+                        os.remove(manifest_file)
+                        emit_log("  ✅ .superpicky_manifest.json")
+                    except Exception as e:
+                        emit_log(f"  ⚠️ manifest 删除失败: {e}")
+                
+                # 清理 macOS ._burst_XXX 残留文件
+                for filename in os.listdir(directory_path):
+                    if filename.startswith('._burst_') or filename.startswith('._其他') or filename.startswith('._栗'):
+                        try:
+                            os.remove(os.path.join(directory_path, filename))
+                        except Exception:
+                            pass
                 
                 if deleted_dirs > 0:
                     emit_log(i18n.t("logs.empty_dirs_cleaned", count=deleted_dirs))
