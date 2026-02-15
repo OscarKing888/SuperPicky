@@ -51,7 +51,8 @@ Automatically set thresholds based on your experience:
 
 ### macOS
 **Apple Silicon (M1/M2/M3/M4)**
-- [GitHub Download](https://github.com/jamesphotography/SuperPicky/releases/download/v4.0.5/SuperPicky_v4.0.5.dmg)
+- [GitHub Download](https://github.com/jamesphotography/SuperPicky/releases/download/v4.0.5/SuperPicky_arm64_V4.0.5.dmg)
+- [Google Drive (Mirror)](https://drive.google.com/file/d/1ykFNcV9rOpp_w04lOer0dyel7chGkS_Q/view?usp=sharing)
 
 **Intel (Pre-2020 Mac)**
 - [GitHub Download](https://github.com/jamesphotography/SuperPicky/releases/download/v4.0.5/SuperPicky_v4.0.5_Intel.dmg)

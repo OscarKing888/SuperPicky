@@ -26,6 +26,11 @@ This release brings a major architectural overhaul, migrating from CSV to SQLite
 - **[Fix]** Burst Merge DB connection error.
 - **[Plugin]** Metadata writing reliability.
 
+### 📥 Downloads (v4.0.5)
+**macOS Apple Silicon (M1/M2/M3/M4)**: 
+- GitHub: [SuperPicky_arm64_V4.0.5.dmg](https://github.com/jamesphotography/SuperPicky/releases/download/v4.0.5/SuperPicky_arm64_V4.0.5.dmg)
+- Google Drive: [SuperPicky_arm64_V4.0.5.dmg](https://drive.google.com/file/d/1ykFNcV9rOpp_w04lOer0dyel7chGkS_Q/view?usp=sharing)
+
 ---
 
 ## V4.0.4 beta (2026-02-09) - 连拍优化与稳定性改进

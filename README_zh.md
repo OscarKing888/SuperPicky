@@ -59,10 +59,10 @@
 
 ### macOS
 **Apple Silicon (M1/M2/M3/M4)**
-- [GitHub 下载](https://github.com/jamesphotography/SuperPicky/releases/download/v4.0.5/SuperPicky_v4.0.5.dmg) | [Google Drive](https://drive.google.com/file/d/PLACEHOLDER/view?usp=sharing) | [百度网盘](https://pan.baidu.com/s/PLACEHOLDER?pwd=code) 提取码: code
+- [GitHub 下载](https://github.com/jamesphotography/SuperPicky/releases/download/v4.0.5/SuperPicky_arm64_V4.0.5.dmg) | [Google Drive](https://drive.google.com/file/d/1ykFNcV9rOpp_w04lOer0dyel7chGkS_Q/view?usp=sharing)
 
 **Intel (2020年前 Mac)**
-- [GitHub 下载](https://github.com/jamesphotography/SuperPicky/releases/download/v4.0.5/SuperPicky_v4.0.5_Intel.dmg) | [Google Drive](https://drive.google.com/file/d/PLACEHOLDER/view?usp=sharing) | [百度网盘](https://pan.baidu.com/s/PLACEHOLDER?pwd=code) 提取码: code
+- [GitHub 下载 (v4.0.4)](https://github.com/jamesphotography/SuperPicky/releases/download/v4.0.4/SuperPicky4.0.4_Intel.dmg)
 
 1. 下载对应版本的 DMG 文件
 2. 双击 DMG 文件，将应用拖入 Applications
