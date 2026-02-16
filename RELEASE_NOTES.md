@@ -38,8 +38,7 @@ This release brings a major architectural overhaul, migrating from CSV to SQLite
 - 百度网盘: [SuperPicky_v4.0.5_Intel.dmg](https://pan.baidu.com/s/1fQ8Wjq0oq1K9GmQTQS7rZA?pwd=cc2f) 提取码: cc2f
 
 **Windows (v4.0.5)**:
-- **CUDA-GPU Version**: [百度网盘](https://pan.baidu.com/s/14tnSXnI2LIeZf4egu4xxNg?pwd=jfuz) 提取码: jfuz
-- **CPU Version**: [GitHub](https://github.com/jamesphotography/SuperPicky/releases/download/v4.0.5/SuperPicky_4.0.5_sp3_CPU_WIn64.zip) | [Google Drive](https://drive.google.com/file/d/1tzXO2nyJTM7sQ1d1137mjrAledG7PjhF/view?usp=sharing) | [百度网盘](https://pan.baidu.com/s/1qHa8PZvV1pp1vueNQq2oQw?pwd=6yzh) 提取码: 6yzh
+- **CUDA-GPU Version**: [百度网盘](https://pan.baidu.com/s/14tnSXnI2LIeZf4egu4xxNg?pwd=jfuz) 提取码: jfuz | [Google Drive](https://drive.google.com/file/d/17-dFw2pZKXn53zmYAZ7HQNHTyndCT76E/view?usp=drive_link)
 
 ---
 
@@ -146,9 +145,10 @@ This release brings a major architectural overhaul, migrating from CSV to SQLite
 
 **CUDA-GPU Version**
 - [百度网盘](https://pan.baidu.com/s/14tnSXnI2LIeZf4egu4xxNg?pwd=jfuz) 提取码: jfuz
+- [Google Drive](https://drive.google.com/file/d/17-dFw2pZKXn53zmYAZ7HQNHTyndCT76E/view?usp=drive_link)
 
-**CPU Version (v4.0.5)**
-- GitHub: [SuperPicky_4.0.5_sp3_CPU_WIn64.zip](https://github.com/jamesphotography/SuperPicky/releases/download/v4.0.5/SuperPicky_4.0.5_sp3_CPU_WIn64.zip)
-- Google Drive: [SuperPicky_4.0.5_sp3_CPU_WIn64.zip](https://drive.google.com/file/d/1tzXO2nyJTM7sQ1d1137mjrAledG7PjhF/view?usp=sharing)
-- 百度网盘: [SuperPicky_4.0.5_sp3_CPU_WIn64.zip](https://pan.baidu.com/s/1qHa8PZvV1pp1vueNQq2oQw?pwd=6yzh) 提取码: 6yzh
+**CPU Version (v4.0.4)**
+- GitHub: [SuperPicky4.0.4_Win64_No_CUDA.zip](https://github.com/jamesphotography/SuperPicky/releases/download/v4.0.4/SuperPicky4.0.4_Win64_No_CUDA.zip)
+- Google Drive: [SuperPicky_Win_v4.0.4_CPU](https://drive.google.com/file/d/1QWfDsb4L7wMoUoo17p6iiW1L9Lf-OAEv/view?usp=sharing)
+- 百度网盘: [SuperPicky_Win_v4.0.4_CPU](https://pan.baidu.com/s/1zhWtMwAzthrLAeKxKf4SZw?pwd=2mrt) 提取码: 2mrt
 

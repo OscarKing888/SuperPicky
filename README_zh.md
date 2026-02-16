@@ -70,10 +70,7 @@
 
 ### Windows (v4.0.5)
 **CUDA-GPU Version**
-- [百度网盘](https://pan.baidu.com/s/14tnSXnI2LIeZf4egu4xxNg?pwd=jfuz) 提取码: jfuz
-
-**CPU Version**
-- [GitHub 下载](https://github.com/jamesphotography/SuperPicky/releases/download/v4.0.5/SuperPicky_4.0.5_sp3_CPU_WIn64.zip) | [Google Drive](https://drive.google.com/file/d/1tzXO2nyJTM7sQ1d1137mjrAledG7PjhF/view?usp=sharing) | [百度网盘](https://pan.baidu.com/s/1qHa8PZvV1pp1vueNQq2oQw?pwd=6yzh) 提取码: 6yzh
+- [百度网盘](https://pan.baidu.com/s/14tnSXnI2LIeZf4egu4xxNg?pwd=jfuz) 提取码: jfuz | [Google Drive](https://drive.google.com/file/d/17-dFw2pZKXn53zmYAZ7HQNHTyndCT76E/view?usp=drive_link)
 
 
 1. 下载并解压 ZIP 文件
