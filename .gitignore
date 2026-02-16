@@ -73,6 +73,7 @@ package_unsigned.sh
 .agent/
 .claude/
 CLAUDE.md
+!CLAUDE.md
 
 
 # IDE 配置
