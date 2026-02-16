@@ -10,8 +10,17 @@ base_path = os.path.abspath('.')
 
 # 动态获取 site-packages 路径
 # 在 venv 环境下，site.getsitepackages() 通常包含 venv 的 site-packages
-sp = site.getsitepackages()
-site_packages = sp[1] if len(sp) > 1 else sp[0]
+site_packages = os.environ.get('SUPERPICKY_SITE_PACKAGES', '').strip()
+if not site_packages:
+    sp = [p for p in site.getsitepackages() if os.path.isdir(p)]
+    for p in sp:
+        if os.path.exists(os.path.join(p, 'ultralytics')):
+            site_packages = p
+            break
+    if not site_packages and sp:
+        site_packages = sp[0]
+    if not site_packages:
+        site_packages = site.getusersitepackages()
 
 # 处理 ultralytics 路径
 ultralytics_base = site_packages
