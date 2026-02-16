@@ -62,6 +62,7 @@ Automatically set thresholds based on your experience:
 
 ### Windows (v4.0.5)
 **CUDA-GPU Version**
+- [Google Drive (Mirror)](https://drive.google.com/file/d/17-dFw2pZKXn53zmYAZ7HQNHTyndCT76E/view?usp=drive_link)
 - [Baidu Netdisk](https://pan.baidu.com/s/14tnSXnI2LIeZf4egu4xxNg?pwd=jfuz) Code: jfuz
 
 

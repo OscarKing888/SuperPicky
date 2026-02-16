@@ -38,7 +38,7 @@ This release brings a major architectural overhaul, migrating from CSV to SQLite
 - 百度网盘: [SuperPicky_v4.0.5_Intel.dmg](https://pan.baidu.com/s/1fQ8Wjq0oq1K9GmQTQS7rZA?pwd=cc2f) 提取码: cc2f
 
 **Windows (v4.0.5)**:
-- **CUDA-GPU Version**: [百度网盘](https://pan.baidu.com/s/14tnSXnI2LIeZf4egu4xxNg?pwd=jfuz) 提取码: jfuz
+- **CUDA-GPU Version**: [Google Drive](https://drive.google.com/file/d/17-dFw2pZKXn53zmYAZ7HQNHTyndCT76E/view?usp=drive_link) | [百度网盘](https://pan.baidu.com/s/14tnSXnI2LIeZf4egu4xxNg?pwd=jfuz) 提取码: jfuz
 
 ---
 
@@ -144,6 +144,7 @@ This release brings a major architectural overhaul, migrating from CSV to SQLite
 ### Windows (v4.0.5)
 
 **CUDA-GPU Version**
+- [Google Drive](https://drive.google.com/file/d/17-dFw2pZKXn53zmYAZ7HQNHTyndCT76E/view?usp=drive_link)
 - [百度网盘](https://pan.baidu.com/s/14tnSXnI2LIeZf4egu4xxNg?pwd=jfuz) 提取码: jfuz
 
 **CPU Version (v4.0.4)**
