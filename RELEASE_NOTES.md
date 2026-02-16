@@ -32,6 +32,14 @@ This release brings a major architectural overhaul, migrating from CSV to SQLite
 - Google Drive: [SuperPicky_arm64_V4.0.5.dmg](https://drive.google.com/file/d/1ykFNcV9rOpp_w04lOer0dyel7chGkS_Q/view?usp=sharing)
 - 百度网盘: [SuperPicky_arm64_V4.0.5.dmg](https://pan.baidu.com/s/1QcBZvhwYn0W2n_vkA4gNaA?pwd=mx69) 提取码: mx69
 
+**macOS Intel (2020年前 Mac)**:
+- GitHub: [SuperPicky_v4.0.5_Intel.dmg](https://github.com/jamesphotography/SuperPicky/releases/download/v4.0.5/SuperPicky_v4.0.5_Intel.dmg)
+- Google Drive: [SuperPicky_v4.0.5_Intel.dmg](https://drive.google.com/file/d/1mYN8FS3xfgSWm7l1dMIA9UfPBCmWbNG7/view?usp=sharing)
+- 百度网盘: [SuperPicky_v4.0.5_Intel.dmg](https://pan.baidu.com/s/1fQ8Wjq0oq1K9GmQTQS7rZA?pwd=cc2f) 提取码: cc2f
+
+**Windows (v4.0.5)**:
+- **CUDA-GPU Version**: [百度网盘](https://pan.baidu.com/s/14tnSXnI2LIeZf4egu4xxNg?pwd=jfuz) 提取码: jfuz
+
 ---
 
 ## V4.0.4 beta (2026-02-09) - 连拍优化与稳定性改进
@@ -46,28 +54,6 @@ This release brings a major architectural overhaul, migrating from CSV to SQLite
 
 ---
 
-## V4.0.5 (2026-02-13) - 性能跃升与架构升级
-
-### Architecture & Performance
-- [Core] **核心架构升级**: 报告存储从 CSV 全面迁移至 SQLite 数据库
-  - **速度提升**: 整体处理速度提升约 1.9x (特别是在包含大量照片的文件夹中)
-  - **稳定性**: 彻底解决多进程下的文件锁冲突与写入失败问题
-  - **数据完整**: 即使程序意外中断，数据库也能保证数据完整性
-
-### Bug Fixes
-- [Plugin] **Lightroom 插件修复**: 解决插件在导出时偶尔无法正确写入 EXIF / 标题元数据的问题
-- [Fix] 修复跨目录连拍合并时的数据库连接错误 ('NoneType' object error)
-- [Fix] 修复识鸟模型在包含中文路径（如 `/Volumes/我的硬盘/`）下无法加载的问题
-- [Fix] 修正识鸟日志显示，明确标记来源文件名
-- [Fix] 修复 ExifTool 多线程并发死锁问题 (导致处理卡住)
-
-### Improvements
-- [Core] **统一临时文件管理**: 
-  - 所有生成的预览图存于 `.superpicky/cache/`
-  - 调试裁剪图存于 `.superpicky/cache/debug_crops/`
-  - 自动清理过期缓存 (默认 7 天)
-- [Log] 优化识鸟日志输出为非阻塞模式，实时反馈进度
-- [Build] 统一版本号管理，确保各模块同步
 
 
 ## V4.0.3 (2026-02-01) - 摄影水平预设与 AI 识鸟
@@ -146,22 +132,22 @@ This release brings a major architectural overhaul, migrating from CSV to SQLite
 ## Downloads
 
 ### macOS Apple Silicon (M1/M2/M3/M4)
-- GitHub: [v4.0.4 beta](https://github.com/jamesphotography/SuperPicky/releases/tag/v4.0.4)
-- Google Drive: [SuperPicky_v4.0.4_Silicon.dmg](https://drive.google.com/file/d/1JpPJUjSe64YJL-E-4nn8lsIqtDXae7CH/view?usp=sharing)
-- 百度网盘: [SuperPicky_v4.0.4_Silicon.dmg](https://pan.baidu.com/s/1OGiZYBFaKYpxPZDHfLxFwA?pwd=i1eq) 提取码: i1eq
+- GitHub: [SuperPicky_arm64_V4.0.5.dmg](https://github.com/jamesphotography/SuperPicky/releases/download/v4.0.5/SuperPicky_arm64_V4.0.5.dmg)
+- Google Drive: [SuperPicky_arm64_V4.0.5.dmg](https://drive.google.com/file/d/1ykFNcV9rOpp_w04lOer0dyel7chGkS_Q/view?usp=sharing)
+- 百度网盘: [SuperPicky_arm64_V4.0.5.dmg](https://pan.baidu.com/s/1QcBZvhwYn0W2n_vkA4gNaA?pwd=mx69) 提取码: mx69
 
 ### macOS Intel
-- GitHub: [v4.0.4 beta](https://github.com/jamesphotography/SuperPicky/releases/tag/v4.0.4)
-- Google Drive: [SuperPicky_v4.0.4_Intel.dmg](https://drive.google.com/file/d/1DghPd1yBRkMjEdM-GpxGNV8GFQBXgXiS/view?usp=sharing)
-- 百度网盘: [SuperPicky_v4.0.4_Intel.dmg](https://pan.baidu.com/s/1iyDhNj1QP-Vg82QN9yoACQ?pwd=xh6u) 提取码: xh6u
+- GitHub: [SuperPicky_v4.0.5_Intel.dmg](https://github.com/jamesphotography/SuperPicky/releases/download/v4.0.5/SuperPicky_v4.0.5_Intel.dmg)
+- Google Drive: [SuperPicky_v4.0.5_Intel.dmg](https://drive.google.com/file/d/1mYN8FS3xfgSWm7l1dMIA9UfPBCmWbNG7/view?usp=sharing)
+- 百度网盘: [SuperPicky_v4.0.5_Intel.dmg](https://pan.baidu.com/s/1fQ8Wjq0oq1K9GmQTQS7rZA?pwd=cc2f) 提取码: cc2f
 
-### Windows (v4.0.4)
+### Windows (v4.0.5)
 
-**CPU 版本 (1GB)**
+**CUDA-GPU Version**
+- [百度网盘](https://pan.baidu.com/s/14tnSXnI2LIeZf4egu4xxNg?pwd=jfuz) 提取码: jfuz
+
+**CPU Version (v4.0.4)**
 - GitHub: [SuperPicky4.0.4_Win64_No_CUDA.zip](https://github.com/jamesphotography/SuperPicky/releases/download/v4.0.4/SuperPicky4.0.4_Win64_No_CUDA.zip)
 - Google Drive: [SuperPicky_Win_v4.0.4_CPU](https://drive.google.com/file/d/1QWfDsb4L7wMoUoo17p6iiW1L9Lf-OAEv/view?usp=sharing)
 - 百度网盘: [SuperPicky_Win_v4.0.4_CPU](https://pan.baidu.com/s/1zhWtMwAzthrLAeKxKf4SZw?pwd=2mrt) 提取码: 2mrt
 
-**CUDA-GPU 版本 (3.4GB)**
-- Google Drive: [SuperPicky_Win_v4.0.4_CUDA](https://drive.google.com/file/d/1QkBqBYxylpIlN7jByVUC3m9QEM40DYga/view?usp=sharing)
-- 百度网盘: [SuperPicky_Win_v4.0.4_CUDA](https://pan.baidu.com/s/1dM79au9DpnWZQoWdUISPQA?pwd=1usg) 提取码: 1usg

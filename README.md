@@ -57,9 +57,13 @@ Automatically set thresholds based on your experience:
 
 **Intel (Pre-2020 Mac)**
 - [GitHub Download](https://github.com/jamesphotography/SuperPicky/releases/download/v4.0.5/SuperPicky_v4.0.5_Intel.dmg)
+- [Google Drive (Mirror)](https://drive.google.com/file/d/1mYN8FS3xfgSWm7l1dMIA9UfPBCmWbNG7/view?usp=sharing)
+- [Baidu Netdisk](https://pan.baidu.com/s/1fQ8Wjq0oq1K9GmQTQS7rZA?pwd=cc2f) Code: cc2f
 
-### Windows (v4.0.4)
-*(See release page for Windows links)*
+### Windows (v4.0.5)
+**CUDA-GPU Version**
+- [Baidu Netdisk](https://pan.baidu.com/s/14tnSXnI2LIeZf4egu4xxNg?pwd=jfuz) Code: jfuz
+
 
 ---
 
