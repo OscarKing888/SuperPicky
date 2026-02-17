@@ -377,69 +377,95 @@ class BirdIDDockWidget(QDockWidget):
     
     def _build_country_list(self) -> dict:
         """构建国家列表 {显示名称: 代码}
-        
-        只显示有离线数据的优先国家，其他国家归入"更多国家..."选项
+
+        V4.4: 简化下拉菜单，只显示约 15 项
+        - 自动定位 (Auto GPS)
+        - 全球模式 (Global)
+        - 分隔符
+        - Top 10 常用国家 (按英文首字母 A-Z)
+        - 分隔符
+        - "更多国家..." 选项
         """
-        # 加载离线数据索引，获取有离线数据的国家代码
-        offline_index_path = get_birdid_data_path('offline_ebird_data/offline_index.json')
-        offline_countries = set()
-        if os.path.exists(offline_index_path):
-            try:
-                with open(offline_index_path, 'r', encoding='utf-8') as f:
-                    index_data = json.load(f)
-                offline_countries = set(index_data.get('countries', {}).keys())
-            except:
-                pass
-        
-        # 特殊选项
+        from collections import OrderedDict
+
         t = self.i18n.t
-        country_list = {t("birdid.country_auto_gps"): None, t("birdid.country_global"): "GLOBAL"}
-        
-        # 优先显示的国家代码（按地区排序，每个地区内按英文名排序）
-        # 大洋洲 → 美洲 → 亚洲 → 欧洲
-        priority_codes = [
-            # 大洋洲 (Oceania)
-            'AU', 'NZ',
-            # 美洲 (Americas)
-            'BR', 'CA', 'CR', 'US',
-            # 亚洲 (Asia)
-            'CN', 'HK', 'IN', 'ID', 'JP', 'MY', 'KR', 'TW',
-            # 欧洲 (Europe)
-            'FR', 'DE', 'IT', 'NL', 'ES', 'GB'
-        ]
-        
-        # 国家代码到 i18n 键的映射
-        code_to_key = {
-            # 大洋洲
-            'AU': 'birdid.country_au', 'NZ': 'birdid.country_nz',
-            # 美洲
-            'BR': 'birdid.country_br', 'CA': 'birdid.country_ca', 'CR': 'birdid.country_cr', 'US': 'birdid.country_us',
-            # 亚洲
-            'CN': 'birdid.country_cn', 'HK': 'birdid.country_hk', 'IN': 'birdid.country_in', 'ID': 'birdid.country_id',
-            'JP': 'birdid.country_jp', 'MY': 'birdid.country_my', 'KR': 'birdid.country_kr', 'TW': 'birdid.country_tw',
-            # 欧洲
-            'FR': 'birdid.country_fr', 'DE': 'birdid.country_de', 'IT': 'birdid.country_it',
-            'NL': 'birdid.country_nl', 'ES': 'birdid.country_es', 'GB': 'birdid.country_gb'
+        is_english = self.i18n.current_lang.startswith('en')
+
+        # 使用 OrderedDict 保持插入顺序
+        country_list = OrderedDict()
+
+        # === 第一部分：特殊选项 ===
+        country_list[t("birdid.country_auto_gps")] = None
+        country_list[t("birdid.country_global")] = "GLOBAL"
+
+        # === 分隔符 1 ===
+        country_list["─" * 15] = "SEP1"
+
+        # === 第二部分：Top 10 常用国家 (按英文首字母 A-Z 排序) ===
+        top10_codes = ['AU', 'BR', 'CN', 'GB', 'HK', 'ID', 'JP', 'MY', 'TW', 'US']
+
+        # 国家代码到 i18n 键的映射 (Top 10)
+        top10_i18n = {
+            'AU': 'birdid.country_au',
+            'BR': 'birdid.country_br',
+            'CN': 'birdid.country_cn',
+            'GB': 'birdid.country_gb',
+            'HK': 'birdid.country_hk',
+            'ID': 'birdid.country_id',
+            'JP': 'birdid.country_jp',
+            'MY': 'birdid.country_my',
+            'TW': 'birdid.country_tw',
+            'US': 'birdid.country_us',
         }
-        
-        # 添加优先国家（只添加有离线数据或在 regions_data 中的）
-        for code in priority_codes:
-            country_name = t(code_to_key.get(code, code))
-            # 检查是否存在该国家数据（离线或 regions_data 中）
-            if code in offline_countries:
-                country_list[country_name] = code
+
+        # 构建 code -> region_data 映射
+        code_to_region = {}
+        for region in self.regions_data.get('countries', []):
+            code_to_region[region.get('code')] = region
+
+        # 添加 Top 10 (已按英文首字母排序)
+        for code in top10_codes:
+            i18n_key = top10_i18n.get(code)
+            if i18n_key:
+                display_name = t(i18n_key)
             else:
-                # 从 regions_data 查找
-                for country in self.regions_data.get('countries', []):
-                    if country.get('code') == code:
-                        country_list[country_name] = code
-                        break
-        
-        # 添加"更多国家..."选项
+                # 回退到 regions_data
+                region = code_to_region.get(code, {})
+                if is_english:
+                    display_name = region.get('name', code)
+                else:
+                    display_name = region.get('name_cn') or region.get('name', code)
+            country_list[display_name] = code
+
+        # === 分隔符 2 ===
+        country_list["─" * 15 + " "] = "SEP2"  # 添加空格使 key 不同
+
+        # === "更多国家..." 选项 ===
         country_list[t("birdid.country_more")] = "MORE"
-        
+
         return country_list
-    
+
+    def _populate_country_combo(self):
+        """填充国家下拉菜单，并禁用分隔符项"""
+        from PySide6.QtGui import QStandardItem
+        from PySide6.QtWidgets import QStyledItemDelegate
+
+        self.country_combo.clear()
+
+        for display_name, code in self.country_list.items():
+            self.country_combo.addItem(display_name)
+
+            # 如果是分隔符，禁用该项
+            if code in ("SEP1", "SEP2"):
+                idx = self.country_combo.count() - 1
+                # 获取模型中的 item 并设置为不可选
+                model = self.country_combo.model()
+                item = model.item(idx)
+                if item:
+                    item.setEnabled(False)
+                    # 设置分隔符样式
+                    item.setSelectable(False)
+
     def _load_settings(self) -> dict:
         """加载设置"""
         settings_path = get_settings_path()
@@ -550,18 +576,22 @@ class BirdIDDockWidget(QDockWidget):
     def _on_country_changed(self, country_display: str):
         """国家选择变化时更新区域列表"""
         country_code = self.country_list.get(country_display)
-        
-        # 处理"更多国家"选项
+
+        # 忽略分隔符
+        if country_code in ("SEP1", "SEP2"):
+            return
+
+        # 处理"更多国家"选项 (已移除，保留兼容性)
         if country_code == "MORE":
             self._show_more_countries_dialog()
             return
-        
+
         # 设置标志，防止在填充区域列表时触发 _on_region_changed
         self._updating_regions = True
-        
+
         self.region_combo.clear()
         self.region_combo.addItem(self.i18n.t("birdid.region_entire_country"))
-        
+
         if country_code and country_code != "GLOBAL":
             # 查找该国家的区域列表
             for country in self.regions_data.get('countries', []):
@@ -593,12 +623,75 @@ class BirdIDDockWidget(QDockWidget):
         self._reidentify_if_needed()
 
     def _show_more_countries_dialog(self):
-        """显示更多国家选择对话框 - 支持国际化和搜索"""
+        """显示更多国家选择对话框 - 显示大洲和其他国家，支持搜索
+
+        V4.4: 只显示不在 Top 10 中的区域（大洲 + 其他国家）
+        - 大洲项目前面加 🌍 前缀
+        - 按英文名 A-Z 排序
+        """
         from PySide6.QtWidgets import QDialog, QListWidget, QDialogButtonBox, QListWidgetItem, QLineEdit
-        
+
         t = self.i18n.t
         is_english = self.i18n.current_lang.startswith('en')
-        
+
+        # Top 10 国家代码（已在下拉菜单中）
+        top10_codes = {'AU', 'BR', 'CN', 'GB', 'HK', 'ID', 'JP', 'MY', 'TW', 'US', 'GLOBAL'}
+
+        # 大洲代码
+        continent_codes = {'AF', 'AS', 'EU', 'NA', 'SA', 'OC'}
+
+        # 大洲 i18n 映射
+        continent_i18n = {
+            'AF': 'birdid.continent_af',
+            'AS': 'birdid.continent_as',
+            'EU': 'birdid.continent_eu',
+            'NA': 'birdid.continent_na',
+            'SA': 'birdid.continent_sa',
+            'OC': 'birdid.continent_oc',
+        }
+
+        # 其他国家 i18n 映射
+        other_country_i18n = {
+            'AR': 'birdid.country_ar',
+            'CA': 'birdid.country_ca',
+            'CH': 'birdid.country_ch',
+            'CL': 'birdid.country_cl',
+            'CO': 'birdid.country_co',
+            'CR': 'birdid.country_cr',
+            'DE': 'birdid.country_de',
+            'EC': 'birdid.country_ec',
+            'EG': 'birdid.country_eg',
+            'ES': 'birdid.country_es',
+            'FI': 'birdid.country_fi',
+            'FR': 'birdid.country_fr',
+            'GR': 'birdid.country_gr',
+            'IN': 'birdid.country_in',
+            'IT': 'birdid.country_it',
+            'KE': 'birdid.country_ke',
+            'KR': 'birdid.country_kr',
+            'LK': 'birdid.country_lk',
+            'MA': 'birdid.country_ma',
+            'MG': 'birdid.country_mg',
+            'MN': 'birdid.country_mn',
+            'MX': 'birdid.country_mx',
+            'NL': 'birdid.country_nl',
+            'NO': 'birdid.country_no',
+            'NP': 'birdid.country_np',
+            'NZ': 'birdid.country_nz',
+            'PE': 'birdid.country_pe',
+            'PH': 'birdid.country_ph',
+            'PL': 'birdid.country_pl',
+            'PT': 'birdid.country_pt',
+            'RU': 'birdid.country_ru',
+            'SE': 'birdid.country_se',
+            'SG': 'birdid.country_sg',
+            'TH': 'birdid.country_th',
+            'TZ': 'birdid.country_tz',
+            'UA': 'birdid.country_ua',
+            'VN': 'birdid.country_vn',
+            'ZA': 'birdid.country_za',
+        }
+
         dialog = QDialog(self)
         dialog.setWindowTitle(t("birdid.country_dialog_title"))
         dialog.setMinimumSize(320, 450)
@@ -632,46 +725,65 @@ class BirdIDDockWidget(QDockWidget):
                 color: {COLORS['bg_void']};
             }}
         """)
-        
+
         layout = QVBoxLayout(dialog)
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(8)
-        
+
         # 搜索框
         search_input = QLineEdit()
         search_input.setPlaceholderText(t("birdid.search_country_placeholder"))
         layout.addWidget(search_input)
-        
+
         list_widget = QListWidget()
-        
-        # 根据当前语言决定显示格式
-        all_countries = []
-        for country in self.regions_data.get('countries', []):
-            code = country.get('code', '')
-            name_en = country.get('name', '')
-            name_cn = country.get('name_cn', '')
-            
-            if is_english:
-                # 英文环境：只显示英文名
-                display = name_en
+
+        # 收集所有其他区域（排除 Top 10）
+        other_regions = []
+        for region in self.regions_data.get('countries', []):
+            code = region.get('code', '')
+
+            # 跳过已在下拉菜单中的国家
+            if code in top10_codes:
+                continue
+
+            name_en = region.get('name', code)
+            name_cn = region.get('name_cn', '')
+
+            # 获取显示名称
+            if code in continent_codes:
+                # 大洲：添加 🌍 前缀
+                i18n_key = continent_i18n.get(code)
+                if i18n_key:
+                    base_name = t(i18n_key)
+                else:
+                    base_name = name_cn if not is_english and name_cn else name_en
+                display = f"🌍 {base_name}"
             else:
-                # 中文环境：只显示中文名（如无中文则显示英文）
-                display = name_cn if name_cn else name_en
-            
-            # 按英文名排序以保持一致性
+                # 普通国家
+                i18n_key = other_country_i18n.get(code)
+                if i18n_key:
+                    display = t(i18n_key)
+                else:
+                    if is_english:
+                        display = name_en
+                    else:
+                        display = name_cn if name_cn else name_en
+
+            # 按英文名排序
             sort_key = name_en.lower()
-            all_countries.append((display, code, sort_key, name_en))
-        
-        all_countries.sort(key=lambda x: x[2])
-        
-        for display, code, _, name_en in all_countries:
+            other_regions.append((sort_key, display, code, name_en))
+
+        # 按英文名 A-Z 排序
+        other_regions.sort(key=lambda x: x[0])
+
+        for _, display, code, name_en in other_regions:
             item = QListWidgetItem(display)
             item.setData(Qt.UserRole, code)
             item.setData(Qt.UserRole + 1, name_en)  # 用于搜索
             list_widget.addItem(item)
-        
+
         layout.addWidget(list_widget)
-        
+
         # 搜索过滤功能
         def filter_countries(text):
             text = text.lower()
@@ -681,20 +793,20 @@ class BirdIDDockWidget(QDockWidget):
                 en_name = (item.data(Qt.UserRole + 1) or "").lower()
                 visible = text in display_name or text in en_name
                 item.setHidden(not visible)
-        
+
         search_input.textChanged.connect(filter_countries)
-        
+
         button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         button_box.accepted.connect(dialog.accept)
         button_box.rejected.connect(dialog.reject)
         layout.addWidget(button_box)
-        
+
         if dialog.exec() == QDialog.Accepted:
             selected = list_widget.currentItem()
             if selected:
                 code = selected.data(Qt.UserRole)
                 display = selected.text()
-                # 添加到列表并选中
+                # 添加到下拉菜单并选中
                 existing = [self.country_combo.itemText(i) for i in range(self.country_combo.count())]
                 if display not in existing:
                     # 在"更多国家"之前插入
@@ -746,7 +858,7 @@ class BirdIDDockWidget(QDockWidget):
         country_row.addWidget(country_label)
         
         self.country_combo = QComboBox()
-        self.country_combo.addItems(list(self.country_list.keys()))
+        self._populate_country_combo()
         self.country_combo.setStyleSheet(f"""
             QComboBox {{
                 background-color: {COLORS['bg_input']};

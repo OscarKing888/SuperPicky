@@ -2304,13 +2304,16 @@ class SuperPickyMainWindow(QMainWindow):
                 return
         
         # 不匹配任何预设，切换到自选模式
+        # 不匹配任何预设，切换到自选模式
         if self.config.skill_level != "custom":
             self.config.set_skill_level("custom")
-            self.config.set_custom_sharpness(current_sharpness)
-            self.config.set_custom_aesthetics(current_aesthetics)
-            self.config.save()
             self._update_skill_level_label("custom")
-            print(f"🎛️ 已切换到自选模式: 锐度={current_sharpness}, 美学={current_aesthetics}")
+            print(f"🎛️ 已切换到自选模式")
+            
+        # 始终更新自选值并保存
+        self.config.set_custom_sharpness(current_sharpness)
+        self.config.set_custom_aesthetics(current_aesthetics)
+        self.config.save()
     
     def _update_skill_level_label(self, level_key: str):
         """更新主界面的水平显示标签"""
