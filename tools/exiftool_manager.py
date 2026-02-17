@@ -396,17 +396,29 @@ class ExifToolManager:
             cmd.append(f'-XMP:Label={item["label"]}')
         if item.get('focus_status') is not None:
             cmd.append(f'-XMP:Country={item["focus_status"]}')
-        if item.get('title') is not None:
-            cmd.append(f'-XMP:Title={item["title"]}')
+        temp_files: List[str] = []
 
-        tmp_path = None
+        # Use UTF-8 temp file for Title to avoid Windows command-line encoding issues.
+        title = item.get('title')
+        if title is not None:
+            try:
+                fd, title_tmp_path = tempfile.mkstemp(suffix='.txt', prefix='sp_title_')
+                with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                    f.write(str(title))
+                temp_files.append(title_tmp_path)
+                cmd.append(f'-XMP:Title<={title_tmp_path}')
+            except Exception as e:
+                print(f"⚠️ Title temp file failed: {e}, fallback to inline")
+                cmd.append(f'-XMP:Title={title}')
+
         caption = item.get('caption')
         if caption is not None:
             try:
-                fd, tmp_path = tempfile.mkstemp(suffix='.txt', prefix='sp_caption_')
+                fd, caption_tmp_path = tempfile.mkstemp(suffix='.txt', prefix='sp_caption_')
                 with os.fdopen(fd, 'w', encoding='utf-8') as f:
                     f.write(caption)
-                cmd.append(f'-XMP:Description<={tmp_path}')
+                temp_files.append(caption_tmp_path)
+                cmd.append(f'-XMP:Description<={caption_tmp_path}')
             except Exception as e:
                 print(f"⚠️ Caption temp file failed: {e}, fallback to inline")
                 cmd.append(f'-XMP:Description={caption}')
@@ -432,11 +444,13 @@ class ExifToolManager:
             print(f"❌ ExifTool error: {e}")
             return False
         finally:
-            if tmp_path and os.path.exists(tmp_path):
+            for temp_path in temp_files:
+                if not os.path.exists(temp_path):
+                    continue
                 try:
-                    os.remove(tmp_path)
+                    os.remove(temp_path)
                 except Exception as e:
-                    print(f"⚠️ Caption temp file cleanup failed: {tmp_path} - {e}")
+                    print(f"⚠️ Temp file cleanup failed: {temp_path} - {e}")
 
     def _write_metadata_xmp_sidecar(self, item: Dict[str, any]) -> bool:
         """写入 XMP 侧车文件（不修改 RAW 本体）"""
@@ -459,17 +473,29 @@ class ExifToolManager:
             cmd.append(f'-XMP:Label={item["label"]}')
         if item.get('focus_status') is not None:
             cmd.append(f'-XMP:Country={item["focus_status"]}')
-        if item.get('title') is not None:
-            cmd.append(f'-XMP:Title={item["title"]}')
+        temp_files: List[str] = []
 
-        tmp_path = None
+        # Keep sidecar writes consistent with subprocess writes for Unicode titles.
+        title = item.get('title')
+        if title is not None:
+            try:
+                fd, title_tmp_path = tempfile.mkstemp(suffix='.txt', prefix='sp_title_')
+                with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                    f.write(str(title))
+                temp_files.append(title_tmp_path)
+                cmd.append(f'-XMP:Title<={title_tmp_path}')
+            except Exception as e:
+                print(f"⚠️ Title temp file failed: {e}, fallback to inline")
+                cmd.append(f'-XMP:Title={title}')
+
         caption = item.get('caption')
         if caption is not None:
             try:
-                fd, tmp_path = tempfile.mkstemp(suffix='.txt', prefix='sp_caption_')
+                fd, caption_tmp_path = tempfile.mkstemp(suffix='.txt', prefix='sp_caption_')
                 with os.fdopen(fd, 'w', encoding='utf-8') as f:
                     f.write(caption)
-                cmd.append(f'-XMP:Description<={tmp_path}')
+                temp_files.append(caption_tmp_path)
+                cmd.append(f'-XMP:Description<={caption_tmp_path}')
             except Exception as e:
                 print(f"⚠️ Caption temp file failed: {e}, fallback to inline")
                 cmd.append(f'-XMP:Description={caption}')
@@ -491,11 +517,13 @@ class ExifToolManager:
             print(f"❌ XMP sidecar write error: {e}")
             return False
         finally:
-            if tmp_path and os.path.exists(tmp_path):
+            for temp_path in temp_files:
+                if not os.path.exists(temp_path):
+                    continue
                 try:
-                    os.remove(tmp_path)
+                    os.remove(temp_path)
                 except Exception as e:
-                    print(f"⚠️ Caption temp file cleanup failed: {tmp_path} - {e}")
+                    print(f"⚠️ Temp file cleanup failed: {temp_path} - {e}")
 
     def _reset_xmp_sidecar(self, file_path: str) -> bool:
         """清理 XMP 侧车中的评分相关字段"""
