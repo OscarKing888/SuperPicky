@@ -1,7 +1,7 @@
 # Git LFS for large model files
 models/*.pt filter=lfs diff=lfs merge=lfs -text
 models/*.pth filter=lfs diff=lfs merge=lfs -text
-
 # Exclude exiftool from language statistics
 exiftools_mac/* linguist-vendored
 exiftools_win/* linguist-vendored
+birdid/data/avonet.db filter=lfs diff=lfs merge=lfs -text

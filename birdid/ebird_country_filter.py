@@ -1,8 +1,17 @@
 #!/usr/bin/env python3
 """
 eBird国家鸟类过滤器
-使用eBird API获取特定国家的鸟类列表，并缓存结果以提高效率
+
+DEPRECATED: 此模块已被 avonet_filter.py 替代
+保留代码仅供参考，不再被调用
 """
+import warnings
+warnings.warn(
+    "ebird_country_filter 已弃用，请使用 avonet_filter",
+    DeprecationWarning,
+    stacklevel=2
+)
+
 import requests
 import json
 import os

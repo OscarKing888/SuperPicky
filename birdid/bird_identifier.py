@@ -7,6 +7,7 @@
 __version__ = "1.0.0"
 
 import torch
+import torchvision.transforms as transforms
 import numpy as np
 from PIL import Image, ImageEnhance, ImageFilter
 from PIL.ExifTags import TAGS, GPSTAGS
@@ -91,11 +92,15 @@ def get_user_data_dir() -> str:
 
 # ==================== 模型路径 ====================
 # 鸟类识别专用模型和数据（在 birdid/ 目录下）
-MODEL_PATH = get_birdid_path('models/birdid2024.pt')
+# OSEA ResNet34 模型（替代旧 birdid2024）
+MODEL_PATH = get_project_path('models/model20240824.pth')
+# 旧模型路径（保留作为回退）
+MODEL_PATH_LEGACY = get_birdid_path('models/birdid2024.pt')
 MODEL_PATH_ENC = get_birdid_path('models/birdid2024.pt.enc')
+# OSEA 模型类别数
+OSEA_NUM_CLASSES = 11000
 BIRD_INFO_PATH = get_birdid_path('data/birdinfo.json')
 DATABASE_PATH = get_birdid_path('data/bird_reference.sqlite')
-OFFLINE_EBIRD_DIR = get_birdid_path('data/offline_ebird_data')
 
 # YOLO 模型（共用项目根目录的模型）
 YOLO_MODEL_PATH = get_project_path('models/yolo11l-seg.pt')
@@ -106,10 +111,8 @@ _bird_info = None
 _db_manager = None
 _yolo_detector = None
 
-# V4.0.5: 性能优化 - 全局缓存
-_ebird_filter = None  # eBirdCountryFilter 单例
-_species_cache = {}  # {region_code: species_set} 物种列表缓存
-_gps_detected_region_cache = None  # GPS 检测的区域缓存，避免重复 Nominatim 查询
+# V4.0.5: 离线物种过滤
+_avonet_filter = None  # AvonetFilter 单例
 
 
 # ==================== 模型加密解密 ====================
@@ -158,29 +161,39 @@ def _load_torchscript_from_bytes(model_data: bytes):
 # ==================== 懒加载函数 ====================
 
 def get_classifier():
-    """懒加载分类模型"""
+    """懒加载分类模型（OSEA ResNet34）"""
     global _classifier
     if _classifier is None:
-        SECRET_PASSWORD = "SuperBirdID_2024_AI_Model_Encryption_Key_v1"
+        import torchvision.models as models
 
-        if os.path.exists(MODEL_PATH_ENC):
-            # 加载加密模型
-            model_data = decrypt_model(MODEL_PATH_ENC, SECRET_PASSWORD)
-            _classifier = _load_torchscript_from_bytes(model_data)
-        elif os.path.exists(MODEL_PATH):
-            try:
-                _classifier = torch.jit.load(MODEL_PATH, map_location='cpu')
-            except RuntimeError as e:
-                # Some Windows builds fail fopen on non-ASCII paths.
-                if 'open file failed' not in str(e) or 'fopen' not in str(e):
-                    raise
-                with open(MODEL_PATH, 'rb') as f:
-                    model_data = f.read()
-                _classifier = _load_torchscript_from_bytes(model_data)
+        if os.path.exists(MODEL_PATH):
+            # 加载 OSEA ResNet34 模型
+            model = models.resnet34(num_classes=OSEA_NUM_CLASSES)
+            state_dict = torch.load(MODEL_PATH, map_location='cpu', weights_only=True)
+            model.load_state_dict(state_dict)
+            model = model.to(CLASSIFIER_DEVICE)
+            model.eval()
+            _classifier = model
+            print(f"[BirdID] OSEA ResNet34 模型已加载，设备: {CLASSIFIER_DEVICE}")
         else:
-            raise RuntimeError(f"未找到分类模型: {MODEL_PATH}")
-
-        _classifier.eval()
+            # 回退到旧的 birdid2024 模型
+            SECRET_PASSWORD = "SuperBirdID_2024_AI_Model_Encryption_Key_v1"
+            if os.path.exists(MODEL_PATH_ENC):
+                model_data = decrypt_model(MODEL_PATH_ENC, SECRET_PASSWORD)
+                _classifier = _load_torchscript_from_bytes(model_data)
+            elif os.path.exists(MODEL_PATH_LEGACY):
+                try:
+                    _classifier = torch.jit.load(MODEL_PATH_LEGACY, map_location='cpu')
+                except RuntimeError as e:
+                    if 'open file failed' not in str(e) or 'fopen' not in str(e):
+                        raise
+                    with open(MODEL_PATH_LEGACY, 'rb') as f:
+                        model_data = f.read()
+                    _classifier = _load_torchscript_from_bytes(model_data)
+            else:
+                raise RuntimeError(f"未找到分类模型: {MODEL_PATH} 或 {MODEL_PATH_LEGACY}")
+            _classifier.eval()
+            print(f"[BirdID] 回退使用 birdid2024 模型")
     return _classifier
 
 
@@ -224,37 +237,21 @@ def get_yolo_detector():
     return _yolo_detector
 
 
-def get_ebird_filter():
-    """V4.0.5: 懒加载 eBirdCountryFilter（单例模式）"""
-    global _ebird_filter
-    if _ebird_filter is None:
+def get_species_filter():
+    """懒加载 AvonetFilter（单例模式）"""
+    global _avonet_filter
+    if _avonet_filter is None:
         try:
-            from birdid.ebird_country_filter import eBirdCountryFilter
-            api_key = os.environ.get('EBIRD_API_KEY', '60nan25sogpo')
-            cache_dir = os.path.join(get_user_data_dir(), 'ebird_cache')
-            offline_dir = get_birdid_path('data/offline_ebird_data')
-            _ebird_filter = eBirdCountryFilter(api_key, cache_dir=cache_dir, offline_dir=offline_dir)
-        except Exception as e:
-            print(f"[eBird] 初始化失败: {e}")
-            return None
-    return _ebird_filter
-
-
-def get_species_list_cached(region_code: str) -> set:
-    """V4.0.5: 获取物种列表（带内存缓存）"""
-    global _species_cache
-    if region_code not in _species_cache:
-        ebird_filter = get_ebird_filter()
-        if ebird_filter:
-            species_set = ebird_filter.get_country_species_list(region_code)
-            if species_set:
-                _species_cache[region_code] = species_set
-                print(f"[eBird] 首次加载 {region_code} 物种列表: {len(species_set)} 个物种")
+            from birdid.avonet_filter import AvonetFilter
+            _avonet_filter = AvonetFilter()
+            if _avonet_filter.is_available():
+                print("[Avonet] 离线物种过滤器已加载")
             else:
-                return None
-        else:
+                _avonet_filter = None
+        except Exception as e:
+            print(f"[Avonet] 初始化失败: {e}")
             return None
-    return _species_cache.get(region_code)
+    return _avonet_filter
 
 
 # ==================== YOLO 鸟类检测器 ====================
@@ -280,18 +277,26 @@ class YOLOBirdDetector:
         self,
         image_input,
         confidence_threshold: float = 0.25,
-        padding: int = 150
+        padding_ratio: float = 0.15,
+        fill_color: Tuple[int, int, int] = (0, 0, 0)
     ) -> Tuple[Optional[Image.Image], str]:
         """
-        检测并裁剪鸟类区域
+        检测并裁剪鸟类区域（智能正方形裁剪 + Letterboxing）
+
+        处理流程:
+        1. YOLO 检测获取 bounding box
+        2. 智能正方形扩展: max_side * (1 + padding_ratio)
+        3. 边界限制: 裁剪区域不超出图片范围
+        4. Letterboxing: 如果裁剪后非正方形，用 fill_color 填充成正方形
 
         Args:
             image_input: 文件路径或 PIL Image
             confidence_threshold: 置信度阈值
-            padding: 裁剪边距
+            padding_ratio: padding 比例（基于 bbox 最大边长），默认 0.15 (15%)
+            fill_color: Letterboxing 填充颜色，默认黑色 (0, 0, 0)
 
         Returns:
-            (裁剪后的图像, 检测信息) 或 (None, 错误信息)
+            (裁剪后的正方形图像, 检测信息) 或 (None, 错误信息)
         """
         if self.model is None:
             return None, "YOLO模型未可用"
@@ -329,13 +334,43 @@ class YOLOBirdDetector:
             best = max(detections, key=lambda x: x['confidence'])
             img_width, img_height = image.size
 
+            # Phase 1: 获取 bbox
             x1, y1, x2, y2 = best['bbox']
-            x1_padded = max(0, x1 - padding)
-            y1_padded = max(0, y1 - padding)
-            x2_padded = min(img_width, x2 + padding)
-            y2_padded = min(img_height, y2 + padding)
+            bbox_width = x2 - x1
+            bbox_height = y2 - y1
 
-            cropped = image.crop((x1_padded, y1_padded, x2_padded, y2_padded))
+            # Phase 2: 智能正方形扩展 (基于最大边长 + padding_ratio)
+            max_side = max(bbox_width, bbox_height)
+            target_side = int(max_side * (1 + padding_ratio))
+
+            # 以 bbox 中心为基准扩展
+            cx = (x1 + x2) // 2
+            cy = (y1 + y2) // 2
+            half = target_side // 2
+
+            sq_x1 = cx - half
+            sq_y1 = cy - half
+            sq_x2 = cx + half
+            sq_y2 = cy + half
+
+            # Phase 3: 边界限制
+            crop_x1 = max(0, sq_x1)
+            crop_y1 = max(0, sq_y1)
+            crop_x2 = min(img_width, sq_x2)
+            crop_y2 = min(img_height, sq_y2)
+
+            cropped = image.crop((crop_x1, crop_y1, crop_x2, crop_y2))
+            crop_w, crop_h = cropped.size
+
+            # Phase 4: Letterboxing (如果裁剪后非正方形)
+            if crop_w != crop_h:
+                sq_size = max(crop_w, crop_h)
+                square = Image.new('RGB', (sq_size, sq_size), fill_color)
+                paste_x = (sq_size - crop_w) // 2
+                paste_y = (sq_size - crop_h) // 2
+                square.paste(cropped, (paste_x, paste_y))
+                cropped = square
+
             info = f"置信度{best['confidence']:.3f}, 尺寸{cropped.size}"
 
             return cropped, info
@@ -589,20 +624,43 @@ def apply_enhancement(image: Image.Image, method: str = "unsharp_mask") -> Image
     return image
 
 
+# ==================== OSEA 预处理 ====================
+
+# CenterCrop 预处理: Resize(256) + CenterCrop(224) + ImageNet Normalize
+# 用于原始大图（未经 YOLO 裁剪）
+OSEA_TRANSFORM = transforms.Compose([
+    transforms.Resize(256),
+    transforms.CenterCrop(224),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+])
+
+# 直接缩放预处理: Resize(224, 224) with Lanczos + ImageNet Normalize
+# 用于 YOLO 裁剪后的正方形图片（已经过 Letterboxing 处理）
+# 使用 Lanczos 插值保证高质量缩放
+OSEA_TRANSFORM_DIRECT = transforms.Compose([
+    transforms.Resize((224, 224), interpolation=transforms.InterpolationMode.LANCZOS),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+])
+
+
 # ==================== 核心识别函数 ====================
 
 def predict_bird(
     image: Image.Image,
     top_k: int = 5,
-    ebird_species_set: Optional[Set[str]] = None
+    species_class_ids: Optional[Set[int]] = None,
+    is_yolo_cropped: bool = False
 ) -> List[Dict]:
     """
-    识别鸟类
+    识别鸟类（OSEA ResNet34）
 
     Args:
         image: PIL Image 对象
         top_k: 返回前 K 个结果
-        ebird_species_set: eBird 物种代码集合（用于过滤）
+        species_class_ids: 区域物种的 class_id 集合（用于过滤）
+        is_yolo_cropped: 图片是否经过 YOLO 裁剪（用于选择预处理方式）
 
     Returns:
         识别结果列表 [{cn_name, en_name, confidence, ebird_code, ...}, ...]
@@ -611,62 +669,36 @@ def predict_bird(
     bird_data = get_bird_info()
     db_manager = get_database_manager()
 
-    # 多种增强方法测试
-    enhancement_methods = [
-        ("none", None),
-        ("edge_enhance_more", "edge_enhance_more"),
-        ("unsharp_mask", "unsharp_mask"),
-        ("contrast_edge", "contrast_edge"),
-        ("desaturate", "desaturate")
-    ]
+    # 根据是否经过 YOLO 裁剪选择预处理方式
+    # - YOLO 裁剪后: 直接 Resize(224,224)，避免 CenterCrop 丢失特征
+    # - 原始大图: Resize(256) + CenterCrop(224)，鸟在中心时效果更好
+    if image.mode != 'RGB':
+        image = image.convert('RGB')
+    transform = OSEA_TRANSFORM_DIRECT if is_yolo_cropped else OSEA_TRANSFORM
+    input_tensor = transform(image).unsqueeze(0).to(CLASSIFIER_DEVICE)
 
-    all_logits = []  # 收集所有增强方法的logits用于融合
+    # 推理
+    with torch.no_grad():
+        output = model(input_tensor)[0]
 
-    for name, method in enhancement_methods:
-        if method:
-            enhanced = apply_enhancement(image, method)
-        else:
-            enhanced = image
+    # 截取有效类别数（模型输出可能多于实际物种数）
+    num_classes = min(len(bird_data), output.shape[0])
+    output = output[:num_classes]
 
-        processed = smart_resize(enhanced, 224)
-
-        # 转换为 tensor
-        img_array = np.array(processed)
-        bgr_array = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
-
-        mean = np.array([0.406, 0.456, 0.485])
-        std = np.array([0.225, 0.224, 0.229])
-
-        normalized = (bgr_array / 255.0 - mean) / std
-        input_tensor = torch.from_numpy(normalized).permute(2, 0, 1).unsqueeze(0).float()
-
-        with torch.no_grad():
-            output = model(input_tensor)
-
-        # 收集原始logits用于融合
-        all_logits.append(output[0])
-
-    # 多增强融合：对所有增强方法的logits取平均
-    if len(all_logits) == 0:
-        return []
-    
-    stacked_logits = torch.stack(all_logits)
-    fused_logits = stacked_logits.mean(dim=0)
-    
-    # 对融合后的logits应用温度缩放和softmax
-    TEMPERATURE = 0.5
-    best_probs = torch.nn.functional.softmax(fused_logits / TEMPERATURE, dim=0)
+    # Softmax（温度=0.9 更平滑：降低过高置信度，避免 99%+ 输出）
+    TEMPERATURE = 0.9
+    best_probs = torch.nn.functional.softmax(output / TEMPERATURE, dim=0)
 
     # 获取 top-k 结果
-    k = min(100 if ebird_species_set else top_k, len(best_probs))
+    k = min(100 if species_class_ids else top_k, len(best_probs))
     top_probs, top_indices = torch.topk(best_probs, k)
 
     results = []
     for i in range(len(top_indices)):
         class_id = top_indices[i].item()
         confidence = top_probs[i].item() * 100
-        # 置信度阈值：使用 eBird 过滤时降低阈值以保留更多候选
-        min_confidence = 0.3 if ebird_species_set else 1.0
+        # 置信度阈值：使用区域过滤时降低阈值以保留更多候选
+        min_confidence = 0.3 if species_class_ids else 1.0
         if confidence < min_confidence:
             continue
 
@@ -695,19 +727,13 @@ def predict_bird(
             cn_name = f"Unknown (ID: {class_id})"
             en_name = f"Unknown (ID: {class_id})"
 
-        # eBird 过滤
-        ebird_match = False
-        if ebird_species_set:
-            if not ebird_code and db_manager and en_name:
-                ebird_code = db_manager.get_ebird_code_by_english_name(en_name)
-
-            if ebird_code and ebird_code in ebird_species_set:
-                ebird_match = True
-            elif ebird_species_set:
-                # 调试：显示被过滤掉的候选
-                if i < 5:  # 只显示前5个被过滤的
-                    print(f"[eBird过滤] 跳过: {cn_name} ({en_name}), ebird_code={ebird_code}, 置信度={confidence:.1f}%")
-                continue  # 不在列表中，跳过
+        # Avonet 地理过滤
+        region_match = False
+        if species_class_ids:
+            if class_id in species_class_ids:
+                region_match = True
+            else:
+                continue  # 不在区域物种列表中，跳过
 
         results.append({
             'class_id': class_id,
@@ -716,7 +742,7 @@ def predict_bird(
             'scientific_name': scientific_name,
             'confidence': confidence,
             'ebird_code': ebird_code,
-            'ebird_match': ebird_match,
+            'region_match': region_match,
             'description': description or ''
         })
 
@@ -765,6 +791,7 @@ def identify_bird(
         image = load_image(image_path)
 
         # YOLO 裁剪
+        is_yolo_cropped = False
         print(f"[YOLO调试] use_yolo={use_yolo}, YOLO_AVAILABLE={YOLO_AVAILABLE}")
         if use_yolo and YOLO_AVAILABLE:
             width, height = image.size
@@ -778,6 +805,7 @@ def identify_bird(
                     if cropped:
                         image = cropped
                         result['yolo_info'] = info
+                        is_yolo_cropped = True
                         print(f"[YOLO调试] ✅ 已裁剪鸟类区域")
                     else:
                         print(f"[YOLO调试] ⚠️ 未检测到鸟类")
@@ -786,74 +814,53 @@ def identify_bird(
         else:
             print(f"[YOLO调试] YOLO未启用或不可用")
 
-        # eBird 区域过滤 (V4.0.5: 全面优化)
-        ebird_species_set = None
-        effective_region = None
-        data_source = None
-        
-        if use_ebird:
-            global _gps_detected_region_cache
-            
+        # Avonet 地理过滤
+        species_class_ids = None
+
+        if use_ebird:  # 参数名保持兼容，实际使用 Avonet
             try:
-                # V4.0.5: 使用单例模式的 eBirdCountryFilter
-                ebird_filter = get_ebird_filter()
-                if not ebird_filter:
-                    raise ImportError("eBird 过滤模块不可用")
-                
-                # V4.0.5: 三层优化策略确定区域
-                # 1. 用户已设置 region_code/country_code → 直接用
-                # 2. 用户未设置，但缓存中已有 GPS 检测结果 → 直接用缓存
-                # 3. 用户未设置且缓存为空 → 执行 GPS + Nominatim，并缓存结果
-                
-                user_has_preset_region = bool(region_code or country_code)
-                
-                if region_code:
-                    effective_region = region_code
-                    data_source = f"手动选择: {region_code}"
-                elif country_code:
-                    effective_region = country_code
-                    data_source = f"手动选择: {country_code}"
-                elif _gps_detected_region_cache:
-                    # V4.0.5: 使用缓存的 GPS 检测结果，避免重复 Nominatim 查询
-                    effective_region = _gps_detected_region_cache
-                    data_source = f"GPS缓存: {_gps_detected_region_cache}"
-                elif use_gps:
-                    # 首次执行 GPS 检测（仅当未设置且无缓存时）
-                    lat, lon, gps_msg = extract_gps_from_exif(image_path)
-                    if lat and lon:
-                        result['gps_info'] = {
-                            'latitude': lat,
-                            'longitude': lon,
-                            'info': gps_msg
+                species_filter = get_species_filter()
+                if not species_filter:
+                    print("[Avonet] 离线过滤器不可用")
+                else:
+                    # 优先使用 GPS 坐标
+                    if use_gps:
+                        lat, lon, gps_msg = extract_gps_from_exif(image_path)
+                        if lat and lon:
+                            result['gps_info'] = {
+                                'latitude': lat,
+                                'longitude': lon,
+                                'info': gps_msg
+                            }
+                            species_class_ids = species_filter.get_species_by_gps(lat, lon)
+                            if species_class_ids:
+                                print(f"[Avonet] GPS ({lat:.2f}, {lon:.2f}): {len(species_class_ids)} 个物种")
+
+                    # 回退到区域代码
+                    if species_class_ids is None and (region_code or country_code):
+                        effective_region = region_code or country_code
+                        species_class_ids = species_filter.get_species_by_region(effective_region)
+                        if species_class_ids:
+                            print(f"[Avonet] 区域 {effective_region}: {len(species_class_ids)} 个物种")
+
+                    # 记录过滤信息
+                    if species_class_ids:
+                        result['ebird_info'] = {  # 保持键名兼容
+                            'enabled': True,
+                            'species_count': len(species_class_ids),
+                            'data_source': 'avonet.db (offline)'
                         }
-                        gps_detected_region, gps_region_name = ebird_filter.get_region_code_from_gps(lat, lon)
-                        if gps_detected_region:
-                            # 缓存 GPS 检测结果，后续照片直接使用
-                            _gps_detected_region_cache = gps_detected_region
-                            effective_region = gps_detected_region
-                            data_source = f"GPS自动检测: {gps_detected_region} ({gps_region_name})"
-                            print(f"[GPS] 首次检测区域: {gps_detected_region}，后续将使用缓存")
-                
-                # V4.0.5: 使用缓存的物种列表
-                if effective_region:
-                    ebird_species_set = get_species_list_cached(effective_region)
-                
-                # 记录 eBird 过滤信息
-                if ebird_species_set:
-                    result['ebird_info'] = {
-                        'enabled': True,
-                        'region': effective_region,
-                        'species_count': len(ebird_species_set),
-                        'data_source': data_source
-                    }
-                    
-            except ImportError:
-                print("eBird 过滤模块不可用")
+
             except Exception as e:
-                print(f"eBird 过滤初始化失败: {e}")
+                print(f"[Avonet] 过滤初始化失败: {e}")
 
         # 执行识别
-        results = predict_bird(image, top_k=top_k, ebird_species_set=ebird_species_set)
+        results = predict_bird(
+            image,
+            top_k=top_k,
+            species_class_ids=species_class_ids,
+            is_yolo_cropped=is_yolo_cropped
+        )
 
         result['success'] = True
         result['results'] = results
