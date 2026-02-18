@@ -495,8 +495,9 @@ class PhotoProcessor:
         # 阶段3: AI检测与评分
         self._process_images(files_tbr, raw_dict)
         
-        # 阶段4: 精选旗标计算
-        self._calculate_picked_flags()
+        # 阶段4: 精选旗标计算（metadata_write_mode=none 时跳过）
+        if get_advanced_config().get_metadata_write_mode() != "none":
+            self._calculate_picked_flags()
         
         # 阶段5: 文件组织
         if organize_files:
@@ -1845,9 +1846,9 @@ class PhotoProcessor:
                         focus_point_crop,
                         focus_status_en  # 使用英文标签
                     )
-                    # V4.2: 发送裁剪预览到 UI
+                    # V4.2: 发送裁剪预览到 UI（同时传对焦状态供 dock 显示）
                     if debug_img is not None and self.callbacks.crop_preview:
-                        self.callbacks.crop_preview(debug_img)
+                        self.callbacks.crop_preview(debug_img, focus_status_en)
                 except Exception as e:
                     print(f"  ⚠️ debug_crop 保存失败 [{filename}]: {e}")  # 调试图生成失败不影响主流程
                 add_photo_stage('debug_viz', (time.time() - debug_start) * 1000)

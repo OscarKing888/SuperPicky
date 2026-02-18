@@ -326,6 +326,19 @@ class ExifToolManager:
             mode = "auto"
         return mode
 
+    def _get_metadata_write_mode(self) -> str:
+        """获取全局元数据写入模式: embedded | sidecar | none"""
+        try:
+            from advanced_config import get_advanced_config
+            cfg = get_advanced_config()
+            mode = cfg.get_metadata_write_mode()
+        except Exception:
+            mode = "embedded"
+        mode = str(mode).strip().lower()
+        if mode not in {"embedded", "sidecar", "none"}:
+            mode = "embedded"
+        return mode
+
     def _read_arw_structure(self, file_path: str) -> Optional[Dict[str, any]]:
         """读取 ARW 关键结构标签，用于检测文件布局变化"""
         tags = [
@@ -700,6 +713,21 @@ class ExifToolManager:
             统计结果 {'success': 成功数, 'failed': 失败数}
         """
         stats = {'success': 0, 'failed': 0}
+
+        # 全局写入模式检查
+        global_mode = self._get_metadata_write_mode()
+        if global_mode == "none":
+            print("[ExifTool] metadata_write_mode=none, 跳过所有元数据写入")
+            return stats
+        if global_mode == "sidecar":
+            print(f"[ExifTool] metadata_write_mode=sidecar, 所有文件统一写 XMP 侧车 ({len(files_metadata)} 条)")
+            for item in files_metadata:
+                if self._write_metadata_xmp_sidecar(item):
+                    stats['success'] += 1
+                else:
+                    stats['failed'] += 1
+            return stats
+
         caption_temp_files: List[str] = []  # 用于写入 caption 的临时 UTF-8 文件，执行后删除
         num_with_caption = sum(1 for it in files_metadata if it.get('caption'))
 
@@ -1253,21 +1281,25 @@ class ExifToolManager:
                     for file_info in files:
                         filename = file_info['filename']
                         folder = file_info['folder']
-                        
+
+                        # 跳过 macOS AppleDouble 元数据文件（._xxx），由系统自动管理
+                        if filename.startswith('._'):
+                            continue
+
                         src_path = os.path.join(dir_path, folder, filename)
                         dst_path = os.path.join(dir_path, filename)
-                        
+
                         # V4.0: 记录所有涉及的目录（包括多层）
                         folders_to_check.add(os.path.join(dir_path, folder))
                         # 添加父目录（如 3星_优选/红嘴蓝鹊 → 也需要检查 3星_优选）
                         parts = folder.split(os.sep)
                         if len(parts) > 1:
                             folders_to_check.add(os.path.join(dir_path, parts[0]))
-                        
+
                         if not os.path.exists(src_path):
                             stats['not_found'] += 1
                             continue
-                        
+
                         if os.path.exists(dst_path):
                             stats['failed'] += 1
                             log(t("logs.restore_skipped_exists", filename=filename))
@@ -1325,15 +1357,19 @@ class ExifToolManager:
             
             for entry in os.listdir(folder_path):
                 entry_path = os.path.join(folder_path, entry)
-                
+
                 if os.path.isdir(entry_path):
                     # V4.0: 递归处理子目录（鸟种目录、连拍目录）
                     folders_to_check.add(entry_path)
                     restore_from_folder(entry_path, os.path.join(relative_path, entry) if relative_path else entry)
                 else:
+                    # 跳过 macOS AppleDouble 元数据文件（._xxx），由系统自动管理
+                    if entry.startswith('._'):
+                        continue
+
                     # 移动文件回主目录
                     dst_path = os.path.join(dir_path, entry)
-                    
+
                     if os.path.exists(dst_path):
                         log(t("logs.restore_skipped_exists", filename=entry))
                         continue
