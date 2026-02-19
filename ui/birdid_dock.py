@@ -229,6 +229,8 @@ class ResultCard(QFrame):
             font-family: {FONTS['mono']};
             background: transparent;
         """)
+        self.conf_label.setFixedWidth(50)
+        self.conf_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         layout.addWidget(self.conf_label)
     
     def _update_style(self):
@@ -377,69 +379,95 @@ class BirdIDDockWidget(QDockWidget):
     
     def _build_country_list(self) -> dict:
         """构建国家列表 {显示名称: 代码}
-        
-        只显示有离线数据的优先国家，其他国家归入"更多国家..."选项
+
+        V4.4: 简化下拉菜单，只显示约 15 项
+        - 自动定位 (Auto GPS)
+        - 全球模式 (Global)
+        - 分隔符
+        - Top 10 常用国家 (按英文首字母 A-Z)
+        - 分隔符
+        - "更多国家..." 选项
         """
-        # 加载离线数据索引，获取有离线数据的国家代码
-        offline_index_path = get_birdid_data_path('offline_ebird_data/offline_index.json')
-        offline_countries = set()
-        if os.path.exists(offline_index_path):
-            try:
-                with open(offline_index_path, 'r', encoding='utf-8') as f:
-                    index_data = json.load(f)
-                offline_countries = set(index_data.get('countries', {}).keys())
-            except:
-                pass
-        
-        # 特殊选项
+        from collections import OrderedDict
+
         t = self.i18n.t
-        country_list = {t("birdid.country_auto_gps"): None, t("birdid.country_global"): "GLOBAL"}
-        
-        # 优先显示的国家代码（按地区排序，每个地区内按英文名排序）
-        # 大洋洲 → 美洲 → 亚洲 → 欧洲
-        priority_codes = [
-            # 大洋洲 (Oceania)
-            'AU', 'NZ',
-            # 美洲 (Americas)
-            'BR', 'CA', 'CR', 'US',
-            # 亚洲 (Asia)
-            'CN', 'HK', 'IN', 'ID', 'JP', 'MY', 'KR', 'TW',
-            # 欧洲 (Europe)
-            'FR', 'DE', 'IT', 'NL', 'ES', 'GB'
-        ]
-        
-        # 国家代码到 i18n 键的映射
-        code_to_key = {
-            # 大洋洲
-            'AU': 'birdid.country_au', 'NZ': 'birdid.country_nz',
-            # 美洲
-            'BR': 'birdid.country_br', 'CA': 'birdid.country_ca', 'CR': 'birdid.country_cr', 'US': 'birdid.country_us',
-            # 亚洲
-            'CN': 'birdid.country_cn', 'HK': 'birdid.country_hk', 'IN': 'birdid.country_in', 'ID': 'birdid.country_id',
-            'JP': 'birdid.country_jp', 'MY': 'birdid.country_my', 'KR': 'birdid.country_kr', 'TW': 'birdid.country_tw',
-            # 欧洲
-            'FR': 'birdid.country_fr', 'DE': 'birdid.country_de', 'IT': 'birdid.country_it',
-            'NL': 'birdid.country_nl', 'ES': 'birdid.country_es', 'GB': 'birdid.country_gb'
+        is_english = self.i18n.current_lang.startswith('en')
+
+        # 使用 OrderedDict 保持插入顺序
+        country_list = OrderedDict()
+
+        # === 第一部分：特殊选项 ===
+        country_list[t("birdid.country_auto_gps")] = None
+        country_list[t("birdid.country_global")] = "GLOBAL"
+
+        # === 分隔符 1 ===
+        country_list["─" * 15] = "SEP1"
+
+        # === 第二部分：Top 10 常用国家 (按英文首字母 A-Z 排序) ===
+        top10_codes = ['AU', 'BR', 'CN', 'GB', 'HK', 'ID', 'JP', 'MY', 'TW', 'US']
+
+        # 国家代码到 i18n 键的映射 (Top 10)
+        top10_i18n = {
+            'AU': 'birdid.country_au',
+            'BR': 'birdid.country_br',
+            'CN': 'birdid.country_cn',
+            'GB': 'birdid.country_gb',
+            'HK': 'birdid.country_hk',
+            'ID': 'birdid.country_id',
+            'JP': 'birdid.country_jp',
+            'MY': 'birdid.country_my',
+            'TW': 'birdid.country_tw',
+            'US': 'birdid.country_us',
         }
-        
-        # 添加优先国家（只添加有离线数据或在 regions_data 中的）
-        for code in priority_codes:
-            country_name = t(code_to_key.get(code, code))
-            # 检查是否存在该国家数据（离线或 regions_data 中）
-            if code in offline_countries:
-                country_list[country_name] = code
+
+        # 构建 code -> region_data 映射
+        code_to_region = {}
+        for region in self.regions_data.get('countries', []):
+            code_to_region[region.get('code')] = region
+
+        # 添加 Top 10 (已按英文首字母排序)
+        for code in top10_codes:
+            i18n_key = top10_i18n.get(code)
+            if i18n_key:
+                display_name = t(i18n_key)
             else:
-                # 从 regions_data 查找
-                for country in self.regions_data.get('countries', []):
-                    if country.get('code') == code:
-                        country_list[country_name] = code
-                        break
-        
-        # 添加"更多国家..."选项
+                # 回退到 regions_data
+                region = code_to_region.get(code, {})
+                if is_english:
+                    display_name = region.get('name', code)
+                else:
+                    display_name = region.get('name_cn') or region.get('name', code)
+            country_list[display_name] = code
+
+        # === 分隔符 2 ===
+        country_list["─" * 15 + " "] = "SEP2"  # 添加空格使 key 不同
+
+        # === "更多国家..." 选项 ===
         country_list[t("birdid.country_more")] = "MORE"
-        
+
         return country_list
-    
+
+    def _populate_country_combo(self):
+        """填充国家下拉菜单，并禁用分隔符项"""
+        from PySide6.QtGui import QStandardItem
+        from PySide6.QtWidgets import QStyledItemDelegate
+
+        self.country_combo.clear()
+
+        for display_name, code in self.country_list.items():
+            self.country_combo.addItem(display_name)
+
+            # 如果是分隔符，禁用该项
+            if code in ("SEP1", "SEP2"):
+                idx = self.country_combo.count() - 1
+                # 获取模型中的 item 并设置为不可选
+                model = self.country_combo.model()
+                item = model.item(idx)
+                if item:
+                    item.setEnabled(False)
+                    # 设置分隔符样式
+                    item.setSelectable(False)
+
     def _load_settings(self) -> dict:
         """加载设置"""
         settings_path = get_settings_path()
@@ -550,18 +578,22 @@ class BirdIDDockWidget(QDockWidget):
     def _on_country_changed(self, country_display: str):
         """国家选择变化时更新区域列表"""
         country_code = self.country_list.get(country_display)
-        
-        # 处理"更多国家"选项
+
+        # 忽略分隔符
+        if country_code in ("SEP1", "SEP2"):
+            return
+
+        # 处理"更多国家"选项 (已移除，保留兼容性)
         if country_code == "MORE":
             self._show_more_countries_dialog()
             return
-        
+
         # 设置标志，防止在填充区域列表时触发 _on_region_changed
         self._updating_regions = True
-        
+
         self.region_combo.clear()
         self.region_combo.addItem(self.i18n.t("birdid.region_entire_country"))
-        
+
         if country_code and country_code != "GLOBAL":
             # 查找该国家的区域列表
             for country in self.regions_data.get('countries', []):
@@ -593,12 +625,75 @@ class BirdIDDockWidget(QDockWidget):
         self._reidentify_if_needed()
 
     def _show_more_countries_dialog(self):
-        """显示更多国家选择对话框 - 支持国际化和搜索"""
+        """显示更多国家选择对话框 - 显示大洲和其他国家，支持搜索
+
+        V4.4: 只显示不在 Top 10 中的区域（大洲 + 其他国家）
+        - 大洲项目前面加 🌍 前缀
+        - 按英文名 A-Z 排序
+        """
         from PySide6.QtWidgets import QDialog, QListWidget, QDialogButtonBox, QListWidgetItem, QLineEdit
-        
+
         t = self.i18n.t
         is_english = self.i18n.current_lang.startswith('en')
-        
+
+        # Top 10 国家代码（已在下拉菜单中）
+        top10_codes = {'AU', 'BR', 'CN', 'GB', 'HK', 'ID', 'JP', 'MY', 'TW', 'US', 'GLOBAL'}
+
+        # 大洲代码
+        continent_codes = {'AF', 'AS', 'EU', 'NA', 'SA', 'OC'}
+
+        # 大洲 i18n 映射
+        continent_i18n = {
+            'AF': 'birdid.continent_af',
+            'AS': 'birdid.continent_as',
+            'EU': 'birdid.continent_eu',
+            'NA': 'birdid.continent_na',
+            'SA': 'birdid.continent_sa',
+            'OC': 'birdid.continent_oc',
+        }
+
+        # 其他国家 i18n 映射
+        other_country_i18n = {
+            'AR': 'birdid.country_ar',
+            'CA': 'birdid.country_ca',
+            'CH': 'birdid.country_ch',
+            'CL': 'birdid.country_cl',
+            'CO': 'birdid.country_co',
+            'CR': 'birdid.country_cr',
+            'DE': 'birdid.country_de',
+            'EC': 'birdid.country_ec',
+            'EG': 'birdid.country_eg',
+            'ES': 'birdid.country_es',
+            'FI': 'birdid.country_fi',
+            'FR': 'birdid.country_fr',
+            'GR': 'birdid.country_gr',
+            'IN': 'birdid.country_in',
+            'IT': 'birdid.country_it',
+            'KE': 'birdid.country_ke',
+            'KR': 'birdid.country_kr',
+            'LK': 'birdid.country_lk',
+            'MA': 'birdid.country_ma',
+            'MG': 'birdid.country_mg',
+            'MN': 'birdid.country_mn',
+            'MX': 'birdid.country_mx',
+            'NL': 'birdid.country_nl',
+            'NO': 'birdid.country_no',
+            'NP': 'birdid.country_np',
+            'NZ': 'birdid.country_nz',
+            'PE': 'birdid.country_pe',
+            'PH': 'birdid.country_ph',
+            'PL': 'birdid.country_pl',
+            'PT': 'birdid.country_pt',
+            'RU': 'birdid.country_ru',
+            'SE': 'birdid.country_se',
+            'SG': 'birdid.country_sg',
+            'TH': 'birdid.country_th',
+            'TZ': 'birdid.country_tz',
+            'UA': 'birdid.country_ua',
+            'VN': 'birdid.country_vn',
+            'ZA': 'birdid.country_za',
+        }
+
         dialog = QDialog(self)
         dialog.setWindowTitle(t("birdid.country_dialog_title"))
         dialog.setMinimumSize(320, 450)
@@ -632,46 +727,65 @@ class BirdIDDockWidget(QDockWidget):
                 color: {COLORS['bg_void']};
             }}
         """)
-        
+
         layout = QVBoxLayout(dialog)
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(8)
-        
+
         # 搜索框
         search_input = QLineEdit()
         search_input.setPlaceholderText(t("birdid.search_country_placeholder"))
         layout.addWidget(search_input)
-        
+
         list_widget = QListWidget()
-        
-        # 根据当前语言决定显示格式
-        all_countries = []
-        for country in self.regions_data.get('countries', []):
-            code = country.get('code', '')
-            name_en = country.get('name', '')
-            name_cn = country.get('name_cn', '')
-            
-            if is_english:
-                # 英文环境：只显示英文名
-                display = name_en
+
+        # 收集所有其他区域（排除 Top 10）
+        other_regions = []
+        for region in self.regions_data.get('countries', []):
+            code = region.get('code', '')
+
+            # 跳过已在下拉菜单中的国家
+            if code in top10_codes:
+                continue
+
+            name_en = region.get('name', code)
+            name_cn = region.get('name_cn', '')
+
+            # 获取显示名称
+            if code in continent_codes:
+                # 大洲：添加 🌍 前缀
+                i18n_key = continent_i18n.get(code)
+                if i18n_key:
+                    base_name = t(i18n_key)
+                else:
+                    base_name = name_cn if not is_english and name_cn else name_en
+                display = f"🌍 {base_name}"
             else:
-                # 中文环境：只显示中文名（如无中文则显示英文）
-                display = name_cn if name_cn else name_en
-            
-            # 按英文名排序以保持一致性
+                # 普通国家
+                i18n_key = other_country_i18n.get(code)
+                if i18n_key:
+                    display = t(i18n_key)
+                else:
+                    if is_english:
+                        display = name_en
+                    else:
+                        display = name_cn if name_cn else name_en
+
+            # 按英文名排序
             sort_key = name_en.lower()
-            all_countries.append((display, code, sort_key, name_en))
-        
-        all_countries.sort(key=lambda x: x[2])
-        
-        for display, code, _, name_en in all_countries:
+            other_regions.append((sort_key, display, code, name_en))
+
+        # 按英文名 A-Z 排序
+        other_regions.sort(key=lambda x: x[0])
+
+        for _, display, code, name_en in other_regions:
             item = QListWidgetItem(display)
             item.setData(Qt.UserRole, code)
             item.setData(Qt.UserRole + 1, name_en)  # 用于搜索
             list_widget.addItem(item)
-        
+
         layout.addWidget(list_widget)
-        
+
         # 搜索过滤功能
         def filter_countries(text):
             text = text.lower()
@@ -681,20 +795,20 @@ class BirdIDDockWidget(QDockWidget):
                 en_name = (item.data(Qt.UserRole + 1) or "").lower()
                 visible = text in display_name or text in en_name
                 item.setHidden(not visible)
-        
+
         search_input.textChanged.connect(filter_countries)
-        
+
         button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         button_box.accepted.connect(dialog.accept)
         button_box.rejected.connect(dialog.reject)
         layout.addWidget(button_box)
-        
+
         if dialog.exec() == QDialog.Accepted:
             selected = list_widget.currentItem()
             if selected:
                 code = selected.data(Qt.UserRole)
                 display = selected.text()
-                # 添加到列表并选中
+                # 添加到下拉菜单并选中
                 existing = [self.country_combo.itemText(i) for i in range(self.country_combo.count())]
                 if display not in existing:
                     # 在"更多国家"之前插入
@@ -721,8 +835,6 @@ class BirdIDDockWidget(QDockWidget):
         self.drop_area = DropArea()
         self.drop_area.fileDropped.connect(self.on_file_dropped)
 
-        layout.addWidget(self.drop_area)
-        
         # ===== 国家/区域过滤 =====
         filter_frame = QFrame()
         filter_frame.setStyleSheet(f"""
@@ -746,7 +858,7 @@ class BirdIDDockWidget(QDockWidget):
         country_row.addWidget(country_label)
         
         self.country_combo = QComboBox()
-        self.country_combo.addItems(list(self.country_list.keys()))
+        self._populate_country_combo()
         self.country_combo.setStyleSheet(f"""
             QComboBox {{
                 background-color: {COLORS['bg_input']};
@@ -768,32 +880,19 @@ class BirdIDDockWidget(QDockWidget):
         filter_layout.addLayout(country_row)
         
         # 区域选择行
-        region_row = QHBoxLayout()
-        region_label = QLabel(self.i18n.t("birdid.region"))
-        region_label.setStyleSheet(f"""
-            color: {COLORS['text_tertiary']};
-            font-size: 11px;
-        """)
-        region_row.addWidget(region_label)
+        # 区域选择行 (V4.2: 二级区域已移除，隐藏整行)
+        # region_row = QHBoxLayout()
+        # region_label = QLabel(self.i18n.t("birdid.region"))
+        # ... (label styling removed) ...
+        # region_row.addWidget(region_label)
         
         self.region_combo = QComboBox()
         self.region_combo.addItem(self.i18n.t("birdid.region_entire_country"))
-        self.region_combo.setStyleSheet(f"""
-            QComboBox {{
-                background-color: {COLORS['bg_input']};
-                border: 1px solid {COLORS['border_subtle']};
-                border-radius: 4px;
-                padding: 4px 8px;
-                color: {COLORS['text_secondary']};
-                font-size: 11px;
-            }}
-            QComboBox:hover {{
-                border-color: {COLORS['accent']};
-            }}
-        """)
+        self.region_combo.hide() # 隐藏
         self.region_combo.currentTextChanged.connect(self._on_region_changed)
-        region_row.addWidget(self.region_combo, 1)
-        filter_layout.addLayout(region_row)
+        
+        # region_row.addWidget(self.region_combo, 1)
+        # filter_layout.addLayout(region_row)
         
         # V4.2: 移除 eBird 过滤开关（默认启用，选择"全球"可禁用）
         # V4.2: 移除自动识别开关（已移到主界面的"识鸟"按钮）
@@ -807,6 +906,7 @@ class BirdIDDockWidget(QDockWidget):
         self.auto_identify_checkbox.hide()
         
         layout.addWidget(filter_frame)
+        layout.addWidget(self.drop_area)
 
         # 图片预览（初始隐藏，支持拖放替换）
         self.preview_label = DropPreviewLabel()
@@ -821,6 +921,7 @@ class BirdIDDockWidget(QDockWidget):
         self.preview_label.fileDropped.connect(self.on_file_dropped)
         self.preview_label.hide()
         self._current_pixmap = None  # 保存原始 pixmap 用于自适应缩放
+        self._result_crop_pixmap = None  # 保存识别完成的裁剪图，用于结果卡片点击恢复
         layout.addWidget(self.preview_label)
 
         # 文件名显示
@@ -877,7 +978,7 @@ class BirdIDDockWidget(QDockWidget):
 
         self.results_scroll = QScrollArea()
         self.results_scroll.setWidgetResizable(True)
-        self.results_scroll.setMaximumHeight(350)  # 足够显示3-4个候选
+        self.results_scroll.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.results_scroll.setStyleSheet(f"""
             QScrollArea {{
                 border: none;
@@ -894,7 +995,27 @@ class BirdIDDockWidget(QDockWidget):
 
         results_layout.addWidget(self.results_scroll)
         self.results_frame.hide()
-        layout.addWidget(self.results_frame)
+
+        # 占位区：初始可见，有结果时隐藏
+        self.placeholder_frame = QFrame()
+        self.placeholder_frame.setStyleSheet(f"""
+            QFrame {{
+                background-color: {COLORS['bg_elevated']};
+                border-radius: 10px;
+            }}
+        """)
+        ph_layout = QVBoxLayout(self.placeholder_frame)
+        ph_layout.setAlignment(Qt.AlignCenter)
+        ph_label = QLabel("拖入鸟类照片\n识别结果将显示在这里")
+        ph_label.setAlignment(Qt.AlignCenter)
+        ph_label.setStyleSheet(f"""
+            color: {COLORS['text_muted']};
+            font-size: 12px;
+        """)
+        ph_layout.addWidget(ph_label)
+        layout.addWidget(self.placeholder_frame, 1)  # stretch=1，与 results_frame 同级
+
+        layout.addWidget(self.results_frame, 1)  # stretch=1，填满剩余空间
 
         # 操作按钮
         btn_layout = QHBoxLayout()
@@ -927,7 +1048,6 @@ class BirdIDDockWidget(QDockWidget):
         self.status_label = QLabel("")
         self.status_label.hide()
 
-        layout.addStretch()
         self.setWidget(container)
 
 
@@ -1091,59 +1211,146 @@ class BirdIDDockWidget(QDockWidget):
         if self._current_pixmap is not None and self.preview_label.isVisible():
             self._scale_preview()
 
-    def update_crop_preview(self, debug_img):
+    # 对焦状态键映射（photo_processor 内部值 → i18n key）
+    _FOCUS_STATUS_I18N = {
+        'BEST':  'rating_engine.focus_best',
+        'GOOD':  'rating_engine.focus_good',
+        'BAD':   'rating_engine.focus_bad',
+        'WORST': 'rating_engine.focus_worst',
+    }
+    # 对焦状态颜色
+    _FOCUS_STATUS_COLOR = {
+        'BEST':  '#00e5a0',  # 绿
+        'GOOD':  '#7ec8e3',  # 蓝绿
+        'BAD':   '#f0a500',  # 橙
+        'WORST': '#e05c5c',  # 红
+    }
+
+    def update_crop_preview(self, debug_img, focus_status=None):
         """
-        V4.2: 接收选片过程中的裁剪预览图像并显示
+        V4.2: 接收选片过程中的裁剪预览图像并显示，同时在结果区更新对焦状态文字
         Args:
             debug_img: BGR numpy 数组 (带标注的鸟类裁剪图)
+            focus_status: 对焦状态键 "BEST"/"GOOD"/"BAD"/"WORST" 或 None
         """
         try:
             import cv2
             from PySide6.QtGui import QImage
-            
+
             # BGR -> RGB
             rgb_img = cv2.cvtColor(debug_img, cv2.COLOR_BGR2RGB)
             h, w, ch = rgb_img.shape
             bytes_per_line = ch * w
-            
+
             # numpy -> QImage -> QPixmap
             q_img = QImage(rgb_img.data, w, h, bytes_per_line, QImage.Format_RGB888)
             pixmap = QPixmap.fromImage(q_img)
-            
-            # 保存并显示
+
+            # 保存并显示预览
             self._current_pixmap = pixmap
             self.preview_label.show()
             self._scale_preview()
-            
+
         except Exception as e:
             print(f"[BirdIDDock] 预览更新失败: {e}")
 
-    def show_completion_message(self, debug_dir: str):
+        # 更新结果区：清空旧内容，显示当前对焦状态
+        self.clear_results()
+        self.placeholder_frame.hide()
+        self.results_frame.show()
+
+        if focus_status and focus_status in self._FOCUS_STATUS_I18N:
+            i18n_key = self._FOCUS_STATUS_I18N[focus_status]
+            raw_text = self.i18n.t(i18n_key)
+            # i18n 值带前缀标点（"，精焦" / ", Critical Focus"），去掉它
+            display_text = raw_text.lstrip("，, ").strip()
+            color = self._FOCUS_STATUS_COLOR.get(focus_status, COLORS['text_secondary'])
+
+            focus_label = QLabel(display_text)
+            focus_label.setAlignment(Qt.AlignCenter)
+            focus_label.setStyleSheet(f"""
+                color: {color};
+                font-size: 15px;
+                font-weight: 600;
+                padding: 12px;
+                background-color: {COLORS['bg_elevated']};
+                border-radius: 8px;
+            """)
+            self.results_layout.addWidget(focus_label)
+            self.results_layout.addStretch()
+
+    def show_completion_message(self, stats: dict):
         """
-        V4.2: 处理完成后显示目录路径，隐藏预览图
+        V4.2: 处理完成后显示统计摘要，隐藏预览图
         Args:
-            debug_dir: debug_crops 目录路径
+            stats: photo_processor 返回的统计字典
         """
         # 隐藏预览图
         self.preview_label.hide()
         self._current_pixmap = None
-        
-        # 清空结果并显示完成信息
+
+        # 清空结果，切换到结果区显示完成信息
         self.clear_results()
-        
-        # 创建完成信息标签
-        from PySide6.QtWidgets import QLabel
-        
-        info_label = QLabel(f"✅ 分析完成\n\n📁 调试图目录:\n{debug_dir}")
+        self.placeholder_frame.hide()
+        self.results_frame.show()
+
+        total      = stats.get('total', 0)
+        star_3     = stats.get('star_3', 0)
+        star_2     = stats.get('star_2', 0)
+        star_1     = stats.get('star_1', 0)
+        star_0     = stats.get('star_0', 0)
+        no_bird    = stats.get('no_bird', 0)
+        total_time = stats.get('total_time', 0)
+        flying     = stats.get('flying', 0)
+        focus_precise = stats.get('focus_precise', 0)
+        bird_species  = stats.get('bird_species', [])
+
+        def pct(n):
+            return f"{n/total*100:.1f}%" if total > 0 else "—"
+
+        lines = [f"✅  分析完成  |  {total} 张  |  {total_time/60:.1f} min", ""]
+        if total > 0:
+            lines.append(f"⭐⭐⭐  {star_3:>4}  ({pct(star_3)})")
+            lines.append(f"⭐⭐    {star_2:>4}  ({pct(star_2)})")
+            lines.append(f"⭐      {star_1:>4}  ({pct(star_1)})")
+            lines.append(f"0⭐     {star_0:>4}  ({pct(star_0)})")
+            lines.append(f"❌      {no_bird:>4}  ({pct(no_bird)})")
+
+        if flying > 0 or focus_precise > 0:
+            lines.append("")
+            if flying > 0:
+                lines.append(f"🟢 飞版: {flying}")
+            if focus_precise > 0:
+                lines.append(f"🔴 精焦: {focus_precise}")
+
+        if bird_species:
+            is_chinese = self.i18n.current_lang.startswith('zh')
+            names = []
+            for sp in bird_species:
+                if isinstance(sp, dict):
+                    name = sp.get('cn_name', '') if is_chinese else sp.get('en_name', '')
+                    if not name:
+                        name = sp.get('en_name', '') or sp.get('cn_name', '')
+                else:
+                    name = str(sp)
+                if name:
+                    names.append(name)
+            if names:
+                lines.append("")
+                lines.append(f"🦜 {len(names)} 种: {', '.join(names)}")
+
+        info_label = QLabel('\n'.join(lines))
         info_label.setStyleSheet(f"""
             color: {COLORS['text_secondary']};
             font-size: 12px;
+            font-family: {FONTS['mono']};
             padding: 16px;
             background-color: {COLORS['bg_elevated']};
             border-radius: 8px;
         """)
         info_label.setWordWrap(True)
         self.results_layout.addWidget(info_label)
+        self.results_layout.addStretch()
 
     def clear_results(self):
         """清空结果区域"""
@@ -1155,22 +1362,81 @@ class BirdIDDockWidget(QDockWidget):
     def on_identify_finished(self, result: dict):
         """识别完成"""
         self.progress.hide()
+        t = self.i18n.t
 
+        # === 构建状态信息 ===
+        info_lines = []
+
+        # 1. YOLO 检测状态
+        yolo_info = result.get('yolo_info')
+        if yolo_info is not None:
+            if isinstance(yolo_info, dict) and yolo_info.get('bird_count', 1) == 0:
+                info_lines.append(t("birdid.info_yolo_fail"))
+            else:
+                info_lines.append(t("birdid.info_yolo_ok"))
+
+        # 2. 地理过滤状态
+        gps_info = result.get('gps_info')
+        ebird_info = result.get('ebird_info')
+
+        if gps_info and gps_info.get('latitude'):
+            # GPS 过滤生效
+            count = ebird_info.get('species_count', 0) if ebird_info else 0
+            lat = f"{gps_info['latitude']:.2f}"
+            lon = f"{gps_info['longitude']:.2f}"
+            info_lines.append(t("birdid.info_gps", lat=lat, lon=lon, count=count))
+            # GPS 回退提示（优先显示国家级回退，其次全局）
+            if ebird_info and ebird_info.get('country_fallback'):
+                country = ebird_info.get('country_code', '?')
+                info_lines.append(t("birdid.info_country_fallback", country=country))
+            elif ebird_info and ebird_info.get('gps_fallback'):
+                info_lines.append(t("birdid.info_gps_fallback", count=count))
+        elif ebird_info and ebird_info.get('enabled'):
+            # 区域过滤生效
+            region = ebird_info.get('region_code', '')
+            count = ebird_info.get('species_count', 0)
+            if region:
+                info_lines.append(t("birdid.info_region", region=region, count=count))
+            else:
+                info_lines.append(t("birdid.info_region", region="—", count=count))
+        else:
+            info_lines.append(t("birdid.info_global"))
+
+        # === 处理失败/无结果 ===
         if not result.get('success'):
-            self.status_label.setText("识别失败")
-            self.status_label.setStyleSheet(f"font-size: 11px; color: {COLORS['error']};")
+            info_lines.append(t("birdid.info_identify_fail"))
+            self._show_info_panel(info_lines)
             return
 
         results = result.get('results', [])
         if not results:
-            self.status_label.setText("未能识别")
-            self.status_label.setStyleSheet(f"font-size: 11px; color: {COLORS['warning']};")
+            # 无鸟或无结果
+            if isinstance(yolo_info, dict) and yolo_info.get('bird_count', 1) == 0:
+                info_lines.append(t("birdid.info_no_bird_hint"))
+            else:
+                info_lines.append(t("birdid.info_no_result"))
+            self._show_info_panel(info_lines)
             return
 
-        # 显示结果
+        # === 显示信息面板 + 结果卡片 ===
         self.results_frame.show()
-        self.result_cards = []  # 保存卡片引用
-        self.selected_index = 0  # 默认选中第一个
+        self.placeholder_frame.hide()
+        self.result_cards = []
+        self.selected_index = 0
+
+        # 信息标签（在结果卡片之前）
+        if info_lines:
+            info_label = QLabel('\n'.join(info_lines))
+            info_label.setWordWrap(True)
+            info_label.setStyleSheet(f"""
+                color: {COLORS['text_secondary']};
+                font-size: 11px;
+                padding: 8px 10px;
+                background-color: {COLORS['bg_elevated']};
+                border-radius: 6px;
+                line-height: 1.4;
+            """)
+            self.results_layout.addWidget(info_label)
 
         for i, r in enumerate(results, 1):
             card = ResultCard(
@@ -1179,9 +1445,7 @@ class BirdIDDockWidget(QDockWidget):
                 en_name=r.get('en_name', 'Unknown'),
                 confidence=r.get('confidence', 0)
             )
-            # 连接点击信号
             card.clicked.connect(self.on_result_card_clicked)
-            # 默认选中第一个
             if i == 1:
                 card.set_selected(True)
             self.result_cards.append(card)
@@ -1189,12 +1453,44 @@ class BirdIDDockWidget(QDockWidget):
 
         self.results_layout.addStretch()
 
+        # 用 YOLO 裁剪图替换预览（正方形）
+        cropped_pil = result.get('cropped_image')
+        if cropped_pil:
+            try:
+                from PySide6.QtGui import QImage
+                rgb = cropped_pil.convert('RGB')
+                data = rgb.tobytes('raw', 'RGB')
+                q_img = QImage(data, rgb.width, rgb.height,
+                               rgb.width * 3, QImage.Format_RGB888)
+                pixmap = QPixmap.fromImage(q_img)
+                if not pixmap.isNull():
+                    self._current_pixmap = pixmap
+                    self._result_crop_pixmap = pixmap
+                    self._scale_preview()
+            except Exception as _e:
+                print(f"[BirdIDDock] 裁剪图预览更新失败: {_e}")
+
         # 保存结果
         self.identify_results = results
 
-
         # 状态显示选中的候选
         self._update_status_label()
+
+    def _show_info_panel(self, info_lines: list):
+        """显示纯信息面板（无结果卡片时使用）"""
+        self.results_frame.show()
+        self.placeholder_frame.hide()
+        info_label = QLabel('\n'.join(info_lines))
+        info_label.setWordWrap(True)
+        info_label.setStyleSheet(f"""
+            color: {COLORS['text_secondary']};
+            font-size: 11px;
+            padding: 10px 12px;
+            background-color: {COLORS['bg_elevated']};
+            border-radius: 6px;
+            line-height: 1.5;
+        """)
+        self.results_layout.addWidget(info_label)
 
     def on_identify_error(self, error_msg: str):
         """识别出错"""
@@ -1220,7 +1516,12 @@ class BirdIDDockWidget(QDockWidget):
         
         # 更新状态标签
         self._update_status_label()
-    
+
+        # 点击结果卡片时恢复 YOLO 裁剪预览
+        if getattr(self, '_result_crop_pixmap', None):
+            self._current_pixmap = self._result_crop_pixmap
+            self._scale_preview()
+
     def _update_status_label(self):
         """更新状态标签，显示当前选中的候选"""
         if hasattr(self, 'selected_index') and hasattr(self, 'identify_results'):
@@ -1237,6 +1538,8 @@ class BirdIDDockWidget(QDockWidget):
         self.preview_label.hide()
         self.filename_label.hide()
         self.results_frame.hide()
+        self.placeholder_frame.show()
+        self._result_crop_pixmap = None
 
         self.status_label.setText("准备就绪")
         self.status_label.setStyleSheet(f"font-size: 11px; color: {COLORS['text_muted']};")

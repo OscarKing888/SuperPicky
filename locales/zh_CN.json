@@ -2,7 +2,7 @@
   "_meta": {
     "language_name": "简体中文",
     "language_code": "zh_CN",
-    "version": "4.0.5"
+    "version": "4.0.6"
   },
   "app": {
     "title": "慧眼选鸟 by 詹姆斯于震 V{version} ({hash})",
@@ -332,7 +332,9 @@
     "arg_host": "监听地址 (默认: {default})",
     "arg_port": "监听端口 (默认: {default})",
     "arg_debug": "启用调试模式",
-    "arg_no_preload": "跳过模型预加载"
+    "arg_no_preload": "跳过模型预加载",
+    "gps_fallback_warning": "GPS过滤在当前坐标无匹配（已检索{count}种），已自动切换为全球模式",
+    "country_fallback_warning": "当地分布数据无匹配，已自动回退到 eBird {country} 国家物种列表"
   },
   "ai": {
     "using_mps": "✅ 使用 MPS (Apple GPU) 加速",
@@ -498,6 +500,9 @@
     "xmp_mode_sidecar": "XMP 侧车文件",
     "xmp_mode_sidecar_hint": "生成独立 .xmp 文件，不修改原始 RAW",
     "xmp_mode_sidecar_recommend": "推荐 - 解决 Sony 图像浏览器兼容问题",
+    "write_embedded": "写入 RAW（默认）",
+    "write_sidecar": "XMP Sidecar（所有文件）",
+    "write_none": "不写入任何元数据（仅整理目录）",
     "xmp_write_mode": "元数据写入方式",
     "burst_fps": "连拍速度",
     "burst_fps_hint": "快于此速度的连续拍摄将被归为一组",
@@ -568,7 +573,7 @@
     "normalization": "锐度归一化方法，影响大小鸟之间的公平性"
   },
   "help": {
-    "welcome_title": "欢迎使用 SuperPicky V4.0.5 - 慧眼选鸟 | 比你更聪明的选片工具",
+    "welcome_title": "欢迎使用 SuperPicky V{version} - 慧眼选鸟 | 比你更聪明的选片工具",
     "usage_steps_title": "使用步骤：",
     "step1": "点击'浏览'选择照片目录（支持RAW/JPG）",
     "step2": "调整三星与精选参数（可选，推荐默认值）",
@@ -693,7 +698,7 @@
   "about": {
     "window_title": "关于",
     "subtitle": "AI 智能选片助手",
-    "content": "开发者\n詹姆斯·于震 (James Yu)\n澳大利亚华裔职业摄影师\n《詹姆斯的风光摄影笔记》三部曲作者\n\n模型训练：Jordan Yu\n开发团队：小平, Lyapunov, osk.sh\n\n开源模型\nYOLO11 - 鸟类检测 (AGPL-3.0)\nTOPIQ - 美学评分\n  作者: Chaofeng Chen 等 (IEEE TIP 2024)\n  github.com/chaofengc/IQA-PyTorch\n  许可证: CC BY-NC-SA 4.0\n\n© 2024-2025 詹姆斯·于震"
+    "content": "开发者\n詹姆斯·于震 (James Yu)\n澳大利亚华裔职业摄影师\n《詹姆斯的风光摄影笔记》三部曲作者\n\n模型训练：Jordan Yu\n开发团队：小平, Lyapunov, osk.sh\n\n开源模型\nYOLO11 - 鸟类检测 by Ultralytics\nOSEA - 鸟类识别 by Sun Jiao\nTOPIQ - 美学评分 by Chaofeng Chen et al.\n\n许可证: GPL-3.0\n© 2024-2025 詹姆斯·于震"
   },
   "birdid": {
     "title": "鸟类识别",
@@ -732,11 +737,55 @@
     "country_nl": "荷兰",
     "country_es": "西班牙",
     "country_gb": "英国",
+    "country_ar": "阿根廷",
+    "country_ch": "瑞士",
+    "country_cl": "智利",
+    "country_co": "哥伦比亚",
+    "country_ec": "厄瓜多尔",
+    "country_eg": "埃及",
+    "country_fi": "芬兰",
+    "country_gr": "希腊",
+    "country_ke": "肯尼亚",
+    "country_lk": "斯里兰卡",
+    "country_ma": "摩洛哥",
+    "country_mg": "马达加斯加",
+    "country_mn": "蒙古",
+    "country_mx": "墨西哥",
+    "country_no": "挪威",
+    "country_np": "尼泊尔",
+    "country_pe": "秘鲁",
+    "country_ph": "菲律宾",
+    "country_pl": "波兰",
+    "country_pt": "葡萄牙",
+    "country_ru": "俄罗斯",
+    "country_se": "瑞典",
+    "country_sg": "新加坡",
+    "country_th": "泰国",
+    "country_tz": "坦桑尼亚",
+    "country_ua": "乌克兰",
+    "country_vn": "越南",
+    "country_za": "南非",
+    "continent_af": "非洲",
+    "continent_as": "亚洲",
+    "continent_eu": "欧洲",
+    "continent_na": "北美洲",
+    "continent_sa": "南美洲",
+    "continent_oc": "大洋洲",
     "region_entire_country": "整个国家",
     "search_country_placeholder": "搜索国家...",
     "country_dialog_title": "选择国家",
     "country_prompt_title": "选择识别区域",
-    "country_prompt_message": "当前使用「自动检测 GPS」模式。\n\n如果您的照片没有 GPS 信息，建议选择国家/地区以获得更准确的识别结果。\n\n是否现在选择？"
+    "country_prompt_message": "当前使用「自动检测 GPS」模式。\n\n如果您的照片没有 GPS 信息，建议选择国家/地区以获得更准确的识别结果。\n\n是否现在选择？",
+    "info_yolo_ok": "慧眼: 检测到鸟类",
+    "info_yolo_fail": "慧眼: 未检测到鸟类",
+    "info_gps": "GPS: {lat}, {lon} | {count}",
+    "info_gps_fallback": "⚠️ 当地无匹配，已切换全球模式（提示：可在上方选「全球模式」固定此设置）",
+    "info_country_fallback": "⚠️ 当地无精确匹配，使用 eBird {country} 国家鸟种过滤",
+    "info_region": "区域: {region} | {count}",
+    "info_global": "全球模式（无地理过滤）",
+    "info_no_bird_hint": "建议降低检测敏感度或重新拍摄",
+    "info_identify_fail": "识别失败",
+    "info_no_result": "未能识别"
   },
   "rating_engine": {
     "reject_no_bird": "未检测到鸟类",
@@ -792,6 +841,7 @@
     "gps_info": "🌍 GPS位置: {info}",
     "ebird_info": "🗺️  eBird过滤: {region} ({count} 种)",
     "no_bird": "⚠️  未能识别出鸟类",
+    "no_bird_hint": "💡 建议：降低检测敏感度或重新拍摄",
     "result_title": "\n🐦 识别结果 (Top-{count}):",
     "confidence_skip": "  ⚠️  置信度 {confidence:.1f}% < {threshold}%，跳过写入",
     "exif_success": "  ✅ EXIF写入成功",

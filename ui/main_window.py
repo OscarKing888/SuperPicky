@@ -78,7 +78,7 @@ class WorkerSignals(QObject):
     log = Signal(str, str)  # message, tag
     finished = Signal(dict)
     error = Signal(str)
-    crop_preview = Signal(object)  # V4.2: 发送裁剪预览图像 (numpy array BGR)
+    crop_preview = Signal(object, object)  # V4.2: 发送裁剪预览图像 (numpy array BGR) + focus_status str
     update_check_done = Signal(bool, object)  # V4.2: 更新检测完成 (has_update, update_info)
 
 
@@ -267,8 +267,8 @@ class WorkerThread(threading.Thread):
             self.signals.progress.emit(int(value))
 
         # V4.2: 裁剪预览回调
-        def crop_preview_callback(debug_img):
-            self.signals.crop_preview.emit(debug_img)
+        def crop_preview_callback(debug_img, focus_status=None):
+            self.signals.crop_preview.emit(debug_img, focus_status)
 
         callbacks = ProcessingCallbacks(
             log=log_callback,
@@ -1339,10 +1339,9 @@ class SuperPickyMainWindow(QMainWindow):
         # 显示 Lightroom 指南
         self._show_lightroom_guide()
 
-        # V4.2: 通知 BirdIDDock 显示完成信息
+        # V4.2: 通知 BirdIDDock 显示完成信息（传入 stats 替代 debug_dir）
         if hasattr(self, 'birdid_dock') and self.birdid_dock:
-            debug_dir = os.path.join(self.directory_path, ".superpicky", "cache", "crop_debug")
-            self.birdid_dock.show_completion_message(debug_dir)
+            self.birdid_dock.show_completion_message(stats)
 
         # 播放完成音效
         self._play_completion_sound()
@@ -1815,8 +1814,9 @@ class SuperPickyMainWindow(QMainWindow):
     def _show_initial_help(self):
         """显示初始帮助信息"""
         t = self.i18n.t
+        from constants import APP_VERSION
         help_text = f"""━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  {t("help.welcome_title")}
+  {t("help.welcome_title", version=APP_VERSION)}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 {t("help.usage_steps_title")}
@@ -2304,13 +2304,16 @@ class SuperPickyMainWindow(QMainWindow):
                 return
         
         # 不匹配任何预设，切换到自选模式
+        # 不匹配任何预设，切换到自选模式
         if self.config.skill_level != "custom":
             self.config.set_skill_level("custom")
-            self.config.set_custom_sharpness(current_sharpness)
-            self.config.set_custom_aesthetics(current_aesthetics)
-            self.config.save()
             self._update_skill_level_label("custom")
-            print(f"🎛️ 已切换到自选模式: 锐度={current_sharpness}, 美学={current_aesthetics}")
+            print(f"🎛️ 已切换到自选模式")
+            
+        # 始终更新自选值并保存
+        self.config.set_custom_sharpness(current_sharpness)
+        self.config.set_custom_aesthetics(current_aesthetics)
+        self.config.save()
     
     def _update_skill_level_label(self, level_key: str):
         """更新主界面的水平显示标签"""

@@ -1,8 +1,8 @@
 # SuperPicky - AI Bird Photo Culling Tool 🦅
 
-[![Version](https://img.shields.io/badge/version-4.0.5-blue.svg)](https://github.com/jamesphotography/SuperPicky)
+[![Version](https://img.shields.io/badge/version-4.0.6-blue.svg)](https://github.com/jamesphotography/SuperPicky)
 [![Platform](https://img.shields.io/badge/platform-macOS%20|%20Windows-lightgrey.svg)](https://github.com/jamesphotography/SuperPicky/releases)
-[![License](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
 
 [**中文文档 (Chinese)**](README_zh.md) | [**Release Notes**](RELEASE_NOTES.md)
 
@@ -50,16 +50,22 @@ Automatically set thresholds based on your experience:
 ## 📥 Downloads
 
 ### macOS
-**Apple Silicon (M1/M2/M3/M4)**
-- [GitHub Download](https://github.com/jamesphotography/SuperPicky/releases/download/v4.0.5/SuperPicky_arm64_V4.0.5.dmg)
-- [Google Drive (Mirror)](https://drive.google.com/file/d/1ykFNcV9rOpp_w04lOer0dyel7chGkS_Q/view?usp=sharing)
-- [Baidu Netdisk](https://pan.baidu.com/s/1QcBZvhwYn0W2n_vkA4gNaA?pwd=mx69) Code: mx69
+**Apple Silicon (M1/M2/M3/M4) (v4.0.6 Beta)**
+- [GitHub Download](https://github.com/jamesphotography/SuperPicky/releases/download/v4.0.6/SuperPicky_v4.0.6.dmg)
+- [Google Drive (Mirror)](https://drive.google.com/file/d/1vwKMcXcZQHYSalOyXg3grOV2wYFu2W8_/view?usp=sharing)
+- [Baidu Netdisk](https://pan.baidu.com/s/1CR1OsRRorAwC0vI5xqw7Rw?pwd=mix5) Code: mix5
 
-**Intel (Pre-2020 Mac)**
-- [GitHub Download](https://github.com/jamesphotography/SuperPicky/releases/download/v4.0.5/SuperPicky_v4.0.5_Intel.dmg)
+**Intel (Pre-2020 Mac) (v4.0.6 Beta)**
+- [GitHub Download](https://github.com/jamesphotography/SuperPicky/releases/download/v4.0.6/SuperPicky_v4.0.6_Intel.dmg)
+- [Google Drive (Mirror)](https://drive.google.com/file/d/1eKw_02YlsC9Yrfi1VxOxAX6xSMzIDdQa/view?usp=drive_link)
+- [Baidu Netdisk](https://pan.baidu.com/s/1hMW47CCJKaKtjtqgTiep8g?pwd=6cpu) Code: 6cpu
 
-### Windows (v4.0.4)
-*(See release page for Windows links)*
+### Windows (v4.0.5)
+**CUDA-GPU Version**
+- [Google Drive (Mirror)](https://drive.google.com/file/d/17-dFw2pZKXn53zmYAZ7HQNHTyndCT76E/view?usp=drive_link)
+- [Baidu Netdisk](https://pan.baidu.com/s/14tnSXnI2LIeZf4egu4xxNg?pwd=jfuz) Code: jfuz
+- [Google Drive (Mirror)](https://drive.google.com/file/d/17-dFw2pZKXn53zmYAZ7HQNHTyndCT76E/view?usp=drive_link)
+
 
 ---
 
@@ -85,5 +91,9 @@ Automatically set thresholds based on your experience:
 
 ## 📄 License
 
-Open sourced under **AGPL-3.0 License**.
-TOPIQ weights are **CC-BY-NC-SA 4.0** (Non-commercial use only).
+Open sourced under **GPL-3.0 License**.
+
+This project uses:
+- **YOLO11** by Ultralytics
+- **OSEA** by Sun Jiao (github.com/sun-jiao/osea)
+- **TOPIQ** by Chaofeng Chen et al.

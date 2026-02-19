@@ -379,7 +379,7 @@ def recognize_bird():
         if not formatted_results:
             ebird_info = result.get('ebird_info')
             if ebird_info and ebird_info.get('enabled'):
-                region = ebird_info.get('region', 'Unknown')
+                region = ebird_info.get('region_code', 'Unknown')
                 species_count = ebird_info.get('species_count', 0)
                 error_msg = t("server.ebird_filter_error", region=region, species_count=species_count)
                 print(f"[API] ⚠️  {error_msg}")
@@ -401,6 +401,15 @@ def recognize_bird():
             'gps_info': result.get('gps_info'),
             'ebird_info': result.get('ebird_info')
         }
+
+        # 回退警告（优先国家级，其次全局）
+        ebird_info = result.get('ebird_info') or {}
+        if ebird_info.get('country_fallback'):
+            country = ebird_info.get('country_code', '?')
+            response['warning'] = t("server.country_fallback_warning", country=country)
+        elif ebird_info.get('gps_fallback'):
+            species_count = ebird_info.get('species_count', 0)
+            response['warning'] = t("server.gps_fallback_warning", count=species_count)
 
         # 如果照片有 GPS 信息，同步检测到的区域到主界面设置
         gps_info = result.get('gps_info')

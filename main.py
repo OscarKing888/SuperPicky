@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 SuperPicky - PySide6 版本入口点
-Version: 4.0.5 - Burst Logic Optimization
+Version: 4.0.6 - Country Selection Simplification
 """
 
 import sys

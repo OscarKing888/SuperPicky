@@ -154,19 +154,16 @@ class AboutDialog(QDialog):
         """获取关于内容"""
         if self.i18n:
             return self.i18n.t("about.content")
-        return """James Yu (詹姆斯·于震)
+        return """James Yu
 Australian-Chinese Professional Photographer, Author of "James' Landscape Photography Notes" Trilogy
-
 
 Model Training: Jordan Yu
 Development Team: Xiaoping, Lyapunov, osk.sh
 
 Open Source Models
-YOLO11 - Bird Detection (AGPL-3.0)
-TOPIQ - Aesthetic Scoring by Chaofeng Chen et al. (IEEE TIP 2024)
-  github.com/chaofengc/IQA-PyTorch
-  License: CC BY-NC-SA 4.0
+YOLO11 - Bird Detection by Ultralytics
+OSEA - Bird Classification by Sun Jiao
+TOPIQ - Aesthetic Scoring by Chaofeng Chen et al.
 
-
-
+License: GPL-3.0
 © 2024-2025 James Yu"""

@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="utf-8">
+    <title>慧眼选鸟 SuperPicky V4.0.4 安装与使用指南</title>
+    <style>
+        @media print {
+            body {
+                -webkit-print-color-adjust: exact;
+            }
+        }
+
+        body {
+            font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            line-height: 1.8;
+            color: #333;
+        }
+
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+
+        h2 {
+            color: #34495e;
+            margin-top: 30px;
+            border-left: 4px solid #3498db;
+            padding-left: 10px;
+        }
+
+        h3 {
+            color: #7f8c8d;
+        }
+
+        .version {
+            color: #7f8c8d;
+            font-size: 0.9em;
+        }
+
+        .highlight {
+            background: #e8f4f8;
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+
+        .warning {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 15px 0;
+        }
+
+        .info {
+            background: #e8f4f8;
+            border-left: 4px solid #3498db;
+            padding: 15px;
+            margin: 15px 0;
+        }
+
+        .success {
+            background: #d4edda;
+            border-left: 4px solid #28a745;
+            padding: 15px;
+            margin: 15px 0;
+        }
+
+        code {
+            background: #f5f5f5;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: Monaco, Consolas, monospace;
+        }
+
+        pre {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+        }
+
+        ul,
+        ol {
+            padding-left: 25px;
+        }
+
+        li {
+            margin: 8px 0;
+        }
+
+        .step {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 15px 0;
+        }
+
+        .step-num {
+            display: inline-block;
+            width: 30px;
+            height: 30px;
+            background: #3498db;
+            color: white;
+            text-align: center;
+            line-height: 30px;
+            border-radius: 50%;
+            margin-right: 10px;
+        }
+
+        footer {
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            color: #7f8c8d;
+            font-size: 0.9em;
+            text-align: center;
+        }
+
+        .new-badge {
+            background: #e74c3c;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 0.8em;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+        }
+
+        th,
+        td {
+            padding: 12px;
+            border: 1px solid #ddd;
+            text-align: left;
+        }
+
+        th {
+            background: #f5f5f5;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>🦅 慧眼选鸟 SuperPicky</h1>
+    <p class="version">版本 4.0.4 · 安装与使用指南</p>
+
+    <h2>✨ V4.0.4 新功能</h2>
+    <ul>
+        <li><strong>⚙️ 摄影水平预设</strong> - 为初学者/进阶/大师提供不同的选片阈值</li>
+        <li><strong>📸 智能连拍合并</strong> - 自动将连拍组照片合并至该组最高评分照片的目录（少于4张不视为连拍）</li>
+        <li><strong>🐦 AI 鸟种识别</strong> - 自动识别全球 11,000+ 鸟种，智能写入元数据</li>
+        <li><strong>📊 ISO 锐度归一化</strong> - 针对高 ISO 照片优化锐度评分算法</li>
+        <li><strong>⚡️ 性能优化</strong> - 优化 ExifTool 调用，大批量处理速度提升</li>
+    </ul>
+
+    <h2>💻 系统要求</h2>
+    <ul>
+        <li>macOS 11.0 (Big Sur) 或更高版本</li>
+        <li>Apple Silicon (M1/M2/M3/M4) 或 Intel 处理器</li>
+        <li>约 2GB 可用磁盘空间</li>
+        <li>Lightroom Classic 2020 或更高版本（使用插件时）</li>
+    </ul>
+
+    <h2>📦 安装步骤</h2>
+
+    <div class="step">
+        <p><span class="step-num">1</span><strong>双击安装包</strong></p>
+        <p>双击 <code>SuperPicky_v4.0.4_Installer.pkg</code> 开始安装</p>
+    </div>
+
+    <div class="step">
+        <p><span class="step-num">2</span><strong>按向导完成安装</strong></p>
+        <p>点击「继续」→「同意」→「安装」，输入管理员密码确认</p>
+    </div>
+
+    <div class="step">
+        <p><span class="step-num">3</span><strong>安装完成</strong></p>
+        <p>安装器会自动完成以下操作：</p>
+        <ul>
+            <li>安装主程序到 <code>/Applications/SuperPicky.app</code></li>
+            <li>安装 Lightroom 插件到 <code>~/Library/Application Support/Adobe/Lightroom/Modules/</code></li>
+        </ul>
+    </div>
+
+    <div class="info">
+        <strong>💡 首次运行提示：</strong>首次打开应用需要 10-30 秒加载 AI 模型，请耐心等待。
+    </div>
+
+    <h2>🚀 快速开始</h2>
+
+    <h3>主程序使用</h3>
+    <ol>
+        <li>从「启动台」或「应用程序」文件夹打开<span class="highlight">SuperPicky</span></li>
+        <li>拖入包含鸟类照片的文件夹（支持 RAW 和 JPG）</li>
+        <li>选择摄影水平预设（可选）</li>
+        <li>点击「开始处理」</li>
+        <li>等待 AI 评分完成，照片会自动按星级分类</li>
+    </ol>
+
+    <h3>Lightroom 插件使用 <span class="new-badge">V4</span></h3>
+    <ol>
+        <li>先启动「SuperPicky」主程序，确保<span class="highlight">识鸟 API</span>开关已开启</li>
+        <li>打开 Lightroom Classic</li>
+        <li>选中一张或多张鸟类照片</li>
+        <li>菜单：<code>图库 → 增效工具 → 慧眼选鸟 - 识别当前照片</code></li>
+        <li>从识别结果列表中选择正确的鸟种</li>
+        <li>点击「写入 EXIF」将结果写入照片元数据</li>
+    </ol>
+
+    <div class="warning">
+        <strong>⚠️ 重要提示：</strong>使用 Lightroom 插件前，必须先启动「SuperPicky」主程序并确保「识鸟 API」已开启！
+    </div>
+
+    <h3>命令行工具使用 <span class="new-badge">CLI</span></h3>
+    <pre><code># 处理照片目录
+python superpicky_cli.py process ~/Photos/Birds
+
+# 自定义阈值
+python superpicky_cli.py process ~/Photos/Birds -s 600 -n 5.2
+
+# 处理时自动识别鸟种
+python superpicky_cli.py process ~/Photos/Birds --auto-identify
+
+# 识别单张照片
+python superpicky_cli.py identify ~/Photos/bird.jpg
+
+# 识别并写入 EXIF
+python superpicky_cli.py identify bird.NEF --write-exif
+
+# 重置目录
+python superpicky_cli.py reset ~/Photos/Birds
+
+# 重新评星
+python superpicky_cli.py restar ~/Photos/Birds -s 700 -n 5.5
+
+# 查看目录信息
+python superpicky_cli.py info ~/Photos/Birds</code></pre>
+
+    <h2>🔧 手动安装 Lightroom 插件</h2>
+    <p>如果自动安装失败，可以手动安装：</p>
+    <ol>
+        <li>打开 Lightroom Classic</li>
+        <li>选择菜单「文件」→「增效工具管理器」</li>
+        <li>点击左下角「添加」按钮</li>
+        <li>导航到：<code>~/Library/Application Support/Adobe/Lightroom/Modules/SuperBirdID.lrplugin</code></li>
+        <li>点击「完成」</li>
+    </ol>
+
+    <div class="info">
+        <strong>💡 找不到 Modules 文件夹？</strong><br>
+        打开 Finder → 前往 → 前往文件夹 → 粘贴上述路径
+    </div>
+
+    <h2>⭐ 评分说明</h2>
+    <table>
+        <tr>
+            <th>星级</th>
+            <th>含义</th>
+            <th>标记</th>
+        </tr>
+        <tr>
+            <td style="text-align: center;">⭐⭐⭐</td>
+            <td>优选照片，锐度和美学都达标</td>
+            <td>可能获得 Pick 精选旗标</td>
+        </tr>
+        <tr>
+            <td style="text-align: center;">⭐⭐</td>
+            <td>良好照片，锐度或美学其一达标</td>
+            <td>-</td>
+        </tr>
+        <tr>
+            <td style="text-align: center;">⭐</td>
+            <td>普通照片，有鸟但未达标</td>
+            <td>-</td>
+        </tr>
+        <tr>
+            <td style="text-align: center;">0</td>
+            <td>无鸟或质量差，建议删除</td>
+            <td>Reject 排除旗标</td>
+        </tr>
+    </table>
+
+    <h3>颜色标签说明</h3>
+    <table>
+        <tr>
+            <th>颜色</th>
+            <th>含义</th>
+        </tr>
+        <tr>
+            <td style="color: green;">🟢 Green</td>
+            <td>飞鸟照片</td>
+        </tr>
+        <tr>
+            <td style="color: red;">🔴 Red</td>
+            <td>精焦照片（对焦点在鸟头上）</td>
+        </tr>
+        <tr>
+            <td style="color: purple;">🟣 Purple</td>
+            <td>连拍组最佳帧</td>
+        </tr>
+    </table>
+
+    <h2>📊 元数据字段映射</h2>
+    <p>SuperPicky 将评分信息写入以下 EXIF/XMP 字段，方便在 Lightroom 中排序：</p>
+    <table>
+        <tr>
+            <th>字段</th>
+            <th>内容</th>
+            <th>用途</th>
+        </tr>
+        <tr>
+            <td><code>XMP:City</code></td>
+            <td>锐度值 (000.00 - 999.99)</td>
+            <td>按「城市」排序 = 按锐度排序</td>
+        </tr>
+        <tr>
+            <td><code>XMP:State</code></td>
+            <td>美学评分 (00.00 - 10.00)</td>
+            <td>按「省/州」排序 = 按美学排序</td>
+        </tr>
+        <tr>
+            <td><code>XMP:Country</code></td>
+            <td>对焦状态（精焦/合焦/偏移/失焦）</td>
+            <td>筛选对焦质量</td>
+        </tr>
+        <tr>
+            <td><code>IPTC:Title</code></td>
+            <td>鸟种名称（中/英/学名）</td>
+            <td>显示鸟种信息</td>
+        </tr>
+        <tr>
+            <td><code>IPTC:Keywords</code></td>
+            <td>鸟种分类信息</td>
+            <td>搜索和筛选</td>
+        </tr>
+        <tr>
+            <td><code>IPTC:Caption</code></td>
+            <td>鸟种简介</td>
+            <td>显示鸟种描述</td>
+        </tr>
+    </table>
+
+    <h2>❓ 常见问题</h2>
+
+    <h3>首次打开提示"无法验证开发者"</h3>
+    <div class="info">
+        右键点击应用 → 选择「打开」→ 在弹出窗口中点击「打开」
+    </div>
+
+    <h3>Lightroom 插件无法连接</h3>
+    <div class="info">
+        确保「SuperPicky」主程序正在运行，且「识鸟 API」开关已开启。如果仍无法连接，尝试重启主程序。
+    </div>
+
+    <h3>Lightroom 中看不到评分和旗标</h3>
+    <div class="info">
+        选中所有照片 → 菜单「元数据」→「从文件读取元数据」
+    </div>
+
+    <h3>颜色标签不显示（中文版 Lightroom）</h3>
+    <div class="info">
+        菜单「元数据」→「颜色标签集」→「编辑...」→ 将绿色标签名称改为 <code>Green</code>，红色改为 <code>Red</code>
+    </div>
+
+    <h3>如何重置处理结果</h3>
+    <div class="info">
+        重新选择该目录，系统会检测到历史记录并询问是否重置。点击「是」将恢复所有文件位置并清除元数据。
+    </div>
+
+    <h3>如何在后台运行</h3>
+    <div class="info">
+        点击主窗口的最小化按钮或关闭窗口，应用会最小化到菜单栏。点击菜单栏图标可以显示窗口或退出。
+    </div>
+
+    <h2>📱 支持的文件格式</h2>
+    <p><strong>RAW 格式：</strong>NEF, CR2, CR3, ARW, RAF, ORF, RW2, PEF, DNG, 3FR, IIQ</p>
+    <p><strong>JPEG 格式：</strong>JPG, JPEG</p>
+
+    <footer>
+        <p>慧眼选鸟 SuperPicky V4.0.4</p>
+        <p>© 2024-2026 James Zhen Yu · <a href="https://github.com/jamesphotography/SuperPicky">GitHub</a> · <a
+                href="https://superpicky.jamesphotography.com.au/">官网</a></p>
+    </footer>
+</body>
+
+</html>

@@ -30,8 +30,18 @@ def print_banner():
 
 def identify_single(args, image_path: str) -> dict:
     """识别单张图片"""
-    from birdid.bird_identifier import identify_bird, YOLO_AVAILABLE
-    
+    model_type = getattr(args, 'model', 'birdid2024')
+
+    if model_type == 'osea':
+        return identify_single_osea(args, image_path)
+    else:
+        return identify_single_birdid2024(args, image_path)
+
+
+def identify_single_birdid2024(args, image_path: str) -> dict:
+    """使用 birdid2024 模型识别"""
+    from birdid.bird_identifier import identify_bird
+
     result = identify_bird(
         image_path,
         use_yolo=args.yolo,
@@ -41,7 +51,61 @@ def identify_single(args, image_path: str) -> dict:
         region_code=args.region,
         top_k=args.top
     )
-    
+
+    return result
+
+
+def identify_single_osea(args, image_path: str) -> dict:
+    """使用 OSEA 模型识别"""
+    from birdid.osea_classifier import get_osea_classifier
+    from birdid.bird_identifier import load_image, get_yolo_detector, YOLO_AVAILABLE
+
+    result = {
+        'success': False,
+        'image_path': image_path,
+        'results': [],
+        'yolo_info': None,
+        'model': 'osea',
+        'error': None
+    }
+
+    try:
+        # 加载图像
+        image = load_image(image_path)
+
+        # YOLO 裁剪 (可选)
+        if args.yolo and YOLO_AVAILABLE:
+            width, height = image.size
+            if max(width, height) > 640:
+                detector = get_yolo_detector()
+                if detector:
+                    cropped, info = detector.detect_and_crop_bird(image)
+                    if cropped:
+                        image = cropped
+                        result['yolo_info'] = info
+                    else:
+                        # 严格模式：YOLO 未检测到鸟类，直接短路返回
+                        result['success'] = True
+                        result['results'] = []
+                        result['yolo_info'] = {'bird_count': 0}
+                        return result
+
+        # 获取 OSEA 分类器
+        classifier = get_osea_classifier()
+
+        # 预测
+        use_tta = getattr(args, 'tta', False)
+        if use_tta:
+            predictions = classifier.predict_with_tta(image, top_k=args.top)
+        else:
+            predictions = classifier.predict(image, top_k=args.top)
+
+        result['success'] = True
+        result['results'] = predictions
+
+    except Exception as e:
+        result['error'] = str(e)
+
     return result
 
 
@@ -53,22 +117,33 @@ def display_result(result: dict, verbose: bool = True):
     
     if verbose:
         print(f"\n{'─' * 50}")
-        
+
+        # 显示使用的模型
+        model_name = result.get('model', 'birdid2024')
+        if model_name == 'osea':
+            print("🤖 模型: OSEA (10,964 物种)")
+
         if result.get('yolo_info'):
             print(t("cli.yolo_info", info=result['yolo_info']))
-        
+
         if result.get('gps_info'):
             gps = result['gps_info']
             print(t("cli.gps_info", info=gps['info']))
-        
+
         if result.get('ebird_info'):
             ebird = result['ebird_info']
             if ebird.get('enabled'):
-                print(t("cli.ebird_info", region=ebird.get('region', 'N/A'), count=ebird.get('species_count', 0)))
+                print(t("cli.ebird_info", region=ebird.get('region_code', 'N/A'), count=ebird.get('species_count', 0)))
+            # 回退提示（优先国家级，其次全局）
+            if ebird.get('country_fallback'):
+                print(f"⚠️  {t('server.country_fallback_warning', country=ebird.get('country_code', '?'))}")
+            elif ebird.get('gps_fallback'):
+                print(f"⚠️  {t('server.gps_fallback_warning', count=ebird.get('species_count', 0))}")
     
     results = result.get('results', [])
     if not results:
         print(t("cli.no_bird"))
+        print(t("cli.no_bird_hint"))
         return False
     
     print(t("cli.result_title", count=len(results)))
@@ -77,10 +152,13 @@ def display_result(result: dict, verbose: bool = True):
         en_name = r.get('en_name', 'Unknown')
         confidence = r.get('confidence', 0)
         ebird_match = "✓eBird" if r.get('ebird_match') else ""
-        
+        scientific_name = r.get('scientific_name', '')
+
         print(f"  {i}. {cn_name} ({en_name})")
+        if scientific_name:
+            print(f"     学名: {scientific_name}")
         print(f"     置信度: {confidence:.1f}% {ebird_match}")
-    
+
     return True
 
 
@@ -148,14 +226,19 @@ def cmd_identify(args):
         return 1
     
     # 显示设置
+    model_type = getattr(args, 'model', 'birdid2024')
+    use_tta = getattr(args, 'tta', False)
+
     print(f"\n📸 图片数量: {len(images)}")
+    print(f"🤖 模型: {model_type.upper()}" + (" + TTA" if model_type == 'osea' and use_tta else ""))
     print(f"⚙️  YOLO裁剪: {'是' if args.yolo else '否'}")
-    print(f"⚙️  GPS自动检测: {'是' if args.gps else '否'}")
-    print(f"⚙️  eBird过滤: {'是' if args.ebird else '否'}")
-    if args.country:
-        print(f"  └─ 国家: {args.country}")
-    if args.region:
-        print(f"  └─ 区域: {args.region}")
+    if model_type == 'birdid2024':
+        print(f"⚙️  GPS自动检测: {'是' if args.gps else '否'}")
+        print(f"⚙️  eBird过滤: {'是' if args.ebird else '否'}")
+        if args.country:
+            print(f"  └─ 国家: {args.country}")
+        if args.region:
+            print(f"  └─ 区域: {args.region}")
     print(f"⚙️  返回数量: {args.top}")
     if args.write_exif:
         print(f"⚙️  写入EXIF: 是 (阈值: {args.threshold}%)")
@@ -589,8 +672,10 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  %(prog)s bird.jpg                        # 识别单张图片
-  %(prog)s bird.NEF --country AU           # 指定澳大利亚过滤
+  %(prog)s bird.jpg                        # 识别单张图片 (birdid2024)
+  %(prog)s bird.jpg --model osea           # 使用 OSEA 模型识别
+  %(prog)s bird.jpg --model osea --tta     # OSEA + TTA (更准但更慢)
+  %(prog)s bird.NEF --country AU           # 指定澳大利亚过滤 (birdid2024)
   %(prog)s bird.jpg --region AU-SA         # 指定南澳州过滤
   %(prog)s *.jpg --batch --write-exif      # 批量识别并写入EXIF
   %(prog)s organize ~/Photos/Birds -y      # 按鸟种自动分目录
@@ -606,7 +691,14 @@ Examples:
     p_identify.add_argument('images', nargs='+', help='图片文件路径 (支持 glob 模式)')
     p_identify.add_argument('-t', '--top', type=int, default=5,
                            help='返回前 N 个结果 (默认: 5)')
-    
+
+    # 模型选项
+    p_identify.add_argument('--model', '-m', type=str, default='birdid2024',
+                           choices=['birdid2024', 'osea'],
+                           help='选择模型: birdid2024 (默认) 或 osea')
+    p_identify.add_argument('--tta', action='store_true',
+                           help='启用 TTA 模式 (仅 OSEA 模型，更准但更慢)')
+
     # YOLO 选项
     p_identify.add_argument('--no-yolo', action='store_false', dest='yolo',
                            help='禁用 YOLO 裁剪')

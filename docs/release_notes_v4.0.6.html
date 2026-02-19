@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="utf-8">
+    <title>SuperPicky V4.0.6 更新说明</title>
+    <style>
+        body {
+            font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            line-height: 1.8;
+            color: #333;
+            background-color: #fcfcfc;
+        }
+
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+        }
+
+        h2 {
+            color: #34495e;
+            margin-top: 40px;
+            border-left: 4px solid #3498db;
+            padding-left: 15px;
+        }
+
+        h3 {
+            color: #2c3e50;
+            margin-top: 25px;
+            font-weight: 600;
+        }
+
+        .version-date {
+            color: #7f8c8d;
+            font-size: 0.9em;
+            margin-top: -20px;
+            margin-bottom: 40px;
+        }
+
+        .feature-box {
+            background: #fff;
+            border: 1px solid #e1e4e8;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .feature-title {
+            font-size: 1.1em;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            font-weight: bold;
+            margin-right: 10px;
+            color: white;
+        }
+
+        .badge-ai {
+            background: #9b59b6;
+        }
+
+        .badge-data {
+            background: #2ecc71;
+        }
+
+        .badge-ui {
+            background: #f1c40f;
+            color: #333;
+        }
+
+        .badge-fix {
+            background: #e74c3c;
+        }
+
+        .download-btn {
+            display: inline-block;
+            background: #3498db;
+            color: white;
+            padding: 10px 20px;
+            text-decoration: none;
+            border-radius: 5px;
+            margin-right: 10px;
+            transition: background 0.2s;
+        }
+
+        .download-btn:hover {
+            background: #2980b9;
+        }
+
+        .download-section {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 30px;
+        }
+
+        code {
+            background: #f5f5f5;
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-family: Monaco, monospace;
+            font-size: 0.9em;
+            color: #e74c3c;
+        }
+
+        footer {
+            margin-top: 60px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            text-align: center;
+            color: #7f8c8d;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>🦅 SuperPicky V4.0.6 更新说明</h1>
+    <p class="version-date">发布日期：2026-02-18 · 代号：OSEA & Offline Intelligence</p>
+    <div class="intro">
+        <p>本次更新带来了<strong>完全离线的鸟种识别体验</strong>。通过集成 OSEA ResNet34 模型和 Avonet 数据库，我们彻底移除了对外部 API 的依赖，实现了更准、更快的识别与筛选。</p>
+    </div>
+    <h2>✨ 核心更新</h2>
+    <div class="feature-box">
+        <div class="feature-title"><span class="badge badge-ai">AI Model</span> OSEA ResNet34 模型集成</div>
+        <p>全新的鸟类识别引擎，基于 OSEA ResNet34 架构：</p>
+        <ul>
+            <li><strong>更高精度</strong>：大幅提升常见鸟种的识别准确率。</li>
+            <li><strong>完全本地化</strong>：模型文件 <code>models/model20240824.pth</code> 本地加载，无需联网，保护隐私。</li>
+            <li><strong>平滑迁移</strong>：无缝替代旧版 <code>birdid2024</code> 模型。</li>
+        </ul>
+    </div>
+    <div class="feature-box">
+        <div class="feature-title"><span class="badge badge-data">Data</span> 离线 Avonet 数据库</div>
+        <p>告别 API 限制，拥抱完全离线的数据查询：</p>
+        <ul>
+            <li><strong>本地筛选</strong>：集成 <code>Avonet.db</code> 数据库（100MB+），包含详尽的鸟类分布数据。</li>
+            <li><strong>零延迟</strong>：按国家/地区筛选鸟种时，不再需要等待网络响应，毫秒级出结果。</li>
+            <li><strong>可靠性</strong>：即使在无网络环境下（如野外拍摄现场），也能完整使用筛选功能。</li>
+        </ul>
+    </div>
+    <div class="feature-box">
+        <div class="feature-title"><span class="badge badge-ui">UI / UX</span> 精简的国家/地区支持</div>
+        <ul>
+            <li><strong>精选列表</strong>：将支持的国家/地区列表精简为 <strong>48 个</strong> 主要观鸟区域，移除无数据支持的选项。</li>
+            <li><strong>智能联动</strong>：选择地区后，AI 会强制在 Avonet 数据库范围内进行匹配，降低误报率。</li>
+        </ul>
+    </div>
+    <h2>📦 下载地址 (V4.0.6)</h2>
+    <div class="download-section">
+        <div style="margin-bottom: 20px;">
+            <h3 style="margin: 0 0 10px 0; font-size: 1em; color: #555;">macOS Apple Silicon (M1/M2/M3/M4)</h3>
+            <a href="https://drive.google.com/file/d/1vwKMcXcZQHYSalOyXg3grOV2wYFu2W8_/view?usp=sharing"
+                class="download-btn" target="_blank">Google Drive</a>
+            <a href="https://pan.baidu.com/s/1CR1OsRRorAwC0vI5xqw7Rw?pwd=mix5" class="download-btn" target="_blank">百度网盘
+                (提取码: mix5)</a>
+            <a href="https://github.com/jamesphotography/SuperPicky/releases/download/v4.0.6/SuperPicky_v4.0.6.dmg"
+                class="download-btn" target="_blank">GitHub</a>
+        </div>
+
+        <div style="opacity: 0.6; margin-top: 15px;">
+            <h3 style="margin: 0 0 10px 0; font-size: 1em; color: #999;">macOS Intel & Windows (即将来袭)</h3>
+            <a href="#" class="download-btn"
+                style="background-color: #95a5a6; cursor: not-allowed; pointer-events: none;">macOS Intel</a>
+            <a href="#" class="download-btn"
+                style="background-color: #95a5a6; cursor: not-allowed; pointer-events: none;">Windows</a>
+        </div>
+    </div>
+    <footer>
+        <p>慧眼选鸟 SuperPicky V4.0.6</p>
+        <p>© 2024-2026 James Zhen Yu · <a href="https://github.com/jamesphotography/SuperPicky">GitHub</a></p>
+    </footer>
+</body>
+
+</html>

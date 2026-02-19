@@ -258,24 +258,21 @@ class AdvancedSettingsDialog(QDialog):
 
         self.xmp_button_group = QButtonGroup(self)
 
-        # 选项1: 嵌入 RAW
+        # 选项1: 写入文件（嵌入）—— RadioButton + 灰色小字同行
         embedded_container = QWidget()
-        embedded_layout = QVBoxLayout(embedded_container)
-        embedded_layout.setContentsMargins(0, 8, 0, 8)
-        embedded_layout.setSpacing(4)
+        embedded_layout = QHBoxLayout(embedded_container)
+        embedded_layout.setContentsMargins(0, 6, 0, 6)
+        embedded_layout.setSpacing(8)
 
-        embedded_option = QRadioButton(self.i18n.t("advanced_settings.xmp_mode_embedded"))
+        embedded_option = QRadioButton(self.i18n.t("advanced_settings.write_embedded"))
         self.vars["xmp_embedded"] = embedded_option
         self.xmp_button_group.addButton(embedded_option, 0)
         embedded_layout.addWidget(embedded_option)
 
         embedded_hint = QLabel(self.i18n.t("advanced_settings.xmp_mode_embedded_hint"))
-        embedded_hint.setStyleSheet(f"""
-            color: {COLORS['text_muted']};
-            font-size: 11px;
-            margin-left: 24px;
-        """)
+        embedded_hint.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 11px;")
         embedded_layout.addWidget(embedded_hint)
+        embedded_layout.addStretch()
 
         xmp_layout.addWidget(embedded_container)
 
@@ -285,36 +282,43 @@ class AdvancedSettingsDialog(QDialog):
         sep.setStyleSheet(f"background-color: {COLORS['border_subtle']};")
         xmp_layout.addWidget(sep)
 
-        # 选项2: XMP 侧车文件（推荐）
+        # 选项2: XMP 侧车文件（所有文件）—— RadioButton + 灰色小字同行
         sidecar_container = QWidget()
-        sidecar_layout = QVBoxLayout(sidecar_container)
-        sidecar_layout.setContentsMargins(0, 8, 0, 8)
-        sidecar_layout.setSpacing(4)
+        sidecar_layout = QHBoxLayout(sidecar_container)
+        sidecar_layout.setContentsMargins(0, 6, 0, 6)
+        sidecar_layout.setSpacing(8)
 
-        sidecar_option = QRadioButton(self.i18n.t("advanced_settings.xmp_mode_sidecar"))
-        # 使用全局样式，移除由于覆盖样式导致的 indicator 丢失问题
+        sidecar_option = QRadioButton(self.i18n.t("advanced_settings.write_sidecar"))
         self.vars["xmp_sidecar"] = sidecar_option
         self.xmp_button_group.addButton(sidecar_option, 1)
         sidecar_layout.addWidget(sidecar_option)
 
         sidecar_hint = QLabel(self.i18n.t("advanced_settings.xmp_mode_sidecar_hint"))
-        sidecar_hint.setStyleSheet(f"""
-            color: {COLORS['text_muted']};
-            font-size: 11px;
-            margin-left: 24px;
-        """)
+        sidecar_hint.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 11px;")
         sidecar_layout.addWidget(sidecar_hint)
-
-        # 推荐标签
-        recommend_label = QLabel(self.i18n.t("advanced_settings.xmp_mode_sidecar_recommend"))
-        recommend_label.setStyleSheet(f"""
-            color: {COLORS['accent']};
-            font-size: 11px;
-            margin-left: 24px;
-        """)
-        sidecar_layout.addWidget(recommend_label)
+        sidecar_layout.addStretch()
 
         xmp_layout.addWidget(sidecar_container)
+
+        # 分隔线
+        sep2 = QFrame()
+        sep2.setFixedHeight(1)
+        sep2.setStyleSheet(f"background-color: {COLORS['border_subtle']};")
+        xmp_layout.addWidget(sep2)
+
+        # 选项3: 不写入任何元数据
+        none_container = QWidget()
+        none_layout = QHBoxLayout(none_container)
+        none_layout.setContentsMargins(0, 6, 0, 6)
+        none_layout.setSpacing(8)
+
+        none_option = QRadioButton(self.i18n.t("advanced_settings.write_none"))
+        self.vars["xmp_none"] = none_option
+        self.xmp_button_group.addButton(none_option, 2)
+        none_layout.addWidget(none_option)
+        none_layout.addStretch()
+
+        xmp_layout.addWidget(none_container)
 
         layout.addWidget(xmp_group_widget)
 
@@ -502,11 +506,13 @@ class AdvancedSettingsDialog(QDialog):
         self.vars["burst_fps"].setValue(int(self.config.burst_fps))
         self.vars["birdid_confidence"].setValue(int(self.config.birdid_confidence))
 
-        # 加载 XMP 设置
+        # 加载全局元数据写入模式设置
         try:
-            arw_mode = self.config.arw_write_mode
-            if arw_mode in ("sidecar", "auto"):
+            global_mode = self.config.get_metadata_write_mode()
+            if global_mode == "sidecar":
                 self.vars["xmp_sidecar"].setChecked(True)
+            elif global_mode == "none":
+                self.vars["xmp_none"].setChecked(True)
             else:
                 self.vars["xmp_embedded"].setChecked(True)
         except Exception:
@@ -560,10 +566,11 @@ class AdvancedSettingsDialog(QDialog):
         self.config.set_burst_fps(burst_fps)
         self.config.set_birdid_confidence(birdid_confidence)
 
-        # 保存 XMP 设置
-        xmp_mode = "sidecar" if self.vars["xmp_sidecar"].isChecked() else "embedded"
-        self.config.set_arw_write_mode(xmp_mode)
-        self.config.set_arw_write_mode(xmp_mode)
+        # 保存全局元数据写入模式设置
+        btn_id = self.xmp_button_group.checkedId()
+        mode_map = {0: "embedded", 1: "sidecar", 2: "none"}
+        global_mode = mode_map.get(btn_id, "embedded")
+        self.config.set_metadata_write_mode(global_mode)
         self.config.set_save_csv(True)
 
         # 保存预览图设置

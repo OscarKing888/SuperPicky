@@ -106,6 +106,9 @@ local function parseJSON(jsonString)
     local error_raw = string.match(jsonString, '"error"%s*:%s*"([^"]*)"')
     result.error = decodeUnicodeEscape(error_raw)
 
+    local warning_raw = string.match(jsonString, '"warning"%s*:%s*"([^"]*)"')
+    result.warning = decodeUnicodeEscape(warning_raw)
+
     return result
 end
 
@@ -386,6 +389,14 @@ LrTasks.startAsyncTask(function()
     local result = recognizePhoto(targetPhoto, DEFAULT_API_URL)
 
     if result.success and result.results and #result.results > 0 then
+        -- GPS 回退时提示用户
+        if result.warning then
+            LrDialogs.message(
+                PLUGIN_NAME,
+                result.warning,
+                "info"
+            )
+        end
         -- 显示结果选择对话框
         local selectedIndex = showResultSelectionDialog(result.results, result.photoName)
 
@@ -396,7 +407,15 @@ LrTasks.startAsyncTask(function()
             saveRecognitionResult(targetPhoto, displayName, selectedBird.description)
         end
     else
-        local errorMsg = result.error or LOC "$$$/SuperBirdID/Dialog/Unknown=Unknown"
+        local errorMsg
+        if result.error then
+            errorMsg = result.error
+        elseif result.success then
+            -- success=true 但 results=[] 表示 YOLO 未检测到鸟
+            errorMsg = LOC "$$$/SuperBirdID/Dialog/NoBirdDetected=No bird detected in this photo"
+        else
+            errorMsg = LOC "$$$/SuperBirdID/Dialog/Unknown=Unknown error"
+        end
 
         local failMsg = LOC("$$$/SuperBirdID/Message/IdentifyFail=Cannot identify bird in this photo\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\nError:\n^1\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\nPossible reasons:\n• No bird or bird unclear\n• File corrupted or unsupported\n• Model not loaded", errorMsg)
 

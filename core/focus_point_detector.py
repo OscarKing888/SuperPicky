@@ -387,12 +387,22 @@ class FocusPointDetector:
             return None
         
         # 获取合焦点索引
+        # exiftool -n 模式下 AFPointsInFocus 返回空格分隔的位掩码数组，例如 '1 0 0 0 ...'
+        # 其中值为 1 的位的下标即合焦 AF 点的索引（第0位=1 表示 AF点0合焦）
+        # 也兼容少数相机返回逗号分隔索引列表的情况
         af_points_in_focus = exif_data.get('AFPointsInFocus', '')
         focus_indices = []
-        if af_points_in_focus:
+        if af_points_in_focus is not None and str(af_points_in_focus).strip():
+            af_str = str(af_points_in_focus).strip()
             try:
-                focus_indices = [int(i.strip()) for i in str(af_points_in_focus).split(',') if i.strip().isdigit()]
-            except ValueError:
+                if ',' in af_str:
+                    # 逗号分隔的索引列表：'0,1' → [0, 1]
+                    focus_indices = [int(i.strip()) for i in af_str.split(',') if i.strip().isdigit()]
+                else:
+                    # 空格分隔的位掩码数组：'1 0 0 0 ...' → 找值为1的下标
+                    values = af_str.split()
+                    focus_indices = [i for i, v in enumerate(values) if v in ('1', '1.0')]
+            except (ValueError, IndexError):
                 focus_indices = []
         
         # 如果有合焦点，使用第一个合焦点；否则使用第一个点
@@ -958,7 +968,7 @@ def verify_focus_in_bbox(
         (sharpness_weight, topiq_weight) 权重因子元组:
         - (1.1, 1.0): 对焦点在头部区域内
         - (0.9, 1.0): 对焦点在 SEG 掩码内（但不在头部）
-        - (0.7, 0.9): 对焦点在 BBox 内（但不在 SEG）
+        - (0.8, 0.9): 对焦点在 BBox 内（但不在 SEG）
         - (0.5, 0.8): 对焦点在 BBox 外
         - (1.0, 1.0): 无对焦数据
     """
@@ -971,13 +981,13 @@ def verify_focus_in_bbox(
     # 转换对焦点为像素坐标
     img_w, img_h = img_dims
     focus_px = (int(focus.x * img_w), int(focus.y * img_h))
-    
+
     # 检查是否在头部区域内
     if head_center is not None and head_radius is not None:
         dist = math.sqrt((focus_px[0] - head_center[0])**2 + (focus_px[1] - head_center[1])**2)
         if dist <= head_radius:
             return (1.1, 1.0)  # V4.0: 对焦在头部区域，锐度+10%奖励
-    
+
     # 检查是否在 SEG 掩码内
     if seg_mask is not None:
         # 确保坐标在图像范围内
@@ -985,13 +995,13 @@ def verify_focus_in_bbox(
         if 0 <= fy < seg_mask.shape[0] and 0 <= fx < seg_mask.shape[1]:
             if seg_mask[fy, fx] > 0:
                 return (0.9, 1.0)  # 对焦在鸟身上（但不在头部），轻微惩罚
-    
+
     # 检查是否在 BBox 内
     bx, by, bw, bh = bbox
     in_bbox = (bx <= focus_px[0] <= bx + bw) and (by <= focus_px[1] <= by + bh)
     
     if in_bbox:
-        return (0.7, 0.9)  # V4.0: BBox内，锐度×0.7，美学×0.9
+        return (0.8, 0.9)  # V4.0: BBox内，锐度×0.8，美学×0.9（远距小鸟减轻惩罚）
     else:
         return (0.5, 0.8)  # V4.0: BBox外，锐度×0.5，美学×0.8
 

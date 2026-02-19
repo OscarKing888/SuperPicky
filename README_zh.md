@@ -1,8 +1,8 @@
 # SuperPicky - 慧眼选鸟 🦅
 
-[![Version](https://img.shields.io/badge/version-4.0.5-blue.svg)](https://github.com/jamesphotography/SuperPicky)
+[![Version](https://img.shields.io/badge/version-4.0.6-blue.svg)](https://github.com/jamesphotography/SuperPicky)
 [![Platform](https://img.shields.io/badge/platform-macOS%20|%20Windows-lightgrey.svg)](https://github.com/jamesphotography/SuperPicky/releases)
-[![License](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
 
 [**English Documentation**](README.md) | [**更新日志**](RELEASE_NOTES.md)
 
@@ -58,19 +58,20 @@
 ## 📥 下载安装
 
 ### macOS
-**Apple Silicon (M1/M2/M3/M4)**
-- [GitHub 下载](https://github.com/jamesphotography/SuperPicky/releases/download/v4.0.5/SuperPicky_arm64_V4.0.5.dmg) | [Google Drive](https://drive.google.com/file/d/1ykFNcV9rOpp_w04lOer0dyel7chGkS_Q/view?usp=sharing) | [百度网盘](https://pan.baidu.com/s/1QcBZvhwYn0W2n_vkA4gNaA?pwd=mx69) 提取码: mx69
+**Apple Silicon (M1/M2/M3/M4) (v4.0.6 Beta)**
+- [GitHub 下载](https://github.com/jamesphotography/SuperPicky/releases/download/v4.0.6/SuperPicky_v4.0.6.dmg) | [Google Drive](https://drive.google.com/file/d/1vwKMcXcZQHYSalOyXg3grOV2wYFu2W8_/view?usp=sharing) | [百度网盘](https://pan.baidu.com/s/1CR1OsRRorAwC0vI5xqw7Rw?pwd=mix5) 提取码: mix5
 
-**Intel (2020年前 Mac)**
-- [GitHub 下载 (v4.0.4)](https://github.com/jamesphotography/SuperPicky/releases/download/v4.0.4/SuperPicky4.0.4_Intel.dmg)
+**Intel (2020年前 Mac) (v4.0.6 Beta)**
+- [GitHub 下载](https://github.com/jamesphotography/SuperPicky/releases/download/v4.0.6/SuperPicky_v4.0.6_Intel.dmg) | [Google Drive](https://drive.google.com/file/d/1eKw_02YlsC9Yrfi1VxOxAX6xSMzIDdQa/view?usp=drive_link) | [百度网盘](https://pan.baidu.com/s/1hMW47CCJKaKtjtqgTiep8g?pwd=6cpu) 提取码: 6cpu
 
 1. 下载对应版本的 DMG 文件
 2. 双击 DMG 文件，将应用拖入 Applications
 3. 首次打开：右键点击应用选择"打开"
 
-### Windows (v4.0.4)
-- CPU (1GB): [GitHub 下载](https://github.com/jamesphotography/SuperPicky/releases/download/v4.0.4/SuperPicky4.0.4_Win64_No_CUDA.zip) | [Google Drive](https://drive.google.com/file/d/1QWfDsb4L7wMoUoo17p6iiW1L9Lf-OAEv/view?usp=sharing) | [百度网盘](https://pan.baidu.com/s/1zhWtMwAzthrLAeKxKf4SZw?pwd=2mrt) 提取码: 2mrt
-- CUDA-GPU (3.4GB): [Google Drive](https://drive.google.com/file/d/1QkBqBYxylpIlN7jByVUC3m9QEM40DYga/view?usp=sharing) | [百度网盘](https://pan.baidu.com/s/1dM79au9DpnWZQoWdUISPQA?pwd=1usg) 提取码: 1usg
+### Windows (v4.0.5)
+**CUDA-GPU Version**
+- [Google Drive](https://drive.google.com/file/d/17-dFw2pZKXn53zmYAZ7HQNHTyndCT76E/view?usp=drive_link) | [百度网盘](https://pan.baidu.com/s/14tnSXnI2LIeZf4egu4xxNg?pwd=jfuz) 提取码: jfuz
+
 
 1. 下载并解压 ZIP 文件
 2. 运行 `SuperPicky.exe`
@@ -166,15 +167,16 @@ python main.py
 
 ## 📄 许可证
 
-本软件使用 **AGPL-3.0 License** 开源。
+本软件使用 **GPL-3.0 License** 开源。
 
-- **AGPL-3.0**: 适用于 SuperPicky 主程序代码 (基于 Ultralytics YOLO 的开源要求)
-- **CC-BY-NC-SA 4.0**: 适用于包含的 TOPIQ 模型权重 (仅限非商业研究与个人使用)
+本项目使用:
+- **YOLO11** by Ultralytics
+- **OSEA** by Sun Jiao (github.com/sun-jiao/osea)
+- **TOPIQ** by Chaofeng Chen et al.
 
 这意味着：
 1. 您可以免费下载、使用和修改本软件。
-2. 如果您分发修改后的版本，必须同样开源并使用 AGPL-3.0 协议。
-3. **严禁将本软件或其组件用于商业销售或盈利目的** (受 TOPIQ 权重协议限制)。
+2. 如果您分发修改后的版本，必须同样开源并使用 GPL-3.0 协议。
 
 详见 [LICENSE](LICENSE) 文件。
 

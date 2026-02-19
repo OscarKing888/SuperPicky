@@ -93,3 +93,6 @@ advanced_config.json
 # Project specific
 promo_video/
 pkg_root/
+
+# OSEA 大模型文件（本地使用）
+models/model20240824.pth

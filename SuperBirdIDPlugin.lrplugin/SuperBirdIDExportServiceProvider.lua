@@ -156,6 +156,9 @@ local function parseJSON(jsonString)
     local error_raw = string.match(jsonString, '"error"%s*:%s*"([^"]*)"')
     result.error = decodeUnicodeEscape(error_raw)
 
+    local warning_raw = string.match(jsonString, '"warning"%s*:%s*"([^"]*)"')
+    result.warning = decodeUnicodeEscape(warning_raw)
+
     return result
 end
 
@@ -550,6 +553,14 @@ function exportServiceProvider.processRenderedPhotos( functionContext, exportCon
                 -- 批量模式：自动选择第一项
                 selectedIndex = 1
             else
+                -- 单张模式：GPS 回退时先提示用户
+                if result.warning then
+                    LrDialogs.message(
+                        PLUGIN_NAME,
+                        result.warning,
+                        "info"
+                    )
+                end
                 -- 单张模式：显示选择对话框
                 selectedIndex = showResultSelectionDialog(result.results, result.photoName)
             end
@@ -572,7 +583,15 @@ function exportServiceProvider.processRenderedPhotos( functionContext, exportCon
             end
 
         else
-            local errorMsg = result.error or "未知错误"
+            local errorMsg
+            if result.error then
+                errorMsg = result.error
+            elseif result.success then
+                -- success=true 但 results=[] 表示 YOLO 未检测到鸟
+                errorMsg = LOC "$$$/SuperBirdID/Dialog/NoBirdDetected=No bird detected in this photo"
+            else
+                errorMsg = "Unknown error"
+            end
             myLogger:info( "识别失败: " .. errorMsg )
 
             -- 仅单张模式显示错误弹窗

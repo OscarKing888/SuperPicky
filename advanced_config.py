@@ -54,6 +54,12 @@ class AdvancedConfig:
         #   inplace: 尝试 in-place 写入 ARW（可能失败）
         #   auto: 尝试 embedded/inplace，若检测到结构变化则回退 sidecar
         "arw_write_mode": "embedded",
+
+        # 全局元数据写入模式（覆盖所有文件类型）:
+        #   embedded: 默认行为（ARW 走 arw_write_mode，JPG 直写）
+        #   sidecar:  所有文件统一写 .xmp 侧车，不修改原文件
+        #   none:     跳过所有元数据写入，仅按评分整理目录
+        "metadata_write_mode": "embedded",
         
         # 临时文件管理 V4.1
         "keep_temp_files": True,        # 保留临时预览图片（统一控制 tmp JPG + debug crops）
@@ -242,6 +248,15 @@ class AdvancedConfig:
         """设置 ARW 写入策略: sidecar | embedded | inplace | auto"""
         if value in ("sidecar", "embedded", "inplace", "auto"):
             self.config["arw_write_mode"] = value
+
+    def get_metadata_write_mode(self) -> str:
+        """获取全局元数据写入模式: embedded | sidecar | none"""
+        return self.config.get("metadata_write_mode", "embedded")
+
+    def set_metadata_write_mode(self, value):
+        """设置全局元数据写入模式: embedded | sidecar | none"""
+        if value in ("embedded", "sidecar", "none"):
+            self.config["metadata_write_mode"] = value
     
     def set_skill_level(self, value):
         """设置摄影水平: beginner | intermediate | master | custom"""
