@@ -61,10 +61,8 @@ Automatically set thresholds based on your experience:
 - [Baidu Netdisk](https://pan.baidu.com/s/1oz_tZc7BARktJsVcAwSs9g?pwd=sw35) Code: sw35
 
 ### Windows
-**CUDA-GPU Version (v4.0.5)**
-- [Google Drive (Mirror)](https://drive.google.com/file/d/17-dFw2pZKXn53zmYAZ7HQNHTyndCT76E/view?usp=drive_link)
-- [Baidu Netdisk](https://pan.baidu.com/s/14tnSXnI2LIeZf4egu4xxNg?pwd=jfuz) Code: jfuz
-- [Google Drive (Mirror)](https://drive.google.com/file/d/17-dFw2pZKXn53zmYAZ7HQNHTyndCT76E/view?usp=drive_link)
+**CUDA-GPU Version (v4.0.6 Beta)**
+- [Baidu Netdisk](https://pan.baidu.com/s/1UUfnal8rT2Mizkdcs0xpwg?pwd=igew) Code: igew
 
 **CPU Version (v4.0.6 Beta)**
 - [Baidu Netdisk](https://pan.baidu.com/s/1VtVnNXJQYKEQw4oo_pZRlw) Code: xgnj

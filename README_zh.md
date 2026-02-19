@@ -69,8 +69,8 @@
 3. 首次打开：右键点击应用选择"打开"
 
 ### Windows
-**CUDA-GPU Version (v4.0.5)**
-- [Google Drive](https://drive.google.com/file/d/17-dFw2pZKXn53zmYAZ7HQNHTyndCT76E/view?usp=drive_link) | [百度网盘](https://pan.baidu.com/s/14tnSXnI2LIeZf4egu4xxNg?pwd=jfuz) 提取码: jfuz
+**CUDA-GPU Version (v4.0.6 Beta)**
+- [百度网盘](https://pan.baidu.com/s/1UUfnal8rT2Mizkdcs0xpwg?pwd=igew) 提取码: igew
 
 **CPU Version (v4.0.6 Beta)**
 - [百度网盘](https://pan.baidu.com/s/1VtVnNXJQYKEQw4oo_pZRlw) 提取码: xgnj

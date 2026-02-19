@@ -56,6 +56,9 @@ This release brings a major architectural overhaul, migrating from CSV to SQLite
 - Google Drive: [SuperPicky_v4.0.6_Intel.dmg](https://drive.google.com/file/d/1eKw_02YlsC9Yrfi1VxOxAX6xSMzIDdQa/view?usp=drive_link)
 - 百度网盘: [SuperPicky_v4.0.6_Intel.dmg](https://pan.baidu.com/s/1hMW47CCJKaKtjtqgTiep8g?pwd=6cpu) 提取码: 6cpu
 
+**Windows (v4.0.6 Beta)**:
+- **CUDA-GPU Version**: [百度网盘](https://pan.baidu.com/s/1UUfnal8rT2Mizkdcs0xpwg?pwd=igew) 提取码: igew
+
 **Windows (v4.0.5)**:
 - **CUDA-GPU Version**: [Google Drive](https://drive.google.com/file/d/17-dFw2pZKXn53zmYAZ7HQNHTyndCT76E/view?usp=drive_link) | [百度网盘](https://pan.baidu.com/s/14tnSXnI2LIeZf4egu4xxNg?pwd=jfuz) 提取码: jfuz
 

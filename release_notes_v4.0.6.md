@@ -32,4 +32,7 @@
 - **Baidu Netdisk**: [Download](https://pan.baidu.com/s/1oz_tZc7BARktJsVcAwSs9g?pwd=sw35) (Code: sw35)
 
 ### Windows
+- **CUDA-GPU Version (v4.0.6 Beta)**: [Baidu Netdisk](https://pan.baidu.com/s/1UUfnal8rT2Mizkdcs0xpwg?pwd=igew) (Code: igew)
+
+### Windows
 - **CPU Version (v4.0.6 Beta)**: [Baidu Netdisk](https://pan.baidu.com/s/1VtVnNXJQYKEQw4oo_pZRlw) (Code: xgnj)
