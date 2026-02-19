@@ -110,9 +110,9 @@ echo Step 1: Resolve version
 echo [========================================]
 
 set "VERSION=4.0.5_sp3"
-if not "%VERSION_ARG%"=="" (
-    set "VERSION=%VERSION_ARG%"
-    echo [SUCCESS] Use version from args: %VERSION%
+if not "!VERSION_ARG!"=="" (
+    set "VERSION=!VERSION_ARG!"
+    echo [SUCCESS] Use version from args: !VERSION!
 ) else (
     for /f "usebackq delims=" %%i in (`powershell -NoProfile -Command "$c=Get-Content -Path 'ui/about_dialog.py' -Raw -Encoding UTF8; if($c -match 'v([0-9A-Za-z._-]+)'){ $matches[1] }"`) do (
         set "VERSION=%%i"
