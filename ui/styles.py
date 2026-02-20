@@ -409,6 +409,43 @@ QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
     width: 0;
 }}
 
+/* ==================== 树形视图和列表视图 (用于文件对话框等) ==================== */
+QTreeView, QListView, QTableView {{
+    background-color: {COLORS['bg_input']};
+    color: {COLORS['text_primary']};
+    border: 1px solid {COLORS['border_subtle']};
+    border-radius: 6px;
+    outline: none;
+}}
+
+QTreeView::item, QListView::item, QTableView::item {{
+    padding: 4px;
+}}
+
+QTreeView::item:hover, QListView::item:hover, QTableView::item:hover {{
+    background-color: {COLORS['bg_elevated']};
+}}
+
+QTreeView::item:selected, QListView::item:selected, QTableView::item:selected {{
+    background-color: {COLORS['accent']};
+    color: {COLORS['bg_void']};
+}}
+
+QHeaderView::section {{
+    background-color: {COLORS['bg_card']};
+    color: {COLORS['text_secondary']};
+    border: none;
+    border-right: 1px solid {COLORS['border_subtle']};
+    border-bottom: 1px solid {COLORS['border_subtle']};
+    padding: 6px;
+    font-weight: 500;
+}}
+
+QHeaderView {{
+    background-color: {COLORS['bg_card']};
+    border: none;
+}}
+
 /* ==================== 选项卡 ==================== */
 QTabWidget::pane {{
     background-color: {COLORS['bg_elevated']};
