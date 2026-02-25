@@ -28,7 +28,7 @@ echo Usage:
 echo   %~nx0 [version] [zip_copy_dir]
 echo.
 echo   version       版本号 ^(如 4.0.6^)，用于 ZIP 文件名；缺省则从 ui/about_dialog.py 读取
-echo   zip_copy_dir  目标目录 ^(如 E:\_SuperPickyVersions^)；若指定则复制 SuperPicky 为 SuperPicky_版本号 并打 zip
+echo   zip_copy_dir  目标目录 ^(如 d:\_SuperPickyVersions^)；若指定则复制 SuperPicky 为 SuperPicky_版本号 并打 zip
 echo.
 exit /b 0
 
