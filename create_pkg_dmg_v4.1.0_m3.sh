@@ -1,9 +1,10 @@
-# SuperPicky V4.1.0 (Intel) - PKG + DMG 完整打包脚本
+#!/bin/bash
+# SuperPicky V4.1.0 - PKG + DMG 完整打包脚本 (M3 Mac / Apple Silicon 版本)
 # 包含: PyInstaller打包 → PKG组件 → Distribution PKG → DMG → 签名公证
 # 特色: 自动安装 Lightroom 插件
 # 作者: James Zhen Yu
 # 日期: 2026-02-23
-# 架构: Intel x64
+# 平台: Apple Silicon (M1/M2/M3/M4)
 
 set -e  # 遇到错误立即退出
 
@@ -20,8 +21,8 @@ APPLE_ID="james@jamesphotography.com.au"
 TEAM_ID="JWR6FDB52H"
 APP_PASSWORD=$(security find-generic-password -a "${APPLE_ID}" -s "SuperPicky-Notarize" -w)
 
-PKG_NAME="${APP_NAME}_v${VERSION}_Intel_Installer.pkg"
-DMG_NAME="${APP_NAME}_v${VERSION}_Intel.dmg"
+PKG_NAME="${APP_NAME}_v${VERSION}_Installer.pkg"
+DMG_NAME="${APP_NAME}_v${VERSION}.dmg"
 
 # 颜色输出
 RED='\033[0;31m'
@@ -56,9 +57,8 @@ log_success "清理完成"
 # ============================================
 log_step "步骤 2/8: PyInstaller 打包应用"
 
-log_info "激活 Conda 环境..."
-source /usr/local/Caskroom/miniconda/base/etc/profile.d/conda.sh
-conda activate superpicky312
+log_info "激活 .venv 虚拟环境..."
+source .venv/bin/activate
 
 log_info "开始 PyInstaller 打包..."
 pyinstaller SuperPicky.spec --clean --noconfirm
@@ -106,8 +106,8 @@ fi
 log_step "步骤 3/8: 代码签名"
 
 log_info "签名嵌入的库和框架..."
-find "${APP_PATH}/Contents" -type f \( -name "*.dylib" -o -name "*.so" -o -perm +111 \) \
-    -exec codesign --force --sign "${DEVELOPER_ID}" --timestamp --options runtime {} \; 2>/dev/null || true
+find "${APP_PATH}/Contents" -type f \( -name "*.dylib" -o -name "*.so" -o -perm +111 \) -print0 | \
+    xargs -0 -P 8 -I {} codesign --force --sign "${DEVELOPER_ID}" --timestamp --options runtime {} 2>/dev/null || true
 
 log_info "签名主应用..."
 codesign --force --deep --sign "${DEVELOPER_ID}" \
@@ -129,6 +129,8 @@ log_step "步骤 4/8: 创建 PKG 组件包"
 mkdir -p pkg_root/Applications
 mkdir -p pkg_scripts
 
+# 复制应用（重命名为中文名）
+log_info "复制应用到安装目录..."
 # 复制应用（使用英文名 SuperPicky.app 以支持国际化）
 log_info "复制应用到安装目录..."
 ditto "${APP_PATH}" "pkg_root/Applications/${APP_NAME}.app"
@@ -489,7 +491,7 @@ cat > welcome.html << 'WELCOME_EOF'
 
     <h3>System Requirements</h3>
     <ul>
-        <li>macOS 11.0 (Big Sur) or later</li>
+        <li>macOS 12.0 (Monterey) or later</li>
         <li>Apple Silicon (M1/M2/M3/M4) or Intel processor</li>
         <li>Approximately 2GB of available disk space</li>
     </ul>
@@ -593,10 +595,10 @@ cat > distribution.xml << DISTRIBUTION_EOF
     <title>慧眼选鸟 SuperPicky</title>
     <organization>com.jamesphotography</organization>
     <domains enable_localSystem="true"/>
-    <options customize="never" require-scripts="false" hostArchitectures="x86_64"/>
+    <options customize="never" require-scripts="false" hostArchitectures="arm64,x86_64"/>
 
     <welcome file="welcome.html" mime-type="text/html"/>
-    <license file="LICENSE.txt" mime-type="text/plain"/>
+    <license file="LICENSE" mime-type="text/plain"/>
     <conclusion file="conclusion.html" mime-type="text/html"/>
 
     <choices-outline>

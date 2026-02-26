@@ -2,7 +2,7 @@
   "_meta": {
     "language_name": "English",
     "language_code": "en_US",
-    "version": "4.0.5"
+    "version": "4.1.0"
   },
   "app": {
     "title": "SuperPicky - AI Bird Photo Culling Tool v{version} ({hash})",
@@ -94,7 +94,7 @@
   },
   "dialogs": {
     "file_organization_title": "File Organization",
-    "file_organization_msg": "After analysis, photos will be organized into folders:\n\n• 3-Star → 3star_excellent\n• 2-Star → 2star_good\n• 1-Star → 1star_average\n• Rejects/No Bird → 0star_reject\n{extra_notes}\nUse 'Reset' to restore original structure if needed.",
+    "file_organization_msg": "After analysis, photos will be organized into folders:\n\n• 3-Star → 3_star_excellent\n• 2-Star → 2_star_good\n• 1-Star → 1_star_average\n• Rejects/No Bird → 0_star_reject\n{extra_notes}\nUse 'Reset' to restore original structure if needed.",
     "note_flight": "🟢 BIF (Flying) photos will get green label (Sharpness x1.2)",
     "note_birdid": "🐦 2-Star+ photos will auto-identify bird species and write to EXIF Title",
     "note_burst": "📸 Smart Burst: Merged to highest-rated photo's folder (Min 4 photos)"
@@ -647,7 +647,7 @@
     "normalization": "Sharpness normalization method, affects fairness between large and small birds"
   },
   "help": {
-    "welcome_title": "Welcome to SuperPicky V4.0.5 - AI Bird Photo Culling Tool",
+    "welcome_title": "Welcome to SuperPicky V{version} - AI Bird Photo Culling Tool",
     "usage_steps_title": "Usage Steps:",
     "step1": "Click 'Browse' to select source folder (supports RAW/JPG)",
     "step2": "Adjust 3-star and pick parameters (optional, defaults recommended)",
@@ -663,8 +663,8 @@
     "rule_2_star": "⭐⭐ = Either sharpness or aesthetics meets threshold (2 stars)",
     "rule_1_star": "⭐ = Bird detected but below threshold (1 star)",
     "rule_0_star": "Unrated (Rejects) = Poor technical quality (confidence/aesthetics/sharpness below threshold or both eyes hidden)",
-    "rule_rejected": "❌ = No bird detected → 0star_reject/",
-    "folder_info": "📂 Folder assignment: 3★→3star_excellent/ | 2★→2star_good/ | 1★→1star_average/ | Rejects→0star_reject/",
+    "rule_rejected": "❌ = No bird detected → 0_star_reject/",
+    "folder_info": "📂 Folder assignment: 3★→3_star_excellent/ | 2★→2_star_good/ | 1★→1_star_average/ | Rejects→0_star_reject/",
     "ready": "Ready? Select a folder to begin!",
     "tools_list_title": "More free tools by James:",
     "tool_1": "SuperPicky: AI Bird Photo Culling Tool",
@@ -996,6 +996,7 @@
     "meta_aesthetic": "Aesthetic",
     "meta_flying": "Flying",
     "meta_species": "Species",
+    "meta_caption": "Caption",
     "meta_camera": "Camera",
     "meta_lens": "Lens",
     "meta_shutter": "Shutter",
@@ -1043,6 +1044,13 @@
     "ctx_add_external_app": "Add external app in Settings…",
     "ctx_copy_path": "Copy File Path",
     "copy_exif": "Copy EXIF Info",
-    "copy_exif_done": "Copied ✓"
+    "copy_exif_done": "Copied ✓",
+    "delete_title": "Delete Photo",
+    "delete_msg": "Move {filename} to Trash?\n\n❗ This will also delete the database record. You'll need to reprocess after restoring.",
+    "delete_no_ask": "Don't ask again",
+    "delete_confirm_btn": "Delete",
+    "delete_cancel_btn": "Cancel",
+    "delete_failed": "Delete Failed",
+    "delete_failed_msg": "Failed to move file to Trash:\n{error}"
   }
 }
