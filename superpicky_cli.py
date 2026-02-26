@@ -38,6 +38,7 @@ import sys
 import os
 from pathlib import Path
 from tools.i18n import t
+from constants import RAW_EXTENSIONS, JPG_EXTENSIONS
 
 # 确保模块路径正确
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -103,7 +104,7 @@ def cmd_burst(args):
                 continue
             
             # 重新获取该目录的 groups
-            extensions = {'.nef', '.rw2', '.arw', '.cr2', '.cr3', '.orf', '.dng'}
+            extensions = set(RAW_EXTENSIONS)
             filepaths = []
             for entry in os.scandir(subdir):
                 if entry.is_file():
@@ -600,7 +601,7 @@ def _run_burst_detection_restar(directory: str):
         if not os.path.exists(subdir):
             continue
         
-        extensions = {'.nef', '.rw2', '.arw', '.cr2', '.cr3', '.orf', '.dng'}
+        extensions = set(RAW_EXTENSIONS)
         filepaths = []
         for entry in os.scandir(subdir):
             if entry.is_file():
@@ -673,8 +674,10 @@ def cmd_info(args):
     for folder in folders:
         folder_path = os.path.join(args.directory, folder)
         if os.path.exists(folder_path):
-            count = len([f for f in os.listdir(folder_path) 
-                        if f.lower().endswith(('.nef', '.cr2', '.arw', '.jpg', '.jpeg'))])
+            count = len([
+                f for f in os.listdir(folder_path)
+                if f.lower().endswith(tuple(RAW_EXTENSIONS + JPG_EXTENSIONS))
+            ])
             existing_folders.append((folder, count))
     
     if existing_folders:

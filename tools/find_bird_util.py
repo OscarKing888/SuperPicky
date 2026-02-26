@@ -1,16 +1,89 @@
 import os
 import rawpy
 import imageio
+import subprocess
+import sys
 from .utils import log_message
 from .exiftool_manager import get_exiftool_manager
 import glob
 import shutil
 
 from .file_utils import ensure_hidden_directory
+from constants import RAW_EXTENSIONS, JPG_EXTENSIONS
+
+
+HEIF_EXTENSIONS = {'.heic', '.heif', '.hif'}
+
+
+def _extract_preview_with_exiftool_to_jpeg(source_path: str, target_jpg_path: str) -> bool:
+    """
+    使用 ExifTool 从 HEIF/RAW-like 文件中提取 JPEG 预览图。
+
+    依次尝试 PreviewImage / JpgFromRaw / ThumbnailImage。
+    """
+    mgr = get_exiftool_manager()
+    exiftool_path = mgr.exiftool_path
+    exiftool_cwd = os.path.dirname(os.path.abspath(exiftool_path))
+    creationflags = subprocess.CREATE_NO_WINDOW if sys.platform.startswith('win') else 0
+
+    for tag in ('PreviewImage', 'JpgFromRaw', 'ThumbnailImage'):
+        cmd = [exiftool_path, '-b', f'-{tag}', source_path]
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=False,
+                timeout=30,
+                creationflags=creationflags,
+                cwd=exiftool_cwd,
+            )
+        except Exception:
+            continue
+
+        preview_bytes = result.stdout or b""
+        if result.returncode != 0 or not preview_bytes:
+            continue
+
+        try:
+            with open(target_jpg_path, 'wb') as f:
+                f.write(preview_bytes)
+            return True
+        except Exception:
+            continue
+
+    return False
+
+
+def _heif_to_jpeg(heif_file_path: str, jpg_file_path: str):
+    """
+    将 HEIF/HEIC/HIF 转为临时 JPEG。
+
+    优先尝试 Pillow（如环境安装了 pillow-heif），失败则回退 ExifTool 提取预览图。
+    """
+    # 1) Pillow 路径（支持安装 pillow-heif 的环境）
+    try:
+        try:
+            import pillow_heif  # type: ignore
+            pillow_heif.register_heif_opener()
+        except Exception:
+            pass
+
+        from PIL import Image
+        with Image.open(heif_file_path) as im:
+            im.convert("RGB").save(jpg_file_path, format="JPEG", quality=95)
+        return
+    except Exception:
+        pass
+
+    # 2) ExifTool 预览提取路径（更接近 RAW 逻辑）
+    if _extract_preview_with_exiftool_to_jpeg(heif_file_path, jpg_file_path):
+        return
+
+    raise RuntimeError("无法解码 HEIF/HEIC/HIF（Pillow/ExifTool 预览提取均失败）")
 
 def raw_to_jpeg(raw_file_path):
     filename = os.path.basename(raw_file_path)
-    file_prefix, _ = os.path.splitext(filename)
+    file_prefix, file_ext = os.path.splitext(filename)
     directory_path = os.path.dirname(raw_file_path)
     
     # V4.1.0: 使用 .superpicky/cache 目录存储临时 JPEG
@@ -32,6 +105,10 @@ def raw_to_jpeg(raw_file_path):
         return None
 
     try:
+        if file_ext.lower() in HEIF_EXTENSIONS:
+            _heif_to_jpeg(raw_file_path, jpg_file_path)
+            return jpg_file_path
+
         with rawpy.imread(raw_file_path) as raw:
             thumbnail = raw.extract_thumb()
             if thumbnail is None:
@@ -45,7 +122,7 @@ def raw_to_jpeg(raw_file_path):
             
             return jpg_file_path  # 返回完整路径
     except Exception as e:
-        log_message(f"Error occurred while converting the RAW file:{raw_file_path}, Error: {e}", directory_path)
+        log_message(f"Error occurred while converting the RAW-like file:{raw_file_path}, Error: {e}", directory_path)
         raise e  # 抛出异常供调用者捕获
 
 def reset(directory, log_callback=None, i18n=None):
@@ -200,8 +277,10 @@ def reset(directory, log_callback=None, i18n=None):
         log("\n🏷️  重置EXIF元数据...")
 
     # 支持的图片格式
-    image_extensions = ['*.NEF', '*.nef', '*.CR2', '*.cr2', '*.ARW', '*.arw',
-                       '*.JPG', '*.jpg', '*.JPEG', '*.jpeg', '*.DNG', '*.dng']
+    image_extensions = []
+    for ext in RAW_EXTENSIONS + JPG_EXTENSIONS:
+        image_extensions.append(f"*{ext.lower()}")
+        image_extensions.append(f"*{ext.upper()}")
 
     # 收集所有图片文件（跳过隐藏文件）
     image_files = []
