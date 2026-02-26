@@ -156,6 +156,84 @@ def _load_torchscript_from_bytes(model_data: bytes):
     return torch.jit.load(buffer, map_location='cpu')
 
 
+HEIF_EXTENSIONS = {'.heic', '.heif', '.hif'}
+
+
+def _extract_preview_with_exiftool(file_path: str) -> Optional[Image.Image]:
+    """
+    用 ExifTool 从 HEIF/RAW-like 文件提取 JPEG 预览图并返回 PIL.Image。
+
+    优先级：PreviewImage -> JpgFromRaw -> ThumbnailImage
+    """
+    import subprocess
+
+    exiftool_paths = [
+        '/usr/local/bin/exiftool',
+        '/opt/homebrew/bin/exiftool',
+        'exiftool',
+    ]
+
+    exiftool_path = None
+    for candidate in exiftool_paths:
+        try:
+            creationflags = subprocess.CREATE_NO_WINDOW if sys.platform.startswith('win') else 0
+            res = subprocess.run(
+                [candidate, '-ver'],
+                capture_output=True,
+                text=False,
+                timeout=5,
+                creationflags=creationflags,
+            )
+            if res.returncode == 0:
+                exiftool_path = candidate
+                break
+        except Exception:
+            continue
+
+    if not exiftool_path:
+        return None
+
+    creationflags = subprocess.CREATE_NO_WINDOW if sys.platform.startswith('win') else 0
+    for tag in ('PreviewImage', 'JpgFromRaw', 'ThumbnailImage'):
+        try:
+            res = subprocess.run(
+                [exiftool_path, '-b', f'-{tag}', file_path],
+                capture_output=True,
+                text=False,
+                timeout=20,
+                creationflags=creationflags,
+            )
+            if res.returncode != 0 or not res.stdout:
+                continue
+            return Image.open(io.BytesIO(res.stdout)).convert("RGB")
+        except Exception:
+            continue
+    return None
+
+
+def _load_heif_image(file_path: str) -> Image.Image:
+    """
+    加载 HEIF/HEIC/HIF 图像。
+
+    优先使用 Pillow（若环境安装了 pillow-heif），失败则回退到 ExifTool 预览提取。
+    """
+    try:
+        try:
+            import pillow_heif  # type: ignore
+            pillow_heif.register_heif_opener()
+        except Exception:
+            pass
+        return Image.open(file_path).convert("RGB")
+    except Exception:
+        pass
+
+    preview = _extract_preview_with_exiftool(file_path)
+    if preview is not None:
+        return preview
+
+    raise RuntimeError("HEIF/HEIC/HIF 解码失败（Pillow 与 ExifTool 预览提取均失败）")
+
+
 # ==================== 懒加载函数 ====================
 
 def get_classifier():
@@ -382,6 +460,14 @@ def load_image(image_path: str) -> Image.Image:
         '.raf', '.orf', '.rw2', '.pef', '.srw', '.raw', '.rwl',
         '.3fr', '.fff', '.erf', '.mef', '.mos', '.mrw', '.x3f'
     ]
+
+    if ext in HEIF_EXTENSIONS:
+        try:
+            img = _load_heif_image(image_path)
+            print(f"[HEIF] 已加载: {img.size[0]}x{img.size[1]}")
+            return img
+        except Exception as e:
+            raise Exception(f"HEIF处理失败: {e}")
 
     if ext in raw_extensions:
         if RAW_SUPPORT:
