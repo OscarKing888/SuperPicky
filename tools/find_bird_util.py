@@ -54,13 +54,33 @@ def _extract_preview_with_exiftool_to_jpeg(source_path: str, target_jpg_path: st
     return False
 
 
+# 内嵌预览若最长边低于此值则视为过小，改用 Pillow 生成原图/半尺寸预览
+HEIF_MIN_PREVIEW_LONGEST_SIDE = 1000
+
+
 def _heif_to_jpeg(heif_file_path: str, jpg_file_path: str):
     """
-    将 HEIF/HEIC/HIF 转为临时 JPEG。
+    将 HEIF/HEIC/HIF 转为临时 JPEG，用于处理的预览为原图尺寸（或 ExifTool 大图预览）。
 
-    优先尝试 Pillow（如环境安装了 pillow-heif），失败则回退 ExifTool 提取预览图。
+    优先 ExifTool 提取内嵌预览；若提取到的预览过小则用 Pillow 按原图尺寸生成。
     """
-    # 1) Pillow 路径（支持安装 pillow-heif 的环境）
+    from PIL import Image
+
+    # 1) ExifTool 预览提取；若预览尺寸过小则不用，改走 Pillow
+    if _extract_preview_with_exiftool_to_jpeg(heif_file_path, jpg_file_path):
+        try:
+            with Image.open(jpg_file_path) as check:
+                w, h = check.size
+                if max(w, h) >= HEIF_MIN_PREVIEW_LONGEST_SIDE:
+                    return
+            os.remove(jpg_file_path)
+        except Exception:
+            try:
+                os.remove(jpg_file_path)
+            except Exception:
+                pass
+
+    # 2) Pillow 路径：原图尺寸保存，供 AI/评分使用
     try:
         try:
             import pillow_heif  # type: ignore
@@ -68,18 +88,14 @@ def _heif_to_jpeg(heif_file_path: str, jpg_file_path: str):
         except Exception:
             pass
 
-        from PIL import Image
         with Image.open(heif_file_path) as im:
-            im.convert("RGB").save(jpg_file_path, format="JPEG", quality=95)
+            rgb = im.convert("RGB")
+            rgb.save(jpg_file_path, format="JPEG", quality=95)
         return
     except Exception:
         pass
 
-    # 2) ExifTool 预览提取路径（更接近 RAW 逻辑）
-    if _extract_preview_with_exiftool_to_jpeg(heif_file_path, jpg_file_path):
-        return
-
-    raise RuntimeError("无法解码 HEIF/HEIC/HIF（Pillow/ExifTool 预览提取均失败）")
+    raise RuntimeError("无法解码 HEIF/HEIC/HIF（ExifTool 预览提取与 Pillow 均失败）")
 
 def raw_to_jpeg(raw_file_path):
     filename = os.path.basename(raw_file_path)
@@ -96,10 +112,18 @@ def raw_to_jpeg(raw_file_path):
     
     # 文件名不带 tmp_ 前缀，直接使用原名前缀
     jpg_file_path = os.path.join(cache_dir, f"{file_prefix}.jpg")
-    
+
+    # HEIC/HIF/HEIF：若目标预览已存在且不小于 128K 则跳过生成
     if os.path.exists(jpg_file_path):
-        return jpg_file_path  # 返回完整路径（缓存命中，无需日志）
-        
+        if file_ext.lower() not in HEIF_EXTENSIONS:
+            return jpg_file_path  # 非 HEIF：缓存命中即用
+        try:
+            if os.path.getsize(jpg_file_path) >= 128 * 1024:
+                return jpg_file_path  # HEIF 族：已有预览且不小于 128K 则跳过
+        except OSError:
+            pass
+        # HEIF 且预览不存在或过小：继续生成并覆盖
+
     if not os.path.exists(raw_file_path):
         log_message(f"ERROR, file [{filename}] cannot be found in RAW form", directory_path)
         return None
