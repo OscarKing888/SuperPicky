@@ -912,16 +912,17 @@ class SuperPickyMainWindow(QMainWindow):
         from constants import APP_VERSION
         from core.build_info import COMMIT_HASH
         
-        # V4.0.5: 动态获取版本号和 Commit Hash
+        # COMMIT_HASH 为 None 时（本地开发环境），自动从 git 获取当前 hash
         commit_hash = COMMIT_HASH
-        if commit_hash == "154984fd": # 默认占位符
-             # 开发环境尝试获取真实 hash
-             try:
-                 import subprocess
-                 hash_short = subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD']).strip().decode('utf-8')
-                 commit_hash = hash_short
-             except:
-                 pass
+        if not commit_hash:
+            try:
+                import subprocess
+                commit_hash = subprocess.check_output(
+                    ['git', 'rev-parse', '--short', 'HEAD'],
+                    stderr=subprocess.DEVNULL
+                ).strip().decode('utf-8')
+            except Exception:
+                commit_hash = 'dev'
 
         version_text = f"V{APP_VERSION}\n{commit_hash}"
         
