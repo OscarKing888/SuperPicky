@@ -1471,6 +1471,15 @@ class SuperPickyMainWindow(QMainWindow):
             self.reset_btn.setEnabled(True)
             self.reset_btn.setText(self.i18n.t("labels.reset_short"))
             self.reset_btn.setObjectName("tertiary")
+            try:
+                self.reset_btn.clicked.disconnect(self._quick_restore_directory)
+            except TypeError:
+                pass
+            try:
+                self.reset_btn.clicked.disconnect(self._reset_directory)
+            except TypeError:
+                pass
+            self.reset_btn.clicked.connect(self._reset_directory)
             self.start_btn.setEnabled(True)
             self.start_btn.setText(self.i18n.t("labels.start_processing"))
             self.start_btn.setObjectName("")
@@ -1480,6 +1489,15 @@ class SuperPickyMainWindow(QMainWindow):
             self.reset_btn.setEnabled(True)
             self.reset_btn.setText(self.i18n.t("labels.reprocess"))
             self.reset_btn.setObjectName("tertiary")
+            try:
+                self.reset_btn.clicked.disconnect(self._reset_directory)
+            except TypeError:
+                pass
+            try:
+                self.reset_btn.clicked.disconnect(self._quick_restore_directory)
+            except TypeError:
+                pass
+            self.reset_btn.clicked.connect(self._quick_restore_directory)
             self.start_btn.setEnabled(True)
             self.start_btn.setText(self.i18n.t("labels.start_processing"))
             self.start_btn.setObjectName("tertiary")
@@ -1883,30 +1901,31 @@ class SuperPickyMainWindow(QMainWindow):
                         except Exception as e:
                             emit_log(i18n.t("logs.empty_dir_delete_failed", dir=rating_dir, error=e))
                 
-                # V4.0.5: 清理 .superpicky 隐藏目录和 manifest 文件
-                superpicky_dir = os.path.join(directory_path, ".superpicky")
-                if os.path.exists(superpicky_dir):
-                    try:
-                        shutil.rmtree(superpicky_dir)
-                        emit_log("  ✅ .superpicky/")
-                        deleted_dirs += 1
-                    except Exception:
-                        # 尝试系统命令强制删除
+                # 仅完整重置时删除 .superpicky 与 manifest；重新处理（快速复原）保留预览缓存
+                if not _skip_exif_reset:
+                    superpicky_dir = os.path.join(directory_path, ".superpicky")
+                    if os.path.exists(superpicky_dir):
                         try:
-                            import subprocess
-                            subprocess.run(['rm', '-rf', superpicky_dir], check=True)
-                            emit_log("  ✅ .superpicky/ (force)")
+                            shutil.rmtree(superpicky_dir)
+                            emit_log("  ✅ .superpicky/")
                             deleted_dirs += 1
-                        except Exception as e2:
-                            emit_log(f"  ⚠️ .superpicky 删除失败: {e2}")
-                
-                manifest_file = os.path.join(directory_path, ".superpicky_manifest.json")
-                if os.path.exists(manifest_file):
-                    try:
-                        os.remove(manifest_file)
-                        emit_log("  ✅ .superpicky_manifest.json")
-                    except Exception as e:
-                        emit_log(f"  ⚠️ manifest 删除失败: {e}")
+                        except Exception:
+                            # 尝试系统命令强制删除
+                            try:
+                                import subprocess
+                                subprocess.run(['rm', '-rf', superpicky_dir], check=True)
+                                emit_log("  ✅ .superpicky/ (force)")
+                                deleted_dirs += 1
+                            except Exception as e2:
+                                emit_log(f"  ⚠️ .superpicky 删除失败: {e2}")
+                    
+                    manifest_file = os.path.join(directory_path, ".superpicky_manifest.json")
+                    if os.path.exists(manifest_file):
+                        try:
+                            os.remove(manifest_file)
+                            emit_log("  ✅ .superpicky_manifest.json")
+                        except Exception as e:
+                            emit_log(f"  ⚠️ manifest 删除失败: {e}")
                 
                 # 清理 macOS ._burst_XXX 残留文件
                 for filename in os.listdir(directory_path):
