@@ -20,10 +20,11 @@ from ui.styles import COLORS, FONTS
 # 评分按钮配置 (mode_key, label, ratings_list)
 # ratings_list = None → 不过滤评分
 _RATING_OPTIONS = [
-    ("3",  "★★★", [3, 4, 5]),
-    ("2",  "★★",  [2]),
-    ("1",  "★",   [1]),
-    ("0",  "0",   [0]),
+    ("picked", "🏆",   [3, 4, 5]),   # 精选：Top 25% 3★ 照片
+    ("3",     "★★★", [3, 4, 5]),
+    ("2",     "★★",  [2]),
+    ("1",     "★",   [1]),
+    ("0",     "0",   [0]),
 ]
 _DEFAULT_RATING = "3"
 
@@ -227,7 +228,7 @@ class FilterPanel(QWidget):
     # ------------------------------------------------------------------
 
     def _build_rating_buttons(self) -> QWidget:
-        """4个评分互斥单选按钮，横排。"""
+        """5个评分互斥单选按钮（精选/★★★/★★/★/0），横排。"""
         w = QWidget()
         w.setStyleSheet("background: transparent;")
         row = QHBoxLayout(w)
@@ -236,12 +237,18 @@ class FilterPanel(QWidget):
 
         self._rating_btns: dict = {}  # mode -> QPushButton
 
+        # 窄按钮 mode 集合（★★/★/0/🏆 都固定宽度，留空间给 ★★★）
+        _narrow = {"2": 34, "1": 28, "0": 28, "picked": 32}
+
         for mode, label, ratings in _RATING_OPTIONS:
             btn = QPushButton(label)
             btn.setFixedHeight(30)
-            btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            if mode in _narrow:
+                btn.setFixedWidth(_narrow[mode])
+            else:
+                btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             active = (mode == _DEFAULT_RATING)
-            btn.setStyleSheet(self._rating_btn_style(active))
+            btn.setStyleSheet(self._rating_btn_style(active, mode))
             _m = mode
             btn.clicked.connect(lambda _=None, m=_m: self._on_rating_btn(m))
             self._rating_btns[mode] = btn
@@ -249,13 +256,15 @@ class FilterPanel(QWidget):
 
         return w
 
-    def _rating_btn_style(self, active: bool) -> str:
+    def _rating_btn_style(self, active: bool, mode: str = "") -> str:
+        # 精选按钮用金色高亮
+        accent_color = COLORS['star_gold'] if mode == "picked" else COLORS['star_gold']
         if active:
             return (
                 f"QPushButton {{ background-color: {COLORS['bg_card']};"
-                f" border: 1px solid {COLORS['star_gold']};"
+                f" border: 1px solid {accent_color};"
                 f" border-radius: 6px;"
-                f" color: {COLORS['star_gold']};"
+                f" color: {accent_color};"
                 f" font-size: 13px; padding: 3px 4px; }}"
                 f" QPushButton:hover {{ background-color: {COLORS['bg_input']}; }}"
             )
@@ -273,7 +282,7 @@ class FilterPanel(QWidget):
     def _on_rating_btn(self, mode: str):
         self._active_rating = mode
         for m, btn in self._rating_btns.items():
-            btn.setStyleSheet(self._rating_btn_style(m == mode))
+            btn.setStyleSheet(self._rating_btn_style(m == mode, m))
         self._emit_filters()
 
     # ------------------------------------------------------------------
@@ -448,6 +457,7 @@ class FilterPanel(QWidget):
             "is_flying":      is_flying,
             species_key:      bird_species,
             "sort_by":        sort_by,
+            "picked_only":    self._active_rating == "picked",
         }
 
     # ------------------------------------------------------------------
@@ -459,7 +469,7 @@ class FilterPanel(QWidget):
         # 评分 → 默认 ★★★
         self._active_rating = _DEFAULT_RATING
         for m, btn in self._rating_btns.items():
-            btn.setStyleSheet(self._rating_btn_style(m == _DEFAULT_RATING))
+            btn.setStyleSheet(self._rating_btn_style(m == _DEFAULT_RATING, m))
 
         # 对焦 → 默认精焦
         self._active_focus = _DEFAULT_FOCUS
