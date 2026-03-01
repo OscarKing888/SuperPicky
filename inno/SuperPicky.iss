@@ -74,5 +74,5 @@ Filename: "https://superpicky.app/"; Description: "访问项目网站"; Flags: p
 Filename: "taskkill.exe"; Parameters: "/f /im SuperPicky.exe"; Flags: skipifdoesntexist; RunOnceId: "KillSuperPickyProcess"
 
 [Languages]
-Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
+Name: "chinesesimplified"; MessagesFile: "ChineseSimplified.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
