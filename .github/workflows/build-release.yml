@@ -28,18 +28,23 @@ jobs:
     - name: Create and activate virtual environment
       run: |
         python -m venv .venv
-        .venv\Scripts\activate
+        .venv\Scripts\Activate.ps1
 
     - name: Install dependencies
       run: |
-        .venv\Scripts\activate
+        .venv\Scripts\Activate.ps1
         pip install --upgrade pip
         pip install -r requirements.txt
         pip install pyinstaller
+    
+    - name: Download Model
+      run: |
+        .venv\Scripts\Activate.ps1
+        python scripts/download_model.py
 
     - name: Build CPU version
       run: |
-        .venv\Scripts\activate
+        .venv\Scripts\Activate.ps1
         .\build_release_cpu.bat
 
     - name: Create installer with Inno Setup
