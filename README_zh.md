@@ -157,7 +157,7 @@ python main.py
 |------|------|------|
 | 开发者 | [James Yu (詹姆斯·于震)](https://github.com/jamesphotography) | 核心开发 |
 | 模型训练 | [Jordan Yu (于若君)](https://github.com/triple333sR9) | SuperEyes · SuperFlier |
-| Windows版 | [小平](https://github.com/thp2024) | Windows移植 |
+| Windows版 | [小平](https://github.com/thp2024) · [伯劳](https://github.com/yblpoi) | Windows移植 |
 
 ---
 
