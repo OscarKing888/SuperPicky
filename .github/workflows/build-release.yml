@@ -63,9 +63,9 @@ jobs:
       run: |
         $version = "${{ github.event.inputs.version || github.ref_name }}".TrimStart('v')
         New-Item -ItemType Directory -Path release_assets -Force
-        Copy-Item -Path output/SuperPicky_Win64_CPU.zip -Destination release_assets\
+        # Copy-Item -Path output/SuperPicky_Win64_CPU.zip -Destination release_assets\
         # 查找Inno Setup生成的安装包
-        Get-ChildItem -Path output -Recurse -Filter "SuperPicky_Setup_Win64.exe" | ForEach-Object {
+        Get-ChildItem -Path output -Recurse -Filter "SuperPicky_Setup_Win64*.exe" | ForEach-Object {
           Copy-Item -Path $_.FullName -Destination release_assets\
         }
 
