@@ -205,8 +205,8 @@ class DetailPanel(QWidget):
         prev_btn = QPushButton(f"◀  {self.i18n.t('browser.prev')}")
         next_btn = QPushButton(f"{self.i18n.t('browser.next')}  ▶")
         for btn in (prev_btn, next_btn):
-            btn.setFixedHeight(28)
-            btn.setStyleSheet(self._inactive_btn_style())
+            btn.setFixedHeight(30)
+            btn.setStyleSheet(self._nav_btn_style())
         prev_btn.clicked.connect(self.prev_requested)
         next_btn.clicked.connect(self.next_requested)
         nb_layout.addWidget(prev_btn)
@@ -240,35 +240,43 @@ class DetailPanel(QWidget):
         rating_row.addStretch()
 
         dec_btn = QPushButton("▼")
-        dec_btn.setFixedSize(24, 24)
+        dec_btn.setFixedSize(28, 28)
         dec_btn.setToolTip(self.i18n.t("labels.rating_dec_tooltip"))
         dec_btn.setStyleSheet(f"""
             QPushButton {{
-                background: {COLORS['bg_card']};
+                background: {COLORS['bg_input']};
                 border: 1px solid {COLORS['border']};
-                border-radius: 4px;
-                color: {COLORS['text_secondary']};
-                font-size: 12px;
-                padding: 4px 2px;
+                border-radius: 5px;
+                color: {COLORS['text_primary']};
+                font-size: 13px;
+                padding: 2px;
             }}
-            QPushButton:hover {{ background: {COLORS['bg_input']}; }}
+            QPushButton:hover {{
+                background: {COLORS['bg_elevated']};
+                border-color: {COLORS['text_muted']};
+                color: {COLORS['warning']};
+            }}
         """)
         dec_btn.clicked.connect(self._on_rating_dec)
         rating_row.addWidget(dec_btn)
 
         inc_btn = QPushButton("▲")
-        inc_btn.setFixedSize(24, 24)
+        inc_btn.setFixedSize(28, 28)
         inc_btn.setToolTip(self.i18n.t("labels.rating_inc_tooltip"))
         inc_btn.setStyleSheet(f"""
             QPushButton {{
-                background: {COLORS['bg_card']};
-                border: 1px solid {COLORS['border']};
-                border-radius: 4px;
+                background: {COLORS['bg_input']};
+                border: 1px solid {COLORS['accent']};
+                border-radius: 5px;
                 color: {COLORS['accent']};
-                font-size: 12px;
-                padding: 4px 2px;
+                font-size: 13px;
+                padding: 2px;
             }}
-            QPushButton:hover {{ background: {COLORS['bg_input']}; }}
+            QPushButton:hover {{
+                background: {COLORS['accent_dim']};
+                color: {COLORS['accent_hover']};
+                border-color: {COLORS['accent_hover']};
+            }}
         """)
         inc_btn.clicked.connect(self._on_rating_inc)
         rating_row.addWidget(inc_btn)
@@ -291,7 +299,6 @@ class DetailPanel(QWidget):
             return l
 
         self._val_focus = _make_value_label()
-        self._val_exposure = _make_value_label()
         self._val_sharpness = _make_value_label()
         self._val_aesthetic = _make_value_label()
         self._val_flying = _make_value_label()
@@ -310,10 +317,12 @@ class DetailPanel(QWidget):
         self._val_confidence = _make_value_label()
         self._val_filename = _make_value_label()
         self._val_datetime = _make_value_label()
+        self._val_caption = _make_value_label()
+        self._val_caption.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 11px; font-family: {FONTS['mono']}; background: transparent;")
+        self._val_caption.setWordWrap(True)
 
         rows = [
             ("browser.meta_focus",      self._val_focus),
-            ("browser.meta_exposure",   self._val_exposure),
             ("browser.meta_sharpness",  self._val_sharpness),
             ("browser.meta_aesthetic",  self._val_aesthetic),
             ("browser.meta_flying",     self._val_flying),
@@ -332,6 +341,38 @@ class DetailPanel(QWidget):
 
         meta_layout.addLayout(form)
         meta_layout.addStretch()
+
+        # --- 折叠式选片备注（默认收起，点箭头展开）---
+        meta_layout.addWidget(self._divider())
+
+        self._caption_expanded = False
+
+        self._caption_toggle_btn = QPushButton()
+        self._caption_toggle_btn.setFlat(True)
+        self._caption_toggle_btn.setCursor(Qt.PointingHandCursor)
+        self._caption_toggle_btn.setStyleSheet(f"""
+            QPushButton {{
+                color: {COLORS['text_tertiary']};
+                font-size: 11px;
+                background: transparent;
+                border: none;
+                text-align: left;
+                padding: 4px 0px;
+            }}
+            QPushButton:hover {{ color: {COLORS['text_secondary']}; }}
+        """)
+        self._caption_toggle_btn.clicked.connect(self._toggle_caption)
+        meta_layout.addWidget(self._caption_toggle_btn)
+
+        self._caption_content = QWidget()
+        self._caption_content.setVisible(False)
+        caption_inner = QVBoxLayout(self._caption_content)
+        caption_inner.setContentsMargins(0, 2, 0, 6)
+        caption_inner.setSpacing(0)
+        caption_inner.addWidget(self._val_caption)
+        meta_layout.addWidget(self._caption_content)
+
+        self._update_caption_toggle_label()
 
         meta_scroll.setWidget(meta_container)
         layout.addWidget(meta_scroll, 1)
@@ -374,18 +415,32 @@ class DetailPanel(QWidget):
         self._copy_exif_btn.setEnabled(False)
         self._img_label.set_pixmap(QPixmap())
         for val in (
-            self._val_focus, self._val_exposure, self._val_sharpness,
+            self._val_focus, self._val_sharpness,
             self._val_aesthetic, self._val_flying, self._val_species,
+            self._val_caption,
             self._val_camera, self._val_lens, self._val_shutter,
             self._val_iso, self._val_focal, self._val_confidence,
             self._val_filename, self._val_datetime,
         ):
             val.setText("—")
         self._rating_label.setText("—")
+        self._caption_content.setVisible(False)
+        self._caption_expanded = False
+        self._update_caption_toggle_label()
 
     # ------------------------------------------------------------------
     #  内部
     # ------------------------------------------------------------------
+
+    def _toggle_caption(self):
+        self._caption_expanded = not self._caption_expanded
+        self._caption_content.setVisible(self._caption_expanded)
+        self._update_caption_toggle_label()
+
+    def _update_caption_toggle_label(self):
+        arrow = "▼" if self._caption_expanded else "▶"
+        label = self.i18n.t("browser.meta_caption")
+        self._caption_toggle_btn.setText(f"{arrow} {label}")
 
     def _on_rating_dec(self):
         """▼ 按钮：评分 -1（最低 -1）。"""
@@ -465,6 +520,19 @@ class DetailPanel(QWidget):
     def _reset_copy_btn(self):
         self._copy_exif_btn.setText(self.i18n.t("browser.copy_exif"))
         self._copy_exif_btn.setStyleSheet(self._inactive_btn_style())
+
+    def _nav_btn_style(self) -> str:
+        """导航按钮（◀/▶）样式 — 比一般次级按钮更明显。"""
+        return (
+            f"QPushButton {{ background-color: {COLORS['bg_input']};"
+            f" border: 1px solid {COLORS['border']};"
+            f" border-radius: 6px;"
+            f" color: {COLORS['text_primary']};"
+            f" font-size: 12px;"
+            f" padding: 2px 8px; }}"
+            f" QPushButton:hover {{ background-color: {COLORS['bg_card']};"
+            f" border-color: {COLORS['accent']}; color: {COLORS['accent']}; }}"
+        )
 
     def _active_btn_style(self) -> str:
         return (
@@ -598,11 +666,6 @@ class DetailPanel(QWidget):
         color = _FOCUS_COLORS.get(focus, COLORS['text_primary'])
         self._val_focus.setStyleSheet(f"color: {color}; font-size: 12px; background: transparent;")
 
-        # 曝光
-        exp = p.get("exposure_status", "")
-        _exp_key = {"GOOD": "browser.exposure_good", "OVEREXPOSED": "browser.exposure_over", "UNDEREXPOSED": "browser.exposure_under"}
-        self._val_exposure.setText(self.i18n.t(_exp_key[exp]) if exp in _exp_key else (exp or _unknown))
-
         # 锐度（颜色跟随对焦状态）
         sharp = p.get("adj_sharpness")
         self._val_sharpness.setText(f"{sharp:.1f}" if sharp is not None else _unknown)
@@ -667,3 +730,9 @@ class DetailPanel(QWidget):
         if len(dt) > 19:
             dt = dt[:19]
         self._val_datetime.setText(dt)
+
+        # 选片备注（折叠区）
+        cap = p.get("caption") or _unknown
+        self._val_caption.setText(cap)
+        self._val_caption.setToolTip(cap)
+        self._update_caption_toggle_label()

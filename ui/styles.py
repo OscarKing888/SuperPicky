@@ -31,7 +31,7 @@ COLORS = {
 
     # 焦点状态语义色（全系统统一）
     'focus_best':   '#00cc44',   # 精焦 — 绿（相机 AF 确认色）
-    'focus_good':   '#e8b420',   # 合焦 — 琥珀（可用，非最佳）
+    'focus_good':   '#a8e066',   # 合焦 — 黄绿（淡于精焦深绿，区分明显）
     'focus_bad':    '#e0e0e0',   # 失焦 — 近白灰
     'focus_worst':  '#a1a1a1',   # 脱焦 — 灰
 
@@ -56,10 +56,10 @@ COLORS = {
 # 中英文混排优化: Qt 兼容的字体名称
 # 注意: Qt 不支持 CSS 的 -apple-system/BlinkMacSystemFont，需要使用实际字体名
 FONTS = {
-    # 无衬线: 苹方优先 (中英文都很优雅)
-    'sans': '"PingFang SC", "Noto Sans CJK SC", sans-serif',
-    # 等宽: Menlo 优先 (macOS 内置)
-    'mono': '"Menlo", "Monaco", "PingFang SC", monospace',
+    # 无衬线：苹方优先 (macOS)，雅黑备选 (Windows)，最终回退 sans-serif
+    'sans': '"PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif',
+    # 等宽：Menlo/Monaco (macOS)，Consolas/Courier New (Windows)
+    'mono': '"Menlo", "Consolas", "Monaco", "Courier New", "PingFang SC", "Microsoft YaHei", monospace',
 }
 
 # ==================== 全局样式表 ====================
@@ -765,5 +765,22 @@ QLabel {{
     color: {COLORS['error']};
     font-family: {FONTS['mono']};
     background: transparent;
+}}
+"""
+
+# ==================== QApplication 级别 Tooltip 样式 ====================
+# macOS 上 QToolTip 是顶层窗口，不继承 QMainWindow 的样式表。
+# 需要通过 app.setStyleSheet() 在 QApplication 级别设置才能覆盖系统原生外观。
+# 在浅色模式下，系统会将 QToolTip 渲染为毛玻璃浅色背景，导致文字几乎不可见。
+APP_TOOLTIP_STYLE = f"""
+QToolTip {{
+    background-color: {COLORS['bg_card']};
+    color: {COLORS['text_primary']};
+    border: 1px solid {COLORS['border']};
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 12px;
+    font-family: {FONTS['sans']};
+    opacity: 255;
 }}
 """

@@ -67,7 +67,6 @@ class AdvancedConfig:
         
         # 临时文件管理 V4.1
         "keep_temp_files": True,        # 保留临时预览图片（统一控制 tmp JPG + debug crops）
-        "auto_cleanup_days": 30,        # 自动清理周期：3/7/30/0(永久)
 
         # 鸟种英文名显示格式 V4.x (AviList mapping)
         #   "default"    = OSEA model original names
@@ -85,9 +84,12 @@ class AdvancedConfig:
         # 可选值: "filename" | "sharpness_desc" | "aesthetic_desc"
         "browser_sort": "sharpness_desc",
 
+        # 浏览器删除确认弹窗（首次弹窗后可勾选「不再确认」关闭）
+        "delete_confirm": True,
+
         # 主界面复选框状态
-        "flight_check": True,    # 飞鸟检测默认开启
-        "burst_check": True,     # 连拍检测默认开启
+        "flight_check": False,   # 飞鸟检测默认关闭（开启后速度较慢，用户可手动开启）
+        "burst_check": False,    # 连拍检测默认关闭（开启后速度较慢，用户可手动开启）
         "exposure_check": False, # 曝光检测默认关闭
     }
 
@@ -323,20 +325,8 @@ class AdvancedConfig:
     def keep_temp_files(self):
         return self.config.get("keep_temp_files", True)
 
-    @property
-    def auto_cleanup_days(self):
-        return self.config.get("auto_cleanup_days", 30)
-
     def set_keep_temp_files(self, value):
         self.config["keep_temp_files"] = bool(value)
-
-    def set_auto_cleanup_days(self, value):
-        """设置自动清理周期 (0=永久, 或天数)"""
-        try:
-            days = int(value)
-            self.config["auto_cleanup_days"] = max(0, days)
-        except ValueError:
-            pass
 
     # V4.x: 鸟种英文名显示格式
     @property
@@ -366,14 +356,21 @@ class AdvancedConfig:
         if value in ("filename", "sharpness_desc", "aesthetic_desc"):
             self.config["browser_sort"] = value
 
+    @property
+    def delete_confirm(self) -> bool:
+        return self.config.get("delete_confirm", True)
+
+    def set_delete_confirm(self, value: bool):
+        self.config["delete_confirm"] = bool(value)
+
     # 主界面复选框状态 getter/setter
     @property
     def flight_check(self):
-        return self.config.get("flight_check", True)
+        return self.config.get("flight_check", False)
 
     @property
     def burst_check(self):
-        return self.config.get("burst_check", True)
+        return self.config.get("burst_check", False)
 
     @property
     def exposure_check(self):

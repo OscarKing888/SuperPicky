@@ -42,7 +42,7 @@ from core.flight_detector import FlightDetector, get_flight_detector, FlightResu
 from core.exposure_detector import ExposureDetector, get_exposure_detector, ExposureResult
 from core.focus_point_detector import get_focus_detector, verify_focus_in_bbox
 
-from constants import RATING_FOLDER_NAMES, RAW_EXTENSIONS, JPG_EXTENSIONS, get_rating_folder_name, get_rating_folder_names
+from constants import RATING_FOLDER_NAMES, RAW_EXTENSIONS, JPG_EXTENSIONS, HEIF_EXTENSIONS, get_rating_folder_name, get_rating_folder_names
 
 # 国际化
 from tools.i18n import get_i18n
@@ -548,6 +548,8 @@ class PhotoProcessor:
         
         raw_dict = {}
         jpg_dict = {}
+        heif_dict = {}               # HIF/HEIF 文件暂存
+        heif_processed_as_raw = set() # 被当作 RAW 处理的 HIF 前缀
         files_tbr = []
         
         for filename in os.listdir(self.dir_path):
@@ -565,10 +567,19 @@ class PhotoProcessor:
             file_prefix, file_ext = os.path.splitext(filename)
             if file_ext.lower() in RAW_EXTENSIONS:
                 raw_dict[file_prefix] = file_ext
+            elif file_ext.lower() in HEIF_EXTENSIONS:
+                # HEIF/HIF: 仅当同名前缀没有 RAW 时才加入（RAW 优先）
+                heif_dict[file_prefix] = file_ext
             if file_ext.lower() in JPG_EXTENSIONS:
                 jpg_dict[file_prefix] = file_ext
                 files_tbr.append(filename)
         
+        # 将 HIF 作为 RAW 处理（仅对同名前缀无 RAW 文件的）
+        for prefix, ext in heif_dict.items():
+            if prefix not in raw_dict:
+                raw_dict[prefix] = ext
+                heif_processed_as_raw.add(prefix)
+
         scan_time = (time.time() - scan_start) * 1000
         self._log(self.i18n.t("logs.scan_time", time=scan_time))
         
@@ -769,7 +780,15 @@ class PhotoProcessor:
                     if os.path.exists(f['path']) and not os.path.exists(dest):
                         shutil.move(f['path'], dest)
                         stats['moved'] += 1
-                        
+
+                        # V4.1.1: 同步更新 DB 中的 current_path，避免路径与实际位置不符
+                        if hasattr(self, 'report_db') and self.report_db:
+                            try:
+                                rel_dest = os.path.relpath(dest, self.dir_path)
+                                self.report_db.update_photo(f['prefix'], {'current_path': rel_dest})
+                            except Exception as db_e:
+                                self._log(f"    ⚠️ DB current_path update failed: {db_e}", "warning")
+
                         # 移动 sidecar 文件
                         file_base = os.path.splitext(f['path'])[0]
                         for sidecar_ext in ['.xmp', '.jpg', '.JPG']:
@@ -781,6 +800,7 @@ class PhotoProcessor:
                                     pass
                 except Exception as e:
                     self._log(f"    ⚠️ Move failed: {e}", "warning")
+
             
             stats['groups'] += 1
         
@@ -1072,6 +1092,14 @@ class PhotoProcessor:
                             'bird_species_en': en_name,
                             'birdid_confidence': birdid_confidence,
                         })
+                        # 将鸟名追加到已生成的 DB caption 最前面
+                        existing = self.report_db.get_photo(file_prefix) or {}
+                        old_cap = existing.get('caption') or ''
+                        bird_line = f"鸟种：{cn_name or en_name}"
+                        if old_cap and not old_cap.startswith('鸟种：') and not old_cap.startswith('备选鸟种'):
+                            self.report_db.update_photo(file_prefix, {'caption': bird_line + '\n' + old_cap})
+                        elif not old_cap:
+                            self.report_db.update_photo(file_prefix, {'caption': bird_line})
                     except Exception as _e:
                         self._log(f"  ⚠️ Bird species DB write failed [{file_prefix}]: {_e}", "warning")
 
@@ -1082,10 +1110,32 @@ class PhotoProcessor:
                             'title': bird_title,
                         })
             else:
+                # 低置信度：记日志，并将候选鸟名存入 file_bird_species 供 caption 使用
                 self._log(
-                    f"  🐦 Low confidence [{source_display}]: {top_result.get('cn_name', '?')} "
+                    f"  \U0001f426 Low confidence [{source_display}]: {top_result.get('cn_name', '?')} "
                     f"({birdid_confidence:.0f}% < {self.settings.birdid_confidence_threshold}%)"
                 )
+                if cn_name:
+                    self.file_bird_species[file_prefix] = {
+                        'cn_name': cn_name,
+                        'en_name': en_name,
+                        'low_confidence': True,
+                        'confidence': birdid_confidence,
+                    }
+                    # 低置信度：只写 Caption / DB，不写 EXIF Title，不用于分目录
+                    # 将候选鸟名追加到 DB caption 最前面（备选鸟种）
+                    if self.report_db:
+                        try:
+                            existing = self.report_db.get_photo(file_prefix) or {}
+                            old_cap = existing.get('caption') or ''
+                            bird_line = f"\u5907\u9009\u9e1f\u79cd\uff1a{cn_name}\uff1f\uff08\u628a\u63e1\u5ea6 {birdid_confidence:.0f}%\uff09"
+                            if old_cap and not old_cap.startswith('\u5907\u9009\u9e1f\u79cd'):
+                                self.report_db.update_photo(file_prefix, {'caption': bird_line + '\n' + old_cap})
+                            elif not old_cap:
+                                self.report_db.update_photo(file_prefix, {'caption': bird_line})
+                        except Exception as _e:
+                            self._log(f"  \u26a0\ufe0f Low conf caption update failed [{file_prefix}]: {_e}", "warning")
+
 
         def collect_birdid_tasks(wait: bool = False):
             """Collect completed BirdID tasks.
@@ -1515,13 +1565,26 @@ class PhotoProcessor:
                         w_orig_box = int(w * scale_x)
                         h_orig_box = int(h * scale_y)
                         
+                        # V4.3: 与 BirdID 保持一致，加 15% padding
+                        # 防止鸟头在 bbox 边缘时被裁切，导致关键点模型看不到眼睛
+                        pad = int(max(w_orig_box, h_orig_box) * 0.15)
+                        x_orig_pad = max(0, x_orig - pad)
+                        y_orig_pad = max(0, y_orig - pad)
+                        x2_pad = min(w_orig, x_orig + w_orig_box + pad)
+                        y2_pad = min(h_orig, y_orig + h_orig_box + pad)
+                        # 更新裁切区域（含 padding）
+                        x_orig = x_orig_pad
+                        y_orig = y_orig_pad
+                        w_orig_box = x2_pad - x_orig_pad
+                        h_orig_box = y2_pad - y_orig_pad
+                        
                         # 确保边界有效
                         x_orig = max(0, min(x_orig, w_orig - 1))
                         y_orig = max(0, min(y_orig, h_orig - 1))
                         w_orig_box = min(w_orig_box, w_orig - x_orig)
                         h_orig_box = min(h_orig_box, h_orig - y_orig)
                         
-                        # 裁剪鸟的区域（保存BGR版本供NIMA使用）
+                        # 裁剪鸟的区域（保存BGR版本供关键点/飞版/曝光使用）
                         bird_crop_bgr = orig_img[y_orig:y_orig+h_orig_box, x_orig:x_orig+w_orig_box]
                         
                         # 同样裁剪 mask (如果存在)
@@ -2020,7 +2083,7 @@ class PhotoProcessor:
                 self._update_csv_keypoint_data(
                     original_prefix,
                     head_sharpness,  # V4.1: 原始头部锐度
-                    has_visible_eye, 
+                    has_visible_eye,
                     has_visible_beak,
                     left_eye_vis,
                     right_eye_vis,
@@ -2035,6 +2098,7 @@ class PhotoProcessor:
                     adj_sharpness_csv,  # V4.1: 调整后锐度
                     adj_topiq_csv,  # V4.1: 调整后美学
                     prefetched_exif,  # V2: EXIF 元数据
+                    caption,  # V4.1: 评分说明
                 )
                 add_photo_stage('csv_update', (time.time() - csv_update_start) * 1000)
                 
@@ -2305,8 +2369,8 @@ class PhotoProcessor:
             self.stats['exposure_issue'] += 1
     
     def _update_csv_keypoint_data(
-            self, 
-            filename: str, 
+            self,
+            filename: str,
             head_sharpness: float,
             has_visible_eye: bool,
             has_visible_beak: bool,
@@ -2322,7 +2386,8 @@ class PhotoProcessor:
             focus_y: float = None,  # V3.9: 对焦点Y坐标
             adj_sharpness: float = None,  # V4.1: 调整后锐度
             adj_topiq: float = None,  # V4.1: 调整后美学
-            exif_data: dict = None  # V2: EXIF 元数据
+            exif_data: dict = None,  # V2: EXIF 元数据
+            caption: str = None,  # V4.1: 评分说明
     ):
         """更新报告数据库中的关键点数据和评分（SQLite 版本）"""
         if self.report_db is None:
@@ -2343,11 +2408,15 @@ class PhotoProcessor:
             'adj_sharpness': adj_sharpness,
             'adj_topiq': adj_topiq,
         }
-        
-        # V2: 合并 EXIF 元数据
+
+        # V2: 合并 EXIF 元数据（先合并，再覆盖 caption，避免 exif_data 里的空值覆盖评分说明）
         if exif_data:
             data.update(exif_data)
-        
+
+        # caption 最后写入，确保不被 exif_data 里的空 Caption-Abstract 覆盖
+        if caption is not None:
+            data['caption'] = caption
+
         self.report_db.update_photo(filename, data)
     
     # _load_csv_cache 和 _flush_csv_cache 已被 SQLite (ReportDB) 替代
@@ -2413,14 +2482,13 @@ class PhotoProcessor:
                 base_folder = get_rating_folder_name(rating)
                 
                 # V4.0: 2-star and 3-star photos go to bird species subdirectories
-                if rating >= 2 and prefix in self.file_bird_species:
-                    # Photo with species identification
+                # 只有高置信度（无 low_confidence 标记）才按鸟种分目录
+                if rating >= 2 and prefix in self.file_bird_species and not self.file_bird_species[prefix].get('low_confidence'):
+                    # Photo with confirmed species identification
                     bird_info = self.file_bird_species[prefix]
                     if self.i18n.current_lang.startswith('en'):
-                        # English mode: use en_name with spaces replaced by underscores
                         bird_name = bird_info.get('en_name', '').replace(' ', '_')
                     else:
-                        # Chinese mode: use cn_name
                         bird_name = bird_info.get('cn_name', '')
                     if not bird_name:
                         bird_name = bird_info.get('cn_name', '') or bird_info.get('en_name', '').replace(' ', '_') or 'Unknown'
@@ -2519,6 +2587,10 @@ class PhotoProcessor:
                 for file_info in files_to_move:
                     # 原文件名（带后缀）
                     orig_filename = file_info['filename']
+                    # XMP 侧车文件与 RAW 共用同一个 prefix，跳过 XMP 的 current_path 更新
+                    # 否则 XMP 会覆盖 RAW 已写入的正确路径，导致连拍合并时定位不到原图
+                    if orig_filename.lower().endswith('.xmp'):
+                        continue
                     # 文件前缀（不带后缀，也是数据库的主键/索引）
                     file_prefix = os.path.splitext(orig_filename)[0]
                     # 新的相对路径
@@ -2602,32 +2674,6 @@ class PhotoProcessor:
             self._log(self.i18n.t("logs.cache_paths_saved", count=saved_count))
 
     def _cleanup_expired_cache(self):
-        """V4.1: 清理过期的缓存文件"""
-        # Fix: use get_advanced_config() local instance
-        days = get_advanced_config().auto_cleanup_days
-        if days <= 0:
-            return  # 0 = 永久保存
-            
-        cache_dir = os.path.join(self.dir_path, ".superpicky", "cache")
-        if not os.path.exists(cache_dir):
-            return
-            
-        self._log(self.i18n.t("logs.cleaning_expired", days=days))
-        deleted_count = 0
-        now = time.time()
-        expiry_seconds = days * 86400
-        
-        # 递归遍历缓存目录
-        for root, dirs, files in os.walk(cache_dir):
-            for filename in files:
-                file_path = os.path.join(root, filename)
-                try:
-                    mtime = os.path.getmtime(file_path)
-                    if now - mtime > expiry_seconds:
-                        os.remove(file_path)
-                        deleted_count += 1
-                except Exception:
-                    pass
-                    
-        if deleted_count > 0:
-            self._log(self.i18n.t("logs.expired_files_cleaned", count=deleted_count))
+        """V4.3: 已移除基于天数的定期清理（auto_cleanup_days 已删除）。
+        缓存保留与否由 keep_temp_files 控制，此方法保留为空操作以兼容调用方。"""
+        pass

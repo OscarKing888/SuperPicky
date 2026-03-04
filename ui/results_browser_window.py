@@ -74,16 +74,24 @@ def _resolve_app_path(ap: str) -> str:
     return os.path.splitext(os.path.basename(ap))[0]
 
 
-def _best_reveal_target(filepath: str) -> str:
+def _best_reveal_target(*filepaths: str) -> str:
     """返回"在 Finder 中显示"时最合适的目标路径：
-    - 文件存在 → 直接用它（open -R 精确定位）
-    - 文件不存在 → 回退到父目录（至少打开对应文件夹）
+    - 按顺序尝试多个候选路径，第一个实际存在的文件 → open -R 精确定位
+    - 所有文件均不存在 → 回退到第一个非空路径的父目录（至少打开文件夹）
     """
-    if os.path.exists(filepath):
-        return filepath
-    parent = os.path.dirname(filepath)
-    if parent and os.path.isdir(parent):
-        return parent
+    first_valid = ""
+    for filepath in filepaths:
+        if not filepath:
+            continue
+        if not first_valid:
+            first_valid = filepath
+        if os.path.isfile(filepath):
+            return filepath
+    # 所有路径均不存在，回退到父目录
+    if first_valid:
+        parent = os.path.dirname(first_valid)
+        if parent and os.path.isdir(parent):
+            return parent
     return ""
 
 
@@ -114,9 +122,13 @@ def _show_context_menu_impl(parent_widget, photo: dict, pos, directory: str):
     """)
 
     # 在 Finder/Explorer 中显示
+    current = photo.get("current_path") or ""
+    original = photo.get("original_path") or ""
+
     def _reveal():
-        if sys.platform == "darwin" and filepath:
-            target = _best_reveal_target(filepath)
+        if sys.platform == "darwin":
+            # 按优先级依次尝试：current_path → original_path → filepath（兜底）
+            target = _best_reveal_target(current, original, filepath)
             if not target:
                 return
             # 文件存在 → open -R 精确定位；目录 → open 直接打开
@@ -125,7 +137,12 @@ def _show_context_menu_impl(parent_widget, photo: dict, pos, directory: str):
             else:
                 QProcess.startDetached("open", [target])
         elif sys.platform == "win32" and filepath:
-            QProcess.startDetached("explorer", ["/select,", filepath.replace("/", "\\")])
+            # Windows：优先用实际存在的路径
+            win_target = _best_reveal_target(current, original, filepath)
+            if os.path.isfile(win_target):
+                QProcess.startDetached("explorer", ["/select,", win_target.replace("/", "\\")])
+            elif win_target:
+                QProcess.startDetached("explorer", [win_target.replace("/", "\\")])
 
     _i18n = get_i18n()
     finder_action = QAction(_i18n.t('browser.ctx_show_in_finder'), parent_widget)
@@ -174,6 +191,54 @@ def _show_context_menu_impl(parent_widget, photo: dict, pos, directory: str):
     menu.addAction(copy_action)
 
     menu.exec(pos)
+
+
+def _move_to_trash(filepath: str) -> bool:
+    """将文件移入系统回收站（跨平台）。返回是否成功。"""
+    if not filepath or not os.path.exists(filepath):
+        return False
+    try:
+        if sys.platform == "darwin":
+            # macOS: osascript 调用 Finder 移入回收站
+            escaped = filepath.replace('"', '\\"')
+            script = f'tell application "Finder" to delete POSIX file "{escaped}"'
+            result = subprocess.run(
+                ["osascript", "-e", script],
+                capture_output=True, text=True, timeout=10
+            )
+            return result.returncode == 0
+        elif sys.platform == "win32":
+            # Windows: SHFileOperationW (FOF_ALLOWUNDO 移入回收站)
+            import ctypes
+            from ctypes import wintypes
+            class SHFILEOPSTRUCTW(ctypes.Structure):
+                _fields_ = [
+                    ("hwnd", wintypes.HWND),
+                    ("wFunc", ctypes.c_uint),
+                    ("pFrom", ctypes.c_wchar_p),
+                    ("pTo", ctypes.c_wchar_p),
+                    ("fFlags", ctypes.c_ushort),
+                    ("fAnyOperationsAborted", wintypes.BOOL),
+                    ("hNameMappings", ctypes.c_void_p),
+                    ("lpszProgressTitle", ctypes.c_wchar_p),
+                ]
+            FO_DELETE = 0x0003
+            FOF_ALLOWUNDO = 0x0040
+            FOF_NOCONFIRMATION = 0x0010
+            FOF_SILENT = 0x0004
+            op = SHFILEOPSTRUCTW()
+            op.wFunc = FO_DELETE
+            op.pFrom = filepath + '\0'  # double null-terminated
+            op.fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT
+            shell32 = ctypes.windll.shell32
+            result = shell32.SHFileOperationW(ctypes.byref(op))
+            return result == 0
+        else:
+            print(f"⚠️ 当前平台不支持回收站: {sys.platform}")
+            return False
+    except Exception as e:
+        print(f"⚠️ 移入回收站失败: {e}")
+        return False
 
 
 class ResultsBrowserWindow(QMainWindow):
@@ -283,6 +348,8 @@ class ResultsBrowserWindow(QMainWindow):
         self._fullscreen.close_requested.connect(self._exit_fullscreen)
         self._fullscreen.prev_requested.connect(self._fullscreen_prev)
         self._fullscreen.next_requested.connect(self._fullscreen_next)
+        self._fullscreen.delete_requested.connect(self._on_delete_photo)
+        self._fullscreen.context_menu_requested.connect(self._on_fullscreen_context_menu)
         self._stack.addWidget(self._fullscreen)   # index 1
 
         # Page 2: 对比查看器（C5）
@@ -301,9 +368,10 @@ class ResultsBrowserWindow(QMainWindow):
     def _build_toolbar(self) -> QWidget:
         """构建网格顶部工具栏（目录选择 + 缩略图尺寸滑块）。"""
         bar = QWidget()
+        bar.setObjectName("toolbar")
         bar.setFixedHeight(52)
         bar.setStyleSheet(f"""
-            QWidget {{
+            QWidget#toolbar {{
                 background-color: {COLORS['bg_elevated']};
                 border-bottom: 1px solid {COLORS['border_subtle']};
             }}
@@ -422,9 +490,7 @@ class ResultsBrowserWindow(QMainWindow):
         # 先重置筛选（会触发 filters_changed -> _apply_filters 加载缩略图）
         self._filter_panel.reset_all()
 
-        # 重置后再更新计数/鸟种（确保是最终显示状态，不被后续事件覆盖）
-        counts = self._db.get_statistics().get("by_rating", {})
-        self._filter_panel.update_rating_counts(counts)
+        # 重置后更新鸟种列表
         species = self._db.get_distinct_species(use_en=self.i18n.current_lang.startswith('en'))
         self._filter_panel.update_species_list(species)
 
@@ -475,6 +541,7 @@ class ResultsBrowserWindow(QMainWindow):
         total = len(self._all_photos)
         filtered = len(self._filtered_photos)
         self._update_status(total, filtered)
+        self._filter_panel.update_count(filtered)
 
         # 自动选中第一张
         if self._filtered_photos:
@@ -494,12 +561,16 @@ class ResultsBrowserWindow(QMainWindow):
         photo = self._thumb_grid.select_prev()
         if photo:
             self._detail_panel.show_photo(photo)
+            if self._stack.currentIndex() == 1:   # 全屏模式同步大图
+                self._fullscreen.show_photo(photo)
 
     @Slot()
     def _next_photo(self):
         photo = self._thumb_grid.select_next()
         if photo:
             self._detail_panel.show_photo(photo)
+            if self._stack.currentIndex() == 1:   # 全屏模式同步大图
+                self._fullscreen.show_photo(photo)
 
     @Slot(dict)
     def _enter_fullscreen(self, photo: dict):
@@ -559,6 +630,76 @@ class ResultsBrowserWindow(QMainWindow):
     def _show_context_menu(self, photo: dict, pos):
         """C4：右键菜单（由 ThumbnailGrid 通过 parent chain 调用）。"""
         _show_context_menu_impl(self, photo, pos, self._directory)
+
+    @Slot(dict, object)
+    def _on_fullscreen_context_menu(self, photo: dict, global_pos):
+        """全屏大图右键菜单。"""
+        _show_context_menu_impl(self, photo, global_pos, self._directory)
+
+    @Slot(dict)
+    def _on_delete_photo(self, photo: dict):
+        """全屏模式删除图片：确认 → 回收站 → DB 删除 → 缩略图同步 → 跳下一张。"""
+        from advanced_config import get_advanced_config
+        cfg = get_advanced_config()
+        filename = photo.get("filename", "")
+        if not filename:
+            return
+
+        # 1. 确认弹窗（可勾选「以后不再询问」）
+        if cfg.delete_confirm:
+            from PySide6.QtWidgets import QCheckBox
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle(self.i18n.t("browser.delete_title"))
+            msg_box.setText(self.i18n.t("browser.delete_msg").format(filename=filename))
+            msg_box.setIcon(QMessageBox.Warning)
+            yes_btn = msg_box.addButton(self.i18n.t("browser.delete_confirm_btn"), QMessageBox.AcceptRole)
+            msg_box.addButton(self.i18n.t("browser.delete_cancel_btn"), QMessageBox.RejectRole)
+            cb = QCheckBox(self.i18n.t("browser.delete_no_ask"))
+            msg_box.setCheckBox(cb)
+            msg_box.exec()
+            if msg_box.clickedButton() != yes_btn:
+                return
+            if cb.isChecked():
+                cfg.set_delete_confirm(False)
+                cfg.save()
+
+        # 2. 移入回收站
+        filepath = photo.get("current_path") or photo.get("original_path") or ""
+        if filepath and not _move_to_trash(filepath):
+            QMessageBox.warning(
+                self,
+                self.i18n.t("browser.delete_failed"),
+                self.i18n.t("browser.delete_failed_msg").format(error=filepath)
+            )
+            return
+
+        # 3. DB 删除
+        if self._db:
+            self._db.delete_photo(filename)
+
+        # 4. 从内存列表移除
+        self._filtered_photos = [p for p in self._filtered_photos if p.get("filename") != filename]
+        self._all_photos = [p for p in self._all_photos if p.get("filename") != filename]
+
+        # 5. 缩略图同步
+        self._thumb_grid.remove_photo(filename)
+        self._fullscreen.set_photo_list(self._filtered_photos)
+
+        # 6. 跳转逻辑
+        if self._filtered_photos:
+            nxt = self._thumb_grid.select_next()
+            if nxt is None:
+                nxt = self._thumb_grid.select_prev()
+            if nxt:
+                self._fullscreen.show_photo(nxt)
+                self._detail_panel.show_photo(nxt)
+            else:
+                self._exit_fullscreen()
+        else:
+            self._exit_fullscreen()
+
+        # 7. 更新状态栏
+        self._update_status(len(self._all_photos), len(self._filtered_photos))
 
     def _enter_comparison(self):
         """C5：进入 2-up 对比视图（ResultsBrowserWindow）。"""
@@ -733,6 +874,8 @@ class ResultsBrowserWidget(QWidget):
         self._fullscreen.close_requested.connect(self._exit_fullscreen)
         self._fullscreen.prev_requested.connect(self._fullscreen_prev)
         self._fullscreen.next_requested.connect(self._fullscreen_next)
+        self._fullscreen.delete_requested.connect(self._on_delete_photo)
+        self._fullscreen.context_menu_requested.connect(self._on_fullscreen_context_menu)
         self._stack.addWidget(self._fullscreen)
 
         # Page 2: 对比查看器（C5）
@@ -764,9 +907,10 @@ class ResultsBrowserWidget(QWidget):
 
     def _build_toolbar(self) -> QWidget:
         bar = QWidget()
+        bar.setObjectName("toolbar")
         bar.setFixedHeight(52)
         bar.setStyleSheet(f"""
-            QWidget {{
+            QWidget#toolbar {{
                 background-color: {COLORS['bg_elevated']};
                 border-bottom: 1px solid {COLORS['border_subtle']};
             }}
@@ -869,8 +1013,6 @@ class ResultsBrowserWidget(QWidget):
         self._all_photos = self._db.get_all_photos()
         self._compute_burst_ids()
         self._filter_panel.reset_all()
-        counts = self._db.get_statistics().get("by_rating", {})
-        self._filter_panel.update_rating_counts(counts)
         species = self._db.get_distinct_species(use_en=self.i18n.current_lang.startswith('en'))
         self._filter_panel.update_species_list(species)
 
@@ -971,6 +1113,7 @@ class ResultsBrowserWidget(QWidget):
         total = len(self._all_photos)
         filtered = len(self._filtered_photos)
         self._update_status(total, filtered)
+        self._filter_panel.update_count(filtered)
         if self._filtered_photos:
             first = self._filtered_photos[0]
             self._thumb_grid.select_photo(first.get("filename", ""))
@@ -987,12 +1130,16 @@ class ResultsBrowserWidget(QWidget):
         photo = self._thumb_grid.select_prev()
         if photo:
             self._detail_panel.show_photo(photo)
+            if self._stack.currentIndex() == 1:   # 全屏模式同步大图
+                self._fullscreen.show_photo(photo)
 
     @Slot()
     def _next_photo(self):
         photo = self._thumb_grid.select_next()
         if photo:
             self._detail_panel.show_photo(photo)
+            if self._stack.currentIndex() == 1:   # 全屏模式同步大图
+                self._fullscreen.show_photo(photo)
 
     @Slot(dict)
     def _enter_fullscreen(self, photo: dict):
@@ -1050,6 +1197,76 @@ class ResultsBrowserWidget(QWidget):
     def _show_context_menu(self, photo: dict, pos):
         """C4：右键菜单（由 ThumbnailGrid 通过 parent chain 调用）。"""
         _show_context_menu_impl(self, photo, pos, self._directory)
+
+    @Slot(dict)
+    def _on_delete_photo(self, photo: dict):
+        """全屏模式删除图片：确认 → 回收站 → DB 删除 → 缩略图同步 → 跳下一张。"""
+        from advanced_config import get_advanced_config
+        cfg = get_advanced_config()
+        filename = photo.get("filename", "")
+        if not filename:
+            return
+
+        # 1. 确认弹窗
+    @Slot(dict, object)
+    def _on_fullscreen_context_menu(self, photo: dict, global_pos):
+        """全屏大图右键菜单。"""
+        _show_context_menu_impl(self, photo, global_pos, self._directory)
+
+        if cfg.delete_confirm:
+            from PySide6.QtWidgets import QCheckBox
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle(self.i18n.t("browser.delete_title"))
+            msg_box.setText(self.i18n.t("browser.delete_msg").format(filename=filename))
+            msg_box.setIcon(QMessageBox.Warning)
+            yes_btn = msg_box.addButton(self.i18n.t("browser.delete_confirm_btn"), QMessageBox.AcceptRole)
+            msg_box.addButton(self.i18n.t("browser.delete_cancel_btn"), QMessageBox.RejectRole)
+            cb = QCheckBox(self.i18n.t("browser.delete_no_ask"))
+            msg_box.setCheckBox(cb)
+            msg_box.exec()
+            if msg_box.clickedButton() != yes_btn:
+                return
+            if cb.isChecked():
+                cfg.set_delete_confirm(False)
+                cfg.save()
+
+        # 2. 移入回收站
+        filepath = photo.get("current_path") or photo.get("original_path") or ""
+        if filepath and not _move_to_trash(filepath):
+            QMessageBox.warning(
+                self,
+                self.i18n.t("browser.delete_failed"),
+                self.i18n.t("browser.delete_failed_msg").format(error=filepath)
+            )
+            return
+
+        # 3. DB 删除
+        if self._db:
+            self._db.delete_photo(filename)
+
+        # 4. 从内存列表移除
+        self._filtered_photos = [p for p in self._filtered_photos if p.get("filename") != filename]
+        self._all_photos = [p for p in self._all_photos if p.get("filename") != filename]
+
+        # 5. 缩略图同步
+        self._thumb_grid.remove_photo(filename)
+        self._fullscreen.set_photo_list(self._filtered_photos)
+
+        # 6. 跳转逻辑
+        if self._filtered_photos:
+            nxt = self._thumb_grid.select_next()
+            if nxt is None:
+                nxt = self._thumb_grid.select_prev()
+            if nxt:
+                self._fullscreen.show_photo(nxt)
+                self._detail_panel.show_photo(nxt)
+            else:
+                self._exit_fullscreen()
+        else:
+            self._exit_fullscreen()
+
+        # 7. 更新状态栏
+        self._update_status(len(self._all_photos), len(self._filtered_photos))
 
     def _enter_comparison(self):
         """C5：进入 2-up 对比视图。"""

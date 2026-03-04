@@ -27,6 +27,7 @@ if not os.path.exists(os.path.join(ultralytics_base, 'ultralytics')):
 ultralytics_datas = collect_data_files('ultralytics')
 imageio_datas = collect_data_files('imageio')
 rawpy_datas = collect_data_files('rawpy')
+pillow_heif_datas = collect_data_files('pillow_heif')
 
 # 组合所有数据文件
 all_datas = [
@@ -54,10 +55,12 @@ all_datas = [
 all_datas.extend(ultralytics_datas)
 all_datas.extend(imageio_datas)
 all_datas.extend(rawpy_datas)
+all_datas.extend(pillow_heif_datas)
 # 添加包元数据
 all_datas.extend(copy_metadata('imageio'))
 all_datas.extend(copy_metadata('rawpy'))
 all_datas.extend(copy_metadata('ultralytics'))
+all_datas.extend(copy_metadata('pillow_heif'))
 
 a = Analysis(
     ['main.py'],
@@ -86,6 +89,7 @@ a = Analysis(
         'rawpy',
         'imagehash',
         'pywt',
+        'pillow_heif',   # HEIF/HIF 支持
         'core',
         'core.burst_detector',
         'core.config_manager',

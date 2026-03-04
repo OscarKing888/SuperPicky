@@ -319,21 +319,25 @@ class FocusPointDetector:
         orientation = exif_data.get('Orientation', 1)
         norm_x, norm_y = self._apply_orientation_correction(norm_x, norm_y, orientation)
         
-        # 获取对焦框大小
+        # 获取对焦框大小 + 合焦标志
+        # FocusFrameSize 格式（-n 模式）: "width height validity_flag"
+        # 第 3 个值：0 = 焦框无效 (n/a)，非 0 = 焦框有效 → 用作合焦标志
         frame_size = exif_data.get('FocusFrameSize', '')
         area_w, area_h = 0, 0
+        focus_result = 1  # 默认合焦（无法获取标志时保守假设）
         if frame_size:
             try:
                 fs_parts = str(frame_size).split()
                 if len(fs_parts) >= 2:
                     area_w = int(fs_parts[0])
                     area_h = int(fs_parts[1])
+                if len(fs_parts) >= 3:
+                    focus_result = 1 if int(fs_parts[2]) != 0 else 0
             except (ValueError, IndexError):
                 pass
-        
-        # Sony 没有 FocusResult 标签，假设 AF 模式下都是合焦的
+
         area_mode = str(exif_data.get('AFAreaMode', 'Unknown'))
-        
+
         return FocusPointResult(
             x=norm_x,
             y=norm_y,
@@ -343,7 +347,7 @@ class FocusPointDetector:
             area_height=area_h,
             af_mode=focus_mode,
             area_mode=area_mode,
-            focus_result=1,  # 假设 AF 模式下合焦
+            focus_result=focus_result,
             is_valid=True
         )
     
@@ -608,35 +612,16 @@ class FocusPointDetector:
         except (ValueError, IndexError):
             return None
         
-        # 获取图像尺寸 (V3.9: 优先使用 RawImageCroppedSize)
-        raw_cropped = exif_data.get('RawImageCroppedSize', '')
-        if raw_cropped:
-            # 格式: "7728 5152" (空格分隔) 或 "7728x5152"
-            try:
-                raw_str = str(raw_cropped)
-                # 尝试空格分隔（exiftool 默认格式）
-                if ' ' in raw_str:
-                    parts = raw_str.split()
-                elif 'x' in raw_str.lower():
-                    parts = raw_str.lower().split('x')
-                else:
-                    parts = []
-                
-                if len(parts) == 2:
-                    img_w = int(parts[0])
-                    img_h = int(parts[1])
-                else:
-                    img_w = img_h = None
-            except (ValueError, IndexError):
-                img_w = img_h = None
-        else:
-            img_w = img_h = None
+        # 获取图像尺寸
+        # 重要：富士 FocusPixel 的坐标系是相机内嵌 JPEG 预览图的尺寸（如 4416×2944），
+        # 而不是 RAW 全尺寸（如 7728×5152）。
+        # V3.9 曾错误地使用 RawImageCroppedSize（7728×5152）作为分母，
+        # 导致归一化坐标从正确的 ~0.50 偏移到错误的 ~0.29，焦点显示严重错位。
+        # 正确做法：直接用 ExifImageWidth/Height（相机写入的内嵌预览 JPEG 尺寸）作为分母。
+        img_w = exif_data.get('ExifImageWidth')
+        img_h = exif_data.get('ExifImageHeight')
         
-        # 备用: ExifImageWidth/Height
-        if img_w is None or img_h is None:
-            img_w = exif_data.get('ExifImageWidth')
-            img_h = exif_data.get('ExifImageHeight')
-        
+
         if img_w is None or img_h is None:
             return None
         img_w, img_h = int(img_w), int(img_h)

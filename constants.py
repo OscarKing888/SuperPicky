@@ -62,6 +62,9 @@ def get_rating_folder_name(rating: int) -> str:
 RAW_EXTENSIONS = ['.nef', '.cr2', '.cr3', '.arw', '.raf', '.orf', '.rw2', '.pef', '.dng', '.3fr', '.iiq',
                   '.heic', '.heif', '.hif']
 
+# 支持的 HEIF 文件扩展名（小写）- Sony HIF / Apple HEIC 等
+HEIF_EXTENSIONS = ['.hif', '.heif', '.heic']
+
 # 支持的 JPG 文件扩展名（小写）
 JPG_EXTENSIONS = ['.jpg', '.jpeg']
 
@@ -69,6 +72,8 @@ JPG_EXTENSIONS = ['.jpg', '.jpeg']
 IMAGE_EXTENSIONS = (
     [ext.lower() for ext in RAW_EXTENSIONS] +
     [ext.upper() for ext in RAW_EXTENSIONS] +
+    [ext.lower() for ext in HEIF_EXTENSIONS] +
+    [ext.upper() for ext in HEIF_EXTENSIONS] +
     [ext.lower() for ext in JPG_EXTENSIONS] +
     [ext.upper() for ext in JPG_EXTENSIONS]
 )

@@ -55,6 +55,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon
 
 from ui.main_window import SuperPickyMainWindow
+from ui.styles import APP_TOOLTIP_STYLE
 
 # V3.9.3: 全局窗口引用，防止重复创建
 _main_window = None
@@ -91,7 +92,7 @@ def main():
     app.setOrganizationDomain("jamesphotography.com.au")
 
     # 防止隐藏主窗口（切到结果浏览器时）触发 Qt 自动退出
-    # 退出由托盘菜单"退出"或 _quit_app() 显式控制
+    # 退出由托盘菜单"退出"或 _quit_app() 显式控制，统一走 aboutToQuit 清理
     app.setQuitOnLastWindowClosed(False)
     
     # 设置应用图标
@@ -99,12 +100,27 @@ def main():
     if os.path.exists(icon_path):
         app.setWindowIcon(QIcon(icon_path))
     
-    # 注：Qt6/PySide6 默认启用 HiDPI 支持，无需手动设置
+    # V4.1: Windows 高 DPI 缩放策略
+    # Qt6/PySide6 已默认启用 HiDPI，但 RoundingPolicy 默认为 RoundPreferFloor，
+    # 在 Windows 125%/150% 等非整数缩放下会导致文字/边框轻微模糊。
+    # PassThrough 允许使用精确的小数缩放因子，避免像素取整问题。
+    if sys.platform == "win32":
+        from PySide6.QtCore import Qt
+        app.setHighDpiScaleFactorRoundingPolicy(
+            Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
+        )
+    
+    # V4.1: 在 QApplication 级别设置 QToolTip 样式
+    # macOS 上 QToolTip 是顶层窗口，不继承 QMainWindow 的样式，
+    # 在系统浅色模式下会被系统接管为毛玻璃浅色背景 → 文字不可见
+    app.setStyleSheet(APP_TOOLTIP_STYLE)
     
     # V3.9.3: 防止重复创建窗口
     if _main_window is None:
         _main_window = SuperPickyMainWindow()
         _main_window.show()
+        # 统一退出清理：无论通过 X / 托盘 / Cmd+Q 退出，都会经由 aboutToQuit 信号
+        app.aboutToQuit.connect(_main_window._cleanup_on_quit)
     else:
         print("⚠️  检测到已存在的主窗口实例")
         _main_window.raise_()

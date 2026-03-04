@@ -102,7 +102,18 @@ class AboutDialog(QDialog):
         from constants import APP_VERSION
         from core.build_info import COMMIT_HASH
 
-        version = QLabel(f"v{APP_VERSION} ({COMMIT_HASH})")
+        _commit = COMMIT_HASH
+        if not _commit:
+            try:
+                import subprocess
+                _commit = subprocess.check_output(
+                    ['git', 'rev-parse', '--short', 'HEAD'],
+                    stderr=subprocess.DEVNULL
+                ).strip().decode('utf-8')
+            except Exception:
+                _commit = 'dev'
+
+        version = QLabel(f"v{APP_VERSION} ({_commit})")
         version.setStyleSheet(f"""
             color: {COLORS['accent']};
             font-size: 12px;

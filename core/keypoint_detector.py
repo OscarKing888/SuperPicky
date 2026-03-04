@@ -234,10 +234,32 @@ class KeypointDetector:
         使用眼睛为圆心，眼喙距离×1.2为半径，与seg掩码取交集
         """
         h, w = bird_crop.shape[:2]
-        
-        # 如果双眼都不可见，直接返回0
+
+        # 如果双眼都不可见（如鸟侧面、头部转向等）：
+        # 模型坐标仍然大致指向头部位置，用置信度较高的那只眼做 fallback
+        # 沿用与正常流程完全相同的"圆形区域 Sobel"算法，结果 ×0.8 作为惩罚
+        # 这样与正常眼睛检测的锐度值在同一量级，不会因用全身 Sobel 而虚高
         if left_eye_vis < self.VISIBILITY_THRESHOLD and right_eye_vis < self.VISIBILITY_THRESHOLD:
-            return 0.0
+            eye = left_eye if left_eye_vis >= right_eye_vis else right_eye
+            eye_px = (int(eye[0] * w), int(eye[1] * h))
+            beak_px = (int(beak[0] * w), int(beak[1] * h))
+            if beak_vis >= self.VISIBILITY_THRESHOLD:
+                radius = int(self._distance(eye_px, beak_px) * self.RADIUS_MULTIPLIER)
+            elif box is not None:
+                box_size = max(box[2], box[3])
+                radius = int(box_size * self.NO_BEAK_RADIUS_RATIO)
+            else:
+                radius = int(max(w, h) * self.NO_BEAK_RADIUS_RATIO)
+            radius = max(10, min(radius, min(w, h) // 2))
+            circle_mask = np.zeros((h, w), dtype=np.uint8)
+            cv2.circle(circle_mask, eye_px, radius, 255, -1)
+            if seg_mask is not None and seg_mask.shape[:2] == (h, w):
+                head_mask = cv2.bitwise_and(circle_mask, seg_mask)
+            else:
+                head_mask = circle_mask
+            LOW_VIS_PENALTY = 0.8  # 眼睛不可见时降分但不误杀
+            return self._calculate_sharpness(bird_crop, head_mask) * LOW_VIS_PENALTY
+
 
         # 选择眼睛：用更远离喙的那只眼
         if left_eye_vis >= self.VISIBILITY_THRESHOLD and right_eye_vis >= self.VISIBILITY_THRESHOLD:

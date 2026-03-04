@@ -162,51 +162,90 @@ class ComparisonViewer(QWidget):
 
     def _build_bottom_bar(self) -> QWidget:
         bar = QWidget()
-        bar.setFixedHeight(52)
+        bar.setFixedHeight(60)
         bar.setStyleSheet(f"""
             QWidget {{
-                background-color: rgba(26, 26, 26, 210);
-                border-top: 1px solid {COLORS['border_subtle']};
+                background-color: {COLORS['bg_elevated']};
+                border-top: 1px solid {COLORS['border']};
             }}
         """)
         h = QHBoxLayout(bar)
-        h.setContentsMargins(16, 0, 16, 0)
-        h.setSpacing(8)
+        h.setContentsMargins(20, 0, 20, 0)
+        h.setSpacing(6)
 
-        # 左侧评分按钮（1-5 对应键盘 1-5）
-        lbl_a = QLabel("A:")
-        lbl_a.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 11px; background: transparent;")
+        # 左侧标签
+        lbl_a = QLabel("A  :")
+        lbl_a.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 13px; font-weight: 600; background: transparent;")
         h.addWidget(lbl_a)
 
+        # 左侧星级按钮（1-5，键盘 1-5）
+        self._star_btns_a = []
         for i in range(1, 6):
-            btn = QPushButton(f"{'★' * i if i <= 3 else f'{i}★'}")
-            btn.setObjectName("secondary")
-            btn.setFixedHeight(32)
-            btn.setFixedWidth(44)
-            btn.setToolTip(self.i18n.t("browser.rate_left_tooltip").format(i=i, key=str(i)))
+            btn = QPushButton("★" * i)
+            btn.setFixedHeight(36)
+            btn.setFixedWidth(36 + i * 14)  # 50 / 64 / 78 / 92 / 106 px
+            btn.setToolTip(f"给左图评 {i} 星  [键盘: {i}]")
+            btn.setStyleSheet(self._star_btn_style(active=False))
             _i = i
             btn.clicked.connect(lambda _=None, stars=_i: self._rate_left(stars))
             h.addWidget(btn)
+            self._star_btns_a.append(btn)
 
         h.addStretch()
 
-        # 右侧评分按钮（1-5 对应键盘 Q-T）
-        _keys = ["Q", "W", "E", "R", "T"]
+        # 右侧星级按钮（1-5，键盘 Q-T）
+        _keys_b = ["Q", "W", "E", "R", "T"]
+        self._star_btns_b = []
         for i in range(1, 6):
-            btn = QPushButton(f"{'★' * i if i <= 3 else f'{i}★'}")
-            btn.setObjectName("secondary")
-            btn.setFixedHeight(32)
-            btn.setFixedWidth(44)
-            btn.setToolTip(self.i18n.t("browser.rate_right_tooltip").format(i=i, key=_keys[i-1]))
+            btn = QPushButton("★" * i)
+            btn.setFixedHeight(36)
+            btn.setFixedWidth(36 + i * 14)  # 50 / 64 / 78 / 92 / 106 px
+            btn.setToolTip(f"给右图评 {i} 星  [键盘: {_keys_b[i-1]}]")
+            btn.setStyleSheet(self._star_btn_style(active=False))
             _i = i
             btn.clicked.connect(lambda _=None, stars=_i: self._rate_right(stars))
             h.addWidget(btn)
+            self._star_btns_b.append(btn)
 
-        lbl_b = QLabel(":B")
-        lbl_b.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 11px; background: transparent;")
+        # 右侧标签
+        lbl_b = QLabel(":  B")
+        lbl_b.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 13px; font-weight: 600; background: transparent;")
         h.addWidget(lbl_b)
 
         return bar
+
+    def _star_btn_style(self, active: bool = False) -> str:
+        """星级按钮样式：active=True 金色高亮（当前评分），False 暗色待选。"""
+        if active:
+            return (
+                f"QPushButton {{ background-color: {COLORS['accent_dim']};"
+                f" border: 1px solid {COLORS['star_gold']};"
+                f" border-radius: 6px;"
+                f" color: {COLORS['star_gold']};"
+                f" font-size: 11px; padding: 2px 4px; }}"
+                f" QPushButton:hover {{ background-color: {COLORS['bg_input']}; }}"
+            )
+        else:
+            return (
+                f"QPushButton {{ background-color: {COLORS['bg_card']};"
+                f" border: 1px solid {COLORS['border']};"
+                f" border-radius: 6px;"
+                f" color: {COLORS['text_muted']};"
+                f" font-size: 11px; padding: 2px 4px; }}"
+                f" QPushButton:hover {{ background-color: {COLORS['bg_input']};"
+                f" border-color: {COLORS['star_gold']}; color: {COLORS['star_gold']}; }}"
+            )
+
+    def _refresh_star_buttons(self):
+        """刷新星级按钮高亮（当前评分对应按钮金色高亮）。"""
+        rating_a = self._photo_a.get("rating", 0) if self._photo_a else 0
+        rating_b = self._photo_b.get("rating", 0) if self._photo_b else 0
+        for i, btn in enumerate(self._star_btns_a):
+            btn.setStyleSheet(self._star_btn_style(active=(i + 1 == rating_a)))
+        for i, btn in enumerate(self._star_btns_b):
+            btn.setStyleSheet(self._star_btn_style(active=(i + 1 == rating_b)))
+
+
 
     # ------------------------------------------------------------------
     #  公共接口
@@ -217,6 +256,7 @@ class ComparisonViewer(QWidget):
         self._photo_a = photo_a
         self._photo_b = photo_b
         self._refresh_labels()
+        self._refresh_star_buttons()
         self._load_image(photo_a, self._img_a, 'a')
         self._load_image(photo_b, self._img_b, 'b')
 
@@ -287,6 +327,7 @@ class ComparisonViewer(QWidget):
         fn = self._photo_a.get("filename", "")
         self.rating_changed.emit(fn, stars)
         self._refresh_labels()
+        self._refresh_star_buttons()
 
     def _rate_right(self, stars: int):
         """给右侧照片打分。"""
@@ -296,6 +337,7 @@ class ComparisonViewer(QWidget):
         fn = self._photo_b.get("filename", "")
         self.rating_changed.emit(fn, stars)
         self._refresh_labels()
+        self._refresh_star_buttons()
 
     # ------------------------------------------------------------------
     #  键盘快捷键

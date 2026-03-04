@@ -19,10 +19,11 @@ INSTALLER_ID="Developer ID Installer: James Zhen Yu (JWR6FDB52H)"
 APPLE_ID="james@jamesphotography.com.au"
 TEAM_ID="JWR6FDB52H"
 APP_PASSWORD=$(security find-generic-password -a "${APPLE_ID}" -s "SuperPicky-Notarize" -w)
+COMMIT_HASH=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 
-PKG_NAME="${APP_NAME}_v${VERSION}_Intel_Installer.pkg"
-DMG_NAME="${APP_NAME}_v${VERSION}_Intel.dmg"
-
+ARCH_TAG="Intel"
+PKG_NAME="${APP_NAME}_v${VERSION}_${ARCH_TAG}_${COMMIT_HASH}_Installer.pkg"
+DMG_NAME="${APP_NAME}_v${VERSION}_${ARCH_TAG}_${COMMIT_HASH}.dmg"
 # 颜色输出
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -60,8 +61,19 @@ log_info "激活 Conda 环境..."
 source /usr/local/Caskroom/miniconda/base/etc/profile.d/conda.sh
 conda activate superpicky312
 
+# 注入 Git Commit Hash 到 build_info.py（COMMIT_HASH 已在顶部配置区获取）
+BUILD_INFO_FILE="core/build_info.py"
+BUILD_INFO_BACKUP="${BUILD_INFO_FILE}.backup"
+cp "${BUILD_INFO_FILE}" "${BUILD_INFO_BACKUP}"
+sed -i.tmp "s/COMMIT_HASH = None.*/COMMIT_HASH = \"${COMMIT_HASH}\"/" "${BUILD_INFO_FILE}"
+rm -f "${BUILD_INFO_FILE}.tmp"
+log_info "  Commit Hash: ${COMMIT_HASH}"
+
 log_info "开始 PyInstaller 打包..."
 pyinstaller SuperPicky.spec --clean --noconfirm
+
+# 恢复原始 build_info.py
+mv "${BUILD_INFO_BACKUP}" "${BUILD_INFO_FILE}"
 
 if [ ! -d "dist/${APP_NAME}.app" ]; then
     log_error "打包失败！未找到 dist/${APP_NAME}.app"
@@ -106,8 +118,8 @@ fi
 log_step "步骤 3/8: 代码签名"
 
 log_info "签名嵌入的库和框架..."
-find "${APP_PATH}/Contents" -type f \( -name "*.dylib" -o -name "*.so" -o -perm +111 \) \
-    -exec codesign --force --sign "${DEVELOPER_ID}" --timestamp --options runtime {} \; 2>/dev/null || true
+find "${APP_PATH}/Contents" -type f \( -name "*.dylib" -o -name "*.so" -o -perm +111 \) -print0 | \
+    xargs -0 -P 8 -I {} codesign --force --sign "${DEVELOPER_ID}" --timestamp --options runtime {} 2>/dev/null || true
 
 log_info "签名主应用..."
 codesign --force --deep --sign "${DEVELOPER_ID}" \
@@ -171,9 +183,11 @@ if [ "$IS_CHINESE" -eq 1 ]; then
     TXT_OPT_APP_IN="应用内"
     TXT_MSG_NO_LR="⚠ 未检测到 Lightroom 安装"
     TXT_MSG_MANUAL="插件已保存在应用包内，您可以稍后手动安装"
-    TXT_MSG_CANCEL="用户取消了插件安装"
+    TXT_MSG_CANCEL="已跳过插件安装"
     TXT_MSG_MANUAL_HINT="您可以稍后从应用包内手动复制插件"
     TXT_MSG_SUCCESS="✓ Lightroom 插件安装完成"
+    TXT_OPT_SKIP="⊘ 跳过，不安装插件"
+    TXT_BTN_CANCEL="不要安装"
 else
     TXT_TITLE="SuperPicky - Lightroom Plugin Installer"
     TXT_PROMPT="Please select Lightroom versions to install the plugin:"
@@ -183,9 +197,11 @@ else
     TXT_OPT_APP_IN="Inside App"
     TXT_MSG_NO_LR="⚠ No Lightroom installation detected"
     TXT_MSG_MANUAL="Plugin is inside the app bundle, you can install manually later"
-    TXT_MSG_CANCEL="User cancelled plugin installation"
+    TXT_MSG_CANCEL="Plugin installation skipped"
     TXT_MSG_MANUAL_HINT="You can manually copy the plugin from the app bundle later"
     TXT_MSG_SUCCESS="✓ Lightroom Plugin installation completed"
+    TXT_OPT_SKIP="⊘ Skip, don't install plugin"
+    TXT_BTN_CANCEL="Don't Install"
 fi
 
 # 1. 设置应用权限 / Set permissions
@@ -255,7 +271,10 @@ if [ ${#LR_OPTIONS[@]} -eq 0 ]; then
 else
     echo ""
     echo "Found ${#LR_OPTIONS[@]} install locations"
-    
+
+    # 添加跳过选项（排在最末尾）/ Add skip option at the end
+    LR_OPTIONS+=("$TXT_OPT_SKIP")
+
     # 构建 osascript 选项列表
     OPTIONS_STR=""
     for opt in "${LR_OPTIONS[@]}"; do
@@ -276,8 +295,8 @@ else
     SELECTED=$(osascript -e "
         set theChoices to {$OPTIONS_STR}
         set selectedItems to choose from list theChoices with title \"$TXT_TITLE\" with prompt \"$TXT_PROMPT
-        
-$TXT_NOTE\" default items {item 1 of theChoices} with multiple selections allowed
+
+$TXT_NOTE\" cancel button name \"$TXT_BTN_CANCEL\" default items {item 1 of theChoices} with multiple selections allowed
         if selectedItems is false then
             return \"CANCELLED\"
         else
@@ -298,6 +317,11 @@ $TXT_NOTE\" default items {item 1 of theChoices} with multiple selections allowe
         # 解析用户选择并安装
         IFS='|||' read -ra SELECTED_ITEMS <<< "$SELECTED"
         for selection in "${SELECTED_ITEMS[@]}"; do
+            # 用户选择了跳过 / User chose to skip
+            if [ "$selection" = "$TXT_OPT_SKIP" ]; then
+                echo "$TXT_MSG_CANCEL"
+                continue
+            fi
             # 查找对应的路径
             for i in "${!LR_OPTIONS[@]}"; do
                 if [ "${LR_OPTIONS[$i]}" = "$selection" ]; then
@@ -477,7 +501,7 @@ cat > welcome.html << 'WELCOME_EOF'
 
     <h3>System Requirements</h3>
     <ul>
-        <li>macOS 11.0 (Big Sur) or later</li>
+        <li>macOS 12.0 (Monterey) or later</li>
         <li>Apple Silicon (M1/M2/M3/M4) or Intel processor</li>
         <li>Approximately 2GB of available disk space</li>
     </ul>
@@ -581,10 +605,10 @@ cat > distribution.xml << DISTRIBUTION_EOF
     <title>慧眼选鸟 SuperPicky</title>
     <organization>com.jamesphotography</organization>
     <domains enable_localSystem="true"/>
-    <options customize="never" require-scripts="false" hostArchitectures="x86_64"/>
+    <options customize="never" require-scripts="false" hostArchitectures="arm64,x86_64"/>
 
     <welcome file="welcome.html" mime-type="text/html"/>
-    <license file="LICENSE.txt" mime-type="text/plain"/>
+    <license file="LICENSE" mime-type="text/plain"/>
     <conclusion file="conclusion.html" mime-type="text/html"/>
 
     <choices-outline>

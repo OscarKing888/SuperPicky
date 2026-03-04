@@ -912,16 +912,17 @@ class SuperPickyMainWindow(QMainWindow):
         from constants import APP_VERSION
         from core.build_info import COMMIT_HASH
         
-        # V4.0.5: 动态获取版本号和 Commit Hash
+        # COMMIT_HASH 为 None 时（本地开发环境），自动从 git 获取当前 hash
         commit_hash = COMMIT_HASH
-        if commit_hash == "154984fd": # 默认占位符
-             # 开发环境尝试获取真实 hash
-             try:
-                 import subprocess
-                 hash_short = subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD']).strip().decode('utf-8')
-                 commit_hash = hash_short
-             except:
-                 pass
+        if not commit_hash:
+            try:
+                import subprocess
+                commit_hash = subprocess.check_output(
+                    ['git', 'rev-parse', '--short', 'HEAD'],
+                    stderr=subprocess.DEVNULL
+                ).strip().decode('utf-8')
+            except Exception:
+                commit_hash = 'dev'
 
         version_text = f"V{APP_VERSION}\n{commit_hash}"
         
@@ -1006,25 +1007,10 @@ class SuperPickyMainWindow(QMainWindow):
         burst_layout.addWidget(self.burst_check)
         
         header_layout.addLayout(burst_layout)
-        
-        # V3.8: 曝光检测开关
-        exposure_layout = QHBoxLayout()
-        exposure_layout.setSpacing(10)
-        
-        exposure_label = QLabel(self.i18n.t("menu.exposure_label"))
-        exposure_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
-        exposure_layout.addWidget(exposure_label)
-        
-        self.exposure_check = QCheckBox()
-        self.exposure_check.setChecked(self.config.exposure_check)
-        exposure_layout.addWidget(self.exposure_check)
-
-        header_layout.addLayout(exposure_layout)
 
         # 持久化复选框状态
         self.flight_check.stateChanged.connect(self._save_check_states)
         self.burst_check.stateChanged.connect(self._save_check_states)
-        self.exposure_check.stateChanged.connect(self._save_check_states)
         
         # V4.2: 自动识鸟开关
         birdid_layout = QHBoxLayout()
@@ -1236,7 +1222,7 @@ class SuperPickyMainWindow(QMainWindow):
         self.view_results_btn = QPushButton(self.i18n.t("labels.view_results_arrow"))
         self.view_results_btn.setMinimumWidth(160)
         self.view_results_btn.setMinimumHeight(40)
-        self.view_results_btn.clicked.connect(self._auto_open_results)
+        self.view_results_btn.clicked.connect(self._open_results_smart)
         self.view_results_btn.setVisible(False)
         btn_layout.addWidget(self.view_results_btn)
 
@@ -1336,6 +1322,17 @@ class SuperPickyMainWindow(QMainWindow):
         except Exception:
             return {}
 
+    def _open_results_smart(self):
+        """用户主动点击「查看结果」按鈕时的路由：
+        True  → 打开结果浏览器（有预览图）
+        False → 打开 Finder 显示分目录结果（无预览图）
+        """
+        from advanced_config import get_advanced_config
+        if get_advanced_config().keep_temp_files:
+            self._auto_open_results()
+        else:
+            self._open_finder_results()
+
     def _auto_open_results(self):
         """打开/切换结果浏览器窗口，并隐藏主窗口。"""
         if not self.directory_path:
@@ -1351,6 +1348,21 @@ class SuperPickyMainWindow(QMainWindow):
         self._results_browser.activateWindow()
         # 浏览器打开后隐藏主窗口（托盘图标保持可用）
         self.hide()
+
+    def _open_finder_results(self):
+        """不保留预览图时，直接在 Finder 打开结果目录。"""
+        if not self.directory_path:
+            return
+        import sys
+        try:
+            if sys.platform == 'darwin':
+                subprocess.Popen(['open', self.directory_path])
+            elif sys.platform == 'win32':
+                subprocess.Popen(['explorer', self.directory_path])
+            else:
+                subprocess.Popen(['xdg-open', self.directory_path])
+        except Exception as e:
+            self._log(f"  ⚠️ 打开目录失败: {e}", "warning")
 
     def _update_status_banner(self, state: str, data=None):
         """更新状态条显示。
@@ -1515,7 +1527,10 @@ class SuperPickyMainWindow(QMainWindow):
             counts = self._load_result_counts()
             self._update_status_banner("has_results", counts)
             self._update_action_buttons("has_results")
-            QTimer.singleShot(300, self._auto_open_results)
+            # 只有保留预览图时才自动弹出浏览器（无预览图时浏览器无内容）
+            from advanced_config import get_advanced_config as _get_adv
+            if _get_adv().keep_temp_files:
+                QTimer.singleShot(300, self._auto_open_results)
         else:
             self._update_status_banner("ready")
             self._update_action_buttons("ready")
@@ -1618,7 +1633,7 @@ class SuperPickyMainWindow(QMainWindow):
             True,  # V4.0.5: 始终保存裁切，用于 debug_crop_path 持久化
             self.norm_mode,
             self.flight_check.isChecked(),
-            self.exposure_check.isChecked(),  # V3.8: 曝光检测开关
+            False,                            # 曝光检测已移除，固定为 False
             self.burst_check.isChecked(),     # V4.0: 连拍检测开关
             self.birdid_check.isChecked(),    # V4.2: 识鸟开关
         ]
@@ -1702,8 +1717,12 @@ class SuperPickyMainWindow(QMainWindow):
         # 播放完成音效
         self._play_completion_sound()
 
-        # 800ms 后自动弹出结果浏览器
-        QTimer.singleShot(800, self._auto_open_results)
+        # 800ms 后按设置决定行为
+        from advanced_config import get_advanced_config as _gc
+        if _gc().keep_temp_files:
+            QTimer.singleShot(800, self._auto_open_results)
+        else:
+            QTimer.singleShot(800, self._open_finder_results)
 
     @Slot(str)
     def _on_error(self, error_msg):
@@ -2631,7 +2650,6 @@ class SuperPickyMainWindow(QMainWindow):
         """持久化主界面复选框状态"""
         self.config.set_flight_check(self.flight_check.isChecked())
         self.config.set_burst_check(self.burst_check.isChecked())
-        self.config.set_exposure_check(self.exposure_check.isChecked())
         self.config.save()
 
     def _check_custom_mode(self):

@@ -469,26 +469,38 @@ class ReportDB:
             - is_flying: List[int]
             - bird_species_cn / bird_species_en: str
             - sort_by: filename | sharpness_desc | aesthetic_desc
+            - picked_only: bool (如果为 True，则在结果集中筛选出 adj_topiq 和 adj_sharpness 均排名前 25% 的照片)
         """
         filters = filters or {}
 
         where_clauses = []
         params: List[Any] = []
 
+        # 永远排除无鸟记录（rating=-1），即使前端意外传入也过滤掉
+        where_clauses.append("rating != -1")
+
         ratings = filters.get("ratings")
         if isinstance(ratings, list):
+            # 过滤掉 -1（以防万一）
+            ratings = [r for r in ratings if r != -1]
             if not ratings:
                 return []
             placeholders = ", ".join(["?"] * len(ratings))
             where_clauses.append(f"rating IN ({placeholders})")
             params.extend(ratings)
 
+        # 是否包含低评分（0 星），这类照片 focus_status/is_flying 可能是 NULL
+        has_low_rating = isinstance(ratings, list) and any(r <= 0 for r in ratings)
+
         focus_statuses = filters.get("focus_statuses")
         if isinstance(focus_statuses, list):
             if not focus_statuses:
                 return []
             placeholders = ", ".join(["?"] * len(focus_statuses))
-            where_clauses.append(f"focus_status IN ({placeholders})")
+            condition = f"focus_status IN ({placeholders})"
+            if has_low_rating:
+                condition = f"({condition} OR focus_status IS NULL)"
+            where_clauses.append(condition)
             params.extend(focus_statuses)
 
         is_flying = filters.get("is_flying")
@@ -496,7 +508,10 @@ class ReportDB:
             if not is_flying:
                 return []
             placeholders = ", ".join(["?"] * len(is_flying))
-            where_clauses.append(f"is_flying IN ({placeholders})")
+            condition = f"is_flying IN ({placeholders})"
+            if has_low_rating:
+                condition = f"({condition} OR is_flying IS NULL)"
+            where_clauses.append(condition)
             params.extend(is_flying)
 
         species_col = None
@@ -517,8 +532,14 @@ class ReportDB:
         if where_clauses:
             where_sql = "WHERE " + " AND ".join(where_clauses)
 
+        # Determine sort order
         sort_by = filters.get("sort_by") or "filename"
-        if sort_by == "sharpness_desc":
+        picked_only = filters.get("picked_only", False)
+
+        if picked_only:
+            # 精选模式：先全量取回，再 Python 层按 topiq+sharpness 确定 top 25%
+            order_sql = "ORDER BY filename ASC"
+        elif sort_by == "sharpness_desc":
             order_sql = "ORDER BY COALESCE(adj_sharpness, head_sharp, -1e99) DESC, filename ASC"
         elif sort_by == "aesthetic_desc":
             order_sql = "ORDER BY COALESCE(adj_topiq, nima_score, -1e99) DESC, filename ASC"
@@ -529,7 +550,33 @@ class ReportDB:
 
         with self._lock:
             cursor = self._conn.execute(sql, params)
-            return [dict(row) for row in cursor.fetchall()]
+            results = [dict(row) for row in cursor.fetchall()]
+
+            if picked_only and results:
+                # 按 topiq+sharpness 选出 top 25%（选片逻辑不变）
+                results.sort(key=lambda x: (
+                    x.get("adj_topiq", x.get("nima_score", -1e99)),
+                    x.get("adj_sharpness", x.get("head_sharp", -1e99)),
+                    x.get("filename", "")
+                ), reverse=True)
+                num_to_keep = max(1, int(len(results) * 0.25))
+                results = results[:num_to_keep]
+
+                # 截取后按用户的 sort_by 重新排序展示
+                if sort_by == "sharpness_desc":
+                    results.sort(key=lambda x: (
+                        -(x.get("adj_sharpness") or x.get("head_sharp") or -1e99),
+                        x.get("filename", "")
+                    ))
+                elif sort_by == "aesthetic_desc":
+                    results.sort(key=lambda x: (
+                        -(x.get("adj_topiq") or x.get("nima_score") or -1e99),
+                        x.get("filename", "")
+                    ))
+                else:
+                    results.sort(key=lambda x: x.get("filename", ""))
+
+        return results
 
     def get_statistics(self) -> dict:
         """
@@ -612,6 +659,21 @@ class ReportDB:
 
         with self._lock:
             cursor = self._conn.execute(sql, values)
+            self._safe_commit()
+            return cursor.rowcount > 0
+
+    def delete_photo(self, filename: str) -> bool:
+        """从 photos 表中删除指定文件名的记录。
+
+        Args:
+            filename: 照片文件名
+
+        Returns:
+            是否成功删除
+        """
+        sql = "DELETE FROM photos WHERE filename = ?"
+        with self._lock:
+            cursor = self._conn.execute(sql, [filename])
             self._safe_commit()
             return cursor.rowcount > 0
 
