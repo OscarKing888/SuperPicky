@@ -576,7 +576,12 @@ class SuperPickyMainWindow(QMainWindow):
         self.birdid_dock_action.triggered.connect(self._toggle_birdid_dock)
         birdid_menu.addAction(self.birdid_dock_action)
         
-
+        birdid_menu.addSeparator()
+        
+        # V4.0: 后台运行（最小化到托盘，保持识鸟服务）
+        minimize_tray_action = QAction(self.i18n.t("menu.background_mode"), self)
+        minimize_tray_action.triggered.connect(self._minimize_to_tray)
+        birdid_menu.addAction(minimize_tray_action)
 
         # 设置菜单
         settings_menu = menubar.addMenu(self.i18n.t("menu.settings_menu"))
@@ -771,20 +776,23 @@ class SuperPickyMainWindow(QMainWindow):
         self.setWindowState(self.windowState() & ~Qt.WindowMinimized | Qt.WindowActive)
     
     def _quit_app(self):
-        """完全退出应用（清理由 aboutToQuit 信号统一处理）"""
+        """完全退出应用"""
         self._really_quit = True
+        
+        # 停止识鸟服务器
+        if hasattr(self, '_birdid_server_process') and self._birdid_server_process:
+            try:
+                self._birdid_server_process.terminate()
+                self._birdid_server_process.wait(timeout=2)
+            except Exception:
+                pass
+        
+        # 隐藏托盘图标
         if hasattr(self, 'tray_icon'):
-            self.tray_icon.hide()         # 先隐藏托盘，避免用户二次点击
-        QApplication.quit()               # 触发 aboutToQuit → _cleanup_on_quit
-
-    def _cleanup_on_quit(self):
-        """统一退出清理（由 app.aboutToQuit 信号调用）
-        无论通过 X按鈕 / Cmd+Q / 托盘退出，都会经过此处。
-        Mac 和 Windows 均适用。
-        """
-        self._stop_birdid_server()        # 停止 Flask/BirdID 进程
-        if hasattr(self, 'tray_icon') and self.tray_icon:
-            self.tray_icon.hide()         # 清托盘图标（备用，_quit_app 已调过一次也无害）
+            self.tray_icon.hide()
+        
+        # 退出应用
+        QApplication.quit()
 
     def _minimize_to_tray(self):
         """V4.0: 进入后台模式（服务器继续运行，GUI 完全退出）"""
@@ -1463,6 +1471,15 @@ class SuperPickyMainWindow(QMainWindow):
             self.reset_btn.setEnabled(True)
             self.reset_btn.setText(self.i18n.t("labels.reset_short"))
             self.reset_btn.setObjectName("tertiary")
+            try:
+                self.reset_btn.clicked.disconnect(self._quick_restore_directory)
+            except TypeError:
+                pass
+            try:
+                self.reset_btn.clicked.disconnect(self._reset_directory)
+            except TypeError:
+                pass
+            self.reset_btn.clicked.connect(self._reset_directory)
             self.start_btn.setEnabled(True)
             self.start_btn.setText(self.i18n.t("labels.start_processing"))
             self.start_btn.setObjectName("")
@@ -1472,6 +1489,15 @@ class SuperPickyMainWindow(QMainWindow):
             self.reset_btn.setEnabled(True)
             self.reset_btn.setText(self.i18n.t("labels.reprocess"))
             self.reset_btn.setObjectName("tertiary")
+            try:
+                self.reset_btn.clicked.disconnect(self._reset_directory)
+            except TypeError:
+                pass
+            try:
+                self.reset_btn.clicked.disconnect(self._quick_restore_directory)
+            except TypeError:
+                pass
+            self.reset_btn.clicked.connect(self._quick_restore_directory)
             self.start_btn.setEnabled(True)
             self.start_btn.setText(self.i18n.t("labels.start_processing"))
             self.start_btn.setObjectName("tertiary")
@@ -1875,33 +1901,31 @@ class SuperPickyMainWindow(QMainWindow):
                         except Exception as e:
                             emit_log(i18n.t("logs.empty_dir_delete_failed", dir=rating_dir, error=e))
                 
-                # V4.0.5: 清理 .superpicky 隐藏目录和 manifest 文件
-                # Quick Restore: 重新处理时保留 .superpicky 缓存（预览图复用，节省时间）
-                superpicky_dir = os.path.join(directory_path, ".superpicky")
-                if not _skip_exif_reset and os.path.exists(superpicky_dir):
-                    try:
-                        shutil.rmtree(superpicky_dir)
-                        emit_log("  ✅ .superpicky/")
-                        deleted_dirs += 1
-                    except Exception:
-                        # 尝试系统命令强制删除
+                # 仅完整重置时删除 .superpicky 与 manifest；重新处理（快速复原）保留预览缓存
+                if not _skip_exif_reset:
+                    superpicky_dir = os.path.join(directory_path, ".superpicky")
+                    if os.path.exists(superpicky_dir):
                         try:
-                            import subprocess
-                            subprocess.run(['rm', '-rf', superpicky_dir], check=True)
-                            emit_log("  ✅ .superpicky/ (force)")
+                            shutil.rmtree(superpicky_dir)
+                            emit_log("  ✅ .superpicky/")
                             deleted_dirs += 1
-                        except Exception as e2:
-                            emit_log(f"  ⚠️ .superpicky 删除失败: {e2}")
-                elif _skip_exif_reset:
-                    emit_log("  ✅ .superpicky/ 缓存已保留（快速复原：预览图复用）")
-                
-                manifest_file = os.path.join(directory_path, ".superpicky_manifest.json")
-                if os.path.exists(manifest_file):
-                    try:
-                        os.remove(manifest_file)
-                        emit_log("  ✅ .superpicky_manifest.json")
-                    except Exception as e:
-                        emit_log(f"  ⚠️ manifest 删除失败: {e}")
+                        except Exception:
+                            # 尝试系统命令强制删除
+                            try:
+                                import subprocess
+                                subprocess.run(['rm', '-rf', superpicky_dir], check=True)
+                                emit_log("  ✅ .superpicky/ (force)")
+                                deleted_dirs += 1
+                            except Exception as e2:
+                                emit_log(f"  ⚠️ .superpicky 删除失败: {e2}")
+                    
+                    manifest_file = os.path.join(directory_path, ".superpicky_manifest.json")
+                    if os.path.exists(manifest_file):
+                        try:
+                            os.remove(manifest_file)
+                            emit_log("  ✅ .superpicky_manifest.json")
+                        except Exception as e:
+                            emit_log(f"  ⚠️ manifest 删除失败: {e}")
                 
                 # 清理 macOS ._burst_XXX 残留文件
                 for filename in os.listdir(directory_path):
@@ -2319,7 +2343,7 @@ class SuperPickyMainWindow(QMainWindow):
             else:
                 event.ignore()
         else:
-            QApplication.quit()           # 触发 aboutToQuit → _cleanup_on_quit
+            self._stop_birdid_server()  # V4.0: 停止识鸟 API 服务
             event.accept()
 
     # ========== V4.2: 模型预加载功能 ==========

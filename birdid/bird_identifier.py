@@ -17,6 +17,7 @@ import os
 import sys
 from typing import Optional, List, Dict, Tuple, Set
 from tools.i18n import t as _t
+from tools.exiftool_manager import get_exiftool_manager
 
 # ==================== 设备配置 ====================
 def get_classifier_device():
@@ -154,6 +155,68 @@ def _load_torchscript_from_bytes(model_data: bytes):
     """Load TorchScript from bytes to avoid Windows non-ASCII temp path issues."""
     buffer = io.BytesIO(model_data)
     return torch.jit.load(buffer, map_location='cpu')
+
+
+HEIF_EXTENSIONS = {'.heic', '.heif', '.hif'}
+# 内嵌预览若最长边低于此值则视为过小，改用 Pillow 加载原图
+HEIF_MIN_PREVIEW_LONGEST_SIDE = 1000
+
+
+def _extract_preview_with_exiftool(file_path: str) -> Optional[Image.Image]:
+    """
+    用 ExifTool 从 HEIF/RAW-like 文件提取 JPEG 预览图并返回 PIL.Image。
+
+    使用项目统一的 get_exiftool_manager（Windows 打包需 cwd）。优先级：PreviewImage -> JpgFromRaw -> ThumbnailImage。
+    """
+    import subprocess
+
+    try:
+        mgr = get_exiftool_manager()
+        exiftool_path = mgr.exiftool_path
+        exiftool_cwd = os.path.dirname(os.path.abspath(exiftool_path))
+    except Exception:
+        return None
+
+    creationflags = subprocess.CREATE_NO_WINDOW if sys.platform.startswith('win') else 0
+    for tag in ('PreviewImage', 'JpgFromRaw', 'ThumbnailImage'):
+        try:
+            res = subprocess.run(
+                [exiftool_path, '-b', f'-{tag}', file_path],
+                capture_output=True,
+                text=False,
+                timeout=20,
+                creationflags=creationflags,
+                cwd=exiftool_cwd,
+            )
+            if res.returncode != 0 or not res.stdout:
+                continue
+            return Image.open(io.BytesIO(res.stdout)).convert("RGB")
+        except Exception:
+            continue
+    return None
+
+
+def _load_heif_image(file_path: str) -> Image.Image:
+    """
+    加载 HEIF/HEIC/HIF 图像，用于处理的为原图尺寸（或足够大的内嵌预览）。
+
+    优先 ExifTool 提取内嵌预览；若预览过小则用 Pillow 加载原图。
+    """
+    preview = _extract_preview_with_exiftool(file_path)
+    if preview is not None and max(preview.size) >= HEIF_MIN_PREVIEW_LONGEST_SIDE:
+        return preview
+
+    try:
+        try:
+            import pillow_heif  # type: ignore
+            pillow_heif.register_heif_opener()
+        except Exception:
+            pass
+        return Image.open(file_path).convert("RGB")
+    except Exception:
+        pass
+
+    raise RuntimeError("HEIF/HEIC/HIF 解码失败（ExifTool 预览提取与 Pillow 均失败）")
 
 
 # ==================== 懒加载函数 ====================
@@ -380,16 +443,18 @@ def load_image(image_path: str) -> Image.Image:
     raw_extensions = [
         '.cr2', '.cr3', '.nef', '.nrw', '.arw', '.srf', '.dng',
         '.raf', '.orf', '.rw2', '.pef', '.srw', '.raw', '.rwl',
-        '.3fr', '.fff', '.erf', '.mef', '.mos', '.mrw', '.x3f',
-        '.hif', '.heif', '.heic',   # Sony HIF / HEIF
+        '.3fr', '.fff', '.erf', '.mef', '.mos', '.mrw', '.x3f'
     ]
 
-    # HEIF 格式（rawpy 不支持）：直接补 pillow-heif 路径
-    heif_extensions = {'.hif', '.heif', '.heic'}
+    if ext in HEIF_EXTENSIONS:
+        try:
+            img = _load_heif_image(image_path)
+            print(f"[HEIF] 已加载: {img.size[0]}x{img.size[1]}")
+            return img
+        except Exception as e:
+            raise Exception(f"HEIF处理失败: {e}")
 
     if ext in raw_extensions:
-        if ext in heif_extensions:
-            return _load_heif(image_path)
         if RAW_SUPPORT:
             try:
                 with rawpy.imread(image_path) as raw:
@@ -471,33 +536,11 @@ def _load_raw_via_exiftool(image_path: str) -> "Image.Image":
             continue
 
     raise Exception(
-        f"\u6682\u4e0d\u652f\u6301\u6b64 RAW \u683c\u5f0f\uff08{os.path.basename(image_path)}\uff09\u3002"
-        "Sony A7M5 \u7b49\u76f8\u673a\u7684 NeXt/Compressed RAW 2 \u683c\u5f0f\u76ee\u524d\u7b2c\u4e09\u65b9\u5e93\u5c1a\u672a\u5b8c\u6574\u652f\u6301\uff0c"
-        "\u5c06\u5728\u540e\u7eed\u7248\u672c\u4e2d\u4fee\u590d\u3002\u5efa\u8bae\u4e34\u65f6\u4f7f\u7528\u65e0\u538b\u7f29 RAW \u6216 JPEG \u683c\u5f0f\u62cd\u6444\u3002"
+        f"暂不支持此 RAW 格式（{os.path.basename(image_path)}）。"
+        "Sony A7M5 等相机的 NeXt/Compressed RAW 2 格式目前第三方库尚未完整支持，"
+        "将在后续版本中修复。建议临时使用无压缩 RAW 或 JPEG 格式拍摄。"
     )
 
-
-def _load_heif(image_path: str) -> "Image.Image":
-    """
-    \u4f7f\u7528 pillow-heif \u89e3\u7801 HEIF/HIF \u6587\u4ef6\uff08Sony HIF \u3001\u82f9\u679c HEIC \u7b49\uff09\u4e3a PIL Image\u3002
-    """
-    try:
-        import pillow_heif
-        heif_file = pillow_heif.read_heif(image_path)
-        img = Image.frombytes(
-            heif_file.mode,
-            heif_file.size,
-            heif_file.data,
-            "raw",
-        ).convert("RGB")
-        print(f"[HEIF] pillow-heif \u89e3\u7801\u6210\u529f: {img.size[0]}x{img.size[1]}")
-        return img
-    except ImportError:
-        raise Exception(
-            "\u8bf7\u5b89\u88c5 pillow-heif \u6765\u652f\u6301 HIF/HEIC \u683c\u5f0f\uff1a pip install pillow-heif"
-        )
-    except Exception as e:
-        raise Exception(f"HEIF \u89e3\u7801\u5931\u8d25 ({os.path.basename(image_path)}): {e}")
 
 # ==================== GPS 提取 ====================
 
@@ -512,101 +555,63 @@ def extract_gps_from_exif(image_path: str) -> Tuple[Optional[float], Optional[fl
     import subprocess
     import json as json_module
     
-    # 首先尝试使用 exiftool（支持 RAW 格式）
+    # 使用项目统一的 ExifTool（支持 RAW/HEIF，Windows 打包需 cwd）
     try:
-        # 查找 exiftool
-        exiftool_paths = [
-            '/usr/local/bin/exiftool',
-            '/opt/homebrew/bin/exiftool',
-            'exiftool',  # 在 PATH 中查找
-        ]
-        
-        exiftool_path = None
-        for path in exiftool_paths:
-            try:
-                result = subprocess.run([path, '-ver'], capture_output=True, text=False, timeout=5)
-                if result.returncode == 0:
-                    # 解码输出
-                    stdout_bytes = result.stdout
-                    # 尝试多种编码解码
-                    decoded_output = None
-                    for encoding in ['utf-8', 'gbk', 'gb2312', 'latin-1']:
+        mgr = get_exiftool_manager()
+        exiftool_path = mgr.exiftool_path
+        exiftool_cwd = os.path.dirname(os.path.abspath(exiftool_path))
+        creationflags = subprocess.CREATE_NO_WINDOW if sys.platform.startswith('win') else 0
+
+        result = subprocess.run(
+            [exiftool_path, '-j', '-GPSLatitude', '-GPSLongitude', '-GPSLatitudeRef', '-GPSLongitudeRef', image_path],
+            capture_output=True,
+            text=False,  # 使用 bytes 模式，避免自动解码
+            timeout=10,
+            creationflags=creationflags,
+            cwd=exiftool_cwd,
+        )
+
+        if result.returncode == 0 and result.stdout:
+            stdout_bytes = result.stdout
+            decoded_output = None
+            for encoding in ['utf-8', 'gbk', 'gb2312', 'latin-1']:
+                try:
+                    decoded_output = stdout_bytes.decode(encoding)
+                    break
+                except UnicodeDecodeError:
+                    continue
+            if decoded_output is None:
+                decoded_output = stdout_bytes.decode('latin-1')
+
+            data = json_module.loads(decoded_output)
+            if data and len(data) > 0:
+                gps_data = data[0]
+                lat_str = gps_data.get('GPSLatitude', '')
+                lon_str = gps_data.get('GPSLongitude', '')
+                lat_ref = gps_data.get('GPSLatitudeRef', 'N')
+                lon_ref = gps_data.get('GPSLongitudeRef', 'E')
+
+                if lat_str and lon_str:
+                    def parse_dms(dms_str):
+                        import re
+                        match = re.search(r'(\d+)\s*deg\s*(\d+)\'\s*([\d.]+)"?', str(dms_str))
+                        if match:
+                            d, m, s = float(match.group(1)), float(match.group(2)), float(match.group(3))
+                            return d + m/60 + s/3600
                         try:
-                            decoded_output = stdout_bytes.decode(encoding)
-                            break
-                        except UnicodeDecodeError:
-                            continue
-                    
-                    if decoded_output is None:
-                        # 如果所有编码都失败，使用 latin-1 作为最后手段（不会失败）
-                        decoded_output = stdout_bytes.decode('latin-1')
-                    
-                    # 检查是否成功获取版本
-                    if decoded_output.strip():
-                        exiftool_path = path
-                        break
-            except:
-                continue
-        
-        if exiftool_path:
-            # 使用 exiftool 提取 GPS 信息
-            result = subprocess.run(
-                [exiftool_path, '-j', '-GPSLatitude', '-GPSLongitude', '-GPSLatitudeRef', '-GPSLongitudeRef', image_path],
-                capture_output=True,
-                text=False,  # 使用 bytes 模式，避免自动解码
-                timeout=10
-            )
-            
-            if result.returncode == 0 and result.stdout:
-                stdout_bytes = result.stdout
-                # 尝试多种编码解码
-                decoded_output = None
-                for encoding in ['utf-8', 'gbk', 'gb2312', 'latin-1']:
-                    try:
-                        decoded_output = stdout_bytes.decode(encoding)
-                        break
-                    except UnicodeDecodeError:
-                        continue
-                
-                if decoded_output is None:
-                    # 如果所有编码都失败，使用 latin-1 作为最后手段（不会失败）
-                    decoded_output = stdout_bytes.decode('latin-1')
-                
-                data = json_module.loads(decoded_output)
-                if data and len(data) > 0:
-                    gps_data = data[0]
-                    
-                    lat_str = gps_data.get('GPSLatitude', '')
-                    lon_str = gps_data.get('GPSLongitude', '')
-                    lat_ref = gps_data.get('GPSLatitudeRef', 'N')
-                    lon_ref = gps_data.get('GPSLongitudeRef', 'E')
-                    
-                    if lat_str and lon_str:
-                        # 解析度分秒格式，如 "27 deg 25' 0.53\" S"
-                        def parse_dms(dms_str):
-                            import re
-                            match = re.search(r'(\d+)\s*deg\s*(\d+)\'\s*([\d.]+)"?', str(dms_str))
-                            if match:
-                                d, m, s = float(match.group(1)), float(match.group(2)), float(match.group(3))
-                                return d + m/60 + s/3600
-                            # 尝试直接作为数字解析
-                            try:
-                                return float(dms_str)
-                            except:
-                                return None
-                        
-                        lat = parse_dms(lat_str)
-                        lon = parse_dms(lon_str)
-                        
-                        if lat is not None and lon is not None:
-                            # 处理南纬 (S 或 South)
-                            if lat_ref and lat_ref.upper().startswith('S'):
-                                lat = -lat
-                            # 处理西经 (W 或 West)
-                            if lon_ref and lon_ref.upper().startswith('W'):
-                                lon = -lon
-                            print(_t("logs.gps_extracted", lat=f"{lat:.6f}", lon=f"{lon:.6f}"))
-                            return lat, lon, f"GPS: {lat:.6f}, {lon:.6f}"
+                            return float(dms_str)
+                        except Exception:
+                            return None
+
+                    lat = parse_dms(lat_str)
+                    lon = parse_dms(lon_str)
+                    if lat is not None and lon is not None:
+                        if lat_ref and lat_ref.upper().startswith('S'):
+                            lat = -lat
+                        if lon_ref and lon_ref.upper().startswith('W'):
+                            lon = -lon
+                        print(_t("logs.gps_extracted", lat=f"{lat:.6f}", lon=f"{lon:.6f}"))
+                        return lat, lon, f"GPS: {lat:.6f}, {lon:.6f}"
     except Exception as e:
         print(_t("logs.gps_failed", e=e))
     
