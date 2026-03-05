@@ -3,6 +3,7 @@
 [![Version](https://img.shields.io/badge/version-4.1.0-blue.svg)](https://github.com/jamesphotography/SuperPicky)
 [![Platform](https://img.shields.io/badge/platform-macOS%20|%20Windows-lightgrey.svg)](https://github.com/jamesphotography/SuperPicky/releases)
 [![License](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
+[![Build](https://github.com/jamesphotography/SuperPicky/actions/workflows/build-release.yml/badge.svg)](https://github.com/jamesphotography/SuperPicky/actions/workflows/build-release.yml)
 
 [**中文文档 (Chinese)**](README_zh.md) | [**Release Notes**](RELEASE_NOTES.md)
 
