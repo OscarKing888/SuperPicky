@@ -15,7 +15,6 @@ import os
 import subprocess
 import json
 import sys  # V3.9: 用于检测 PyInstaller 打包环境
-from constants import RAW_EXTENSIONS, JPG_EXTENSIONS
 
 
 @dataclass
@@ -645,7 +644,8 @@ class BurstDetector:
             'groups_by_dir': {}
         }
         
-        extensions = set(RAW_EXTENSIONS)
+        from constants import RAW_EXTENSIONS, HEIF_EXTENSIONS
+        extensions = set(RAW_EXTENSIONS + HEIF_EXTENSIONS)
         
         def collect_files_recursive(dir_path: str) -> List[str]:
             """V4.0: 递归收集目录下所有 RAW 文件（包括鸟种子目录）"""
@@ -720,7 +720,8 @@ def test_burst_detector():
         return
     
     # 获取所有图片文件
-    extensions = set(RAW_EXTENSIONS) | set(JPG_EXTENSIONS)
+    from constants import RAW_EXTENSIONS, JPG_EXTENSIONS, HEIF_EXTENSIONS
+    extensions = set(RAW_EXTENSIONS + JPG_EXTENSIONS + HEIF_EXTENSIONS)
     filepaths = []
     for entry in os.scandir(test_dir):
         if entry.is_file():

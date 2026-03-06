@@ -24,7 +24,7 @@ _RATING_OPTIONS = [
     ("3",     "★★★", [3, 4, 5]),
     ("2",     "★★",  [2]),
     ("1",     "★",   [1]),
-    ("0",     "0",   [0]),
+    ("0",     "0",   [0, -1]),   # 0星放弃 + 无鸟，合并显示
 ]
 _DEFAULT_RATING = "3"
 
@@ -479,9 +479,10 @@ class FilterPanel(QWidget):
         self.species_combo.setCurrentIndex(0)
         self.species_combo.blockSignals(False)
 
-        # 排序 → 锐度
+        # 排序 → 恢复用户上次选择（不强制重置为锐度）
         self._sort_combo.blockSignals(True)
-        idx = self._sort_combo.findData("sharpness_desc")
+        saved_sort = self._adv_config.get_browser_sort()
+        idx = self._sort_combo.findData(saved_sort)
         self._sort_combo.setCurrentIndex(idx if idx >= 0 else 0)
         self._sort_combo.blockSignals(False)
 

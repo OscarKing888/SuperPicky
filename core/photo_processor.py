@@ -42,7 +42,7 @@ from core.flight_detector import FlightDetector, get_flight_detector, FlightResu
 from core.exposure_detector import ExposureDetector, get_exposure_detector, ExposureResult
 from core.focus_point_detector import get_focus_detector, verify_focus_in_bbox
 
-from constants import RATING_FOLDER_NAMES, RAW_EXTENSIONS, JPG_EXTENSIONS, get_rating_folder_name, get_rating_folder_names
+from constants import RATING_FOLDER_NAMES, RAW_EXTENSIONS, JPG_EXTENSIONS, HEIF_EXTENSIONS, get_rating_folder_name, get_rating_folder_names
 
 # 国际化
 from tools.i18n import get_i18n
@@ -548,6 +548,8 @@ class PhotoProcessor:
         
         raw_dict = {}
         jpg_dict = {}
+        heif_dict = {}               # HIF/HEIF 文件暂存
+        heif_processed_as_raw = set() # 被当作 RAW 处理的 HIF 前缀
         files_tbr = []
         
         for filename in os.listdir(self.dir_path):
@@ -565,10 +567,19 @@ class PhotoProcessor:
             file_prefix, file_ext = os.path.splitext(filename)
             if file_ext.lower() in RAW_EXTENSIONS:
                 raw_dict[file_prefix] = file_ext
+            elif file_ext.lower() in HEIF_EXTENSIONS:
+                # HEIF/HIF: 仅当同名前缀没有 RAW 时才加入（RAW 优先）
+                heif_dict[file_prefix] = file_ext
             if file_ext.lower() in JPG_EXTENSIONS:
                 jpg_dict[file_prefix] = file_ext
                 files_tbr.append(filename)
         
+        # 将 HIF 作为 RAW 处理（仅对同名前缀无 RAW 文件的）
+        for prefix, ext in heif_dict.items():
+            if prefix not in raw_dict:
+                raw_dict[prefix] = ext
+                heif_processed_as_raw.add(prefix)
+
         scan_time = (time.time() - scan_start) * 1000
         self._log(self.i18n.t("logs.scan_time", time=scan_time))
         
@@ -1111,15 +1122,8 @@ class PhotoProcessor:
                         'low_confidence': True,
                         'confidence': birdid_confidence,
                     }
-                    # EXIF 标题写成 "鸟名\uff1f(62%)"
-                    low_title = f"{cn_name}\uff1f({birdid_confidence:.0f}%)"
-                    for target_file in title_targets:
-                        if target_file and os.path.exists(target_file):
-                            queue_metadata({
-                                'file': target_file,
-                                'title': low_title,
-                            })
-                    # 将候选鸟名追加到已生成的 DB caption 最前面
+                    # 低置信度：只写 Caption / DB，不写 EXIF Title，不用于分目录
+                    # 将候选鸟名追加到 DB caption 最前面（备选鸟种）
                     if self.report_db:
                         try:
                             existing = self.report_db.get_photo(file_prefix) or {}
@@ -1131,6 +1135,7 @@ class PhotoProcessor:
                                 self.report_db.update_photo(file_prefix, {'caption': bird_line})
                         except Exception as _e:
                             self._log(f"  \u26a0\ufe0f Low conf caption update failed [{file_prefix}]: {_e}", "warning")
+
 
         def collect_birdid_tasks(wait: bool = False):
             """Collect completed BirdID tasks.
@@ -2477,14 +2482,13 @@ class PhotoProcessor:
                 base_folder = get_rating_folder_name(rating)
                 
                 # V4.0: 2-star and 3-star photos go to bird species subdirectories
-                if rating >= 2 and prefix in self.file_bird_species:
-                    # Photo with species identification
+                # 只有高置信度（无 low_confidence 标记）才按鸟种分目录
+                if rating >= 2 and prefix in self.file_bird_species and not self.file_bird_species[prefix].get('low_confidence'):
+                    # Photo with confirmed species identification
                     bird_info = self.file_bird_species[prefix]
                     if self.i18n.current_lang.startswith('en'):
-                        # English mode: use en_name with spaces replaced by underscores
                         bird_name = bird_info.get('en_name', '').replace(' ', '_')
                     else:
-                        # Chinese mode: use cn_name
                         bird_name = bird_info.get('cn_name', '')
                     if not bird_name:
                         bird_name = bird_info.get('cn_name', '') or bird_info.get('en_name', '').replace(' ', '_') or 'Unknown'

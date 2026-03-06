@@ -21,16 +21,16 @@
 
 ### Downloads
 **macOS Apple Silicon (M1/M2/M3/M4)**:
-- [GitHub](https://github.com/jamesphotography/SuperPicky/releases/download/v4.1.0/SuperPicky_v4.1.0_arm64_271f0627.dmg) | [Google Drive](https://drive.google.com/file/d/1AC9l2285DuczFsUl_Gewh0fJmK_mUE63/view?usp=sharing) | [百度网盘](https://pan.baidu.com/s/13y1RNzy4LdlvrUosoSO38g?pwd=yxg9) (yxg9) | [夸克网盘](https://pan.quark.cn/s/46cf8ec8f063)
+- [GitHub](https://github.com/jamesphotography/SuperPicky/releases/download/v4.1.0/SuperPicky_v4.1.0_arm64_c869d64.dmg) | [Google Drive](https://drive.google.com/file/d/1odYNFvtYZa8pAO_bYZZCh5FZ6v0ggxFQ) | [百度网盘](https://pan.baidu.com/s/1xzex0UrSDiZeWyLuYRSqNg?pwd=t6c4) (t6c4) | [夸克网盘](https://pan.quark.cn/s/625a2dac438a)
 
 **macOS Intel (Pre-2020 Mac)**:
-- [GitHub](https://github.com/jamesphotography/SuperPicky/releases/download/v4.1.0/SuperPicky_v4.1.0_Intel.dmg) | [Google Drive](https://drive.google.com/file/d/1igArTfwPdpNmBcaehx4aEt4aYv8Yi04Z/view?usp=sharing) | [百度网盘](https://pan.baidu.com/s/19yQiz655ebZwb2x4jM-75Q?pwd=b2tt) (b2tt) | [夸克网盘](https://pan.quark.cn/s/33751818ac71)
+- [GitHub](https://github.com/jamesphotography/SuperPicky/releases/download/v4.1.0/SuperPicky_v4.1.0_Intel_c869d64.dmg) | [Google Drive](https://drive.google.com/file/d/1dPdCoObVLuxy9ks_sYjbfSR4bI3A-IPD) | [百度网盘](https://pan.baidu.com/s/1lNz2mBUEee8qqrd95rPJsA?pwd=3821) (3821) | [夸克网盘](https://pan.quark.cn/s/1b5d87b74059)
 
 **Windows CUDA-GPU**:
 - [百度网盘](https://pan.baidu.com/s/1XBaGXPim_WzjpNBgG-altg?pwd=c2a6) (c2a6) | [Google Drive](https://drive.google.com/file/d/1IKSxB3KbQdDO7VhnsGnHjOb2EgqZIgSB/view?usp=sharing) | [夸克网盘](https://pan.quark.cn/s/d15276717367)
 
 **Windows CPU**:
-- [GitHub](https://github.com/jamesphotography/SuperPicky/releases/download/v4.1.0/SuperPicky_v4.1.0Win64_CPU-SP2.zip) | [百度网盘](https://pan.baidu.com/s/155DpFtRyiYA7Hz6HnagifA?pwd=kk2n) (kk2n) | [Google Drive](https://drive.google.com/file/d/1dYzW47KuHEH-hnkHZOnpfZwJNSsl7IkB/view?usp=sharing) | [夸克网盘](https://pan.quark.cn/s/400ccf6a3e12)
+- [GitHub](https://github.com/jamesphotography/SuperPicky/releases/download/v4.1.0/SuperPicky_Setup_Win64_4.1.0_242f4be.exe) | [百度网盘](https://pan.baidu.com/s/1dle-dGbKx5_On5cfdaaLXQ?pwd=872v) (872v) | [Google Drive](https://drive.google.com/file/d/1nTcgQdUqotu04kVkWUZqENnQtn573uzx) | [夸克网盘](https://pan.quark.cn/s/1b7016c16f79)
 
 ---
 
@@ -189,16 +189,16 @@ This release brings a major architectural overhaul, migrating from CSV to SQLite
 ## Downloads (Latest: V4.1.0)
 
 ### macOS Apple Silicon (M1/M2/M3/M4)
-- GitHub: [SuperPicky_v4.1.0_arm64_271f0627.dmg](https://github.com/jamesphotography/SuperPicky/releases/download/v4.1.0/SuperPicky_v4.1.0_arm64_271f0627.dmg)
-- Google Drive: [SuperPicky_v4.1.0_arm64_271f0627.dmg](https://drive.google.com/file/d/1AC9l2285DuczFsUl_Gewh0fJmK_mUE63/view?usp=sharing)
-- 百度网盘: [SuperPicky_v4.1.0_arm64_271f0627.dmg](https://pan.baidu.com/s/13y1RNzy4LdlvrUosoSO38g?pwd=yxg9) 提取码: yxg9
-- 夸克网盘: [SuperPicky_v4.1.0_arm64_271f0627.dmg](https://pan.quark.cn/s/46cf8ec8f063)
+- GitHub: [SuperPicky_v4.1.0_arm64_c869d64.dmg](https://github.com/jamesphotography/SuperPicky/releases/download/v4.1.0/SuperPicky_v4.1.0_arm64_c869d64.dmg)
+- Google Drive: [SuperPicky_v4.1.0_arm64_c869d64.dmg](https://drive.google.com/file/d/1odYNFvtYZa8pAO_bYZZCh5FZ6v0ggxFQ)
+- 百度网盘: [SuperPicky_v4.1.0_arm64_c869d64.dmg](https://pan.baidu.com/s/1xzex0UrSDiZeWyLuYRSqNg?pwd=t6c4) 提取码: t6c4
+- 夸克网盘: [SuperPicky_v4.1.0_arm64_c869d64.dmg](https://pan.quark.cn/s/625a2dac438a)
 
 ### macOS Intel (Pre-2020 Mac)
-- GitHub: [SuperPicky_v4.1.0_Intel.dmg](https://github.com/jamesphotography/SuperPicky/releases/download/v4.1.0/SuperPicky_v4.1.0_Intel.dmg)
-- Google Drive: [SuperPicky_v4.1.0_Intel.dmg](https://drive.google.com/file/d/1igArTfwPdpNmBcaehx4aEt4aYv8Yi04Z/view?usp=sharing)
-- 百度网盘: [SuperPicky_v4.1.0_Intel.dmg](https://pan.baidu.com/s/19yQiz655ebZwb2x4jM-75Q?pwd=b2tt) 提取码: b2tt
-- 夸克网盘: [SuperPicky_v4.1.0_Intel.dmg](https://pan.quark.cn/s/33751818ac71)
+- GitHub: [SuperPicky_v4.1.0_Intel_c869d64.dmg](https://github.com/jamesphotography/SuperPicky/releases/download/v4.1.0/SuperPicky_v4.1.0_Intel_c869d64.dmg)
+- Google Drive: [SuperPicky_v4.1.0_Intel_c869d64.dmg](https://drive.google.com/file/d/1dPdCoObVLuxy9ks_sYjbfSR4bI3A-IPD)
+- 百度网盘: [SuperPicky_v4.1.0_Intel_c869d64.dmg](https://pan.baidu.com/s/1lNz2mBUEee8qqrd95rPJsA?pwd=3821) 提取码: 3821
+- 夸克网盘: [SuperPicky_v4.1.0_Intel_c869d64.dmg](https://pan.quark.cn/s/1b5d87b74059)
 
 ### Windows (v4.1.0)
 
@@ -208,8 +208,8 @@ This release brings a major architectural overhaul, migrating from CSV to SQLite
 - [夸克网盘](https://pan.quark.cn/s/d15276717367)
 
 **CPU Version**
-- GitHub: [SuperPicky_v4.1.0Win64_CPU-SP2.zip](https://github.com/jamesphotography/SuperPicky/releases/download/v4.1.0/SuperPicky_v4.1.0Win64_CPU-SP2.zip)
-- [百度网盘](https://pan.baidu.com/s/155DpFtRyiYA7Hz6HnagifA?pwd=kk2n) 提取码: kk2n
-- [Google Drive](https://drive.google.com/file/d/1dYzW47KuHEH-hnkHZOnpfZwJNSsl7IkB/view?usp=sharing)
-- [夸克网盘](https://pan.quark.cn/s/400ccf6a3e12)
+- GitHub: [SuperPicky_Setup_Win64_4.1.0_242f4be.exe](https://github.com/jamesphotography/SuperPicky/releases/download/v4.1.0/SuperPicky_Setup_Win64_4.1.0_242f4be.exe)
+- [百度网盘](https://pan.baidu.com/s/1dle-dGbKx5_On5cfdaaLXQ?pwd=872v) 提取码: 872v
+- [Google Drive](https://drive.google.com/file/d/1nTcgQdUqotu04kVkWUZqENnQtn573uzx)
+- [夸克网盘](https://pan.quark.cn/s/1b7016c16f79)
 

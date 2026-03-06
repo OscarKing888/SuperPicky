@@ -1,101 +1,12 @@
 import os
 import rawpy
 import imageio
-import subprocess
-import sys
 from .utils import log_message
 from .exiftool_manager import get_exiftool_manager
 import glob
 import shutil
 
 from .file_utils import ensure_hidden_directory
-from constants import RAW_EXTENSIONS, JPG_EXTENSIONS
-
-
-HEIF_EXTENSIONS = {'.heic', '.heif', '.hif'}
-
-
-def _extract_preview_with_exiftool_to_jpeg(source_path: str, target_jpg_path: str) -> bool:
-    """
-    使用 ExifTool 从 HEIF/RAW-like 文件中提取 JPEG 预览图。
-
-    依次尝试 PreviewImage / JpgFromRaw / ThumbnailImage。
-    """
-    mgr = get_exiftool_manager()
-    exiftool_path = mgr.exiftool_path
-    exiftool_cwd = os.path.dirname(os.path.abspath(exiftool_path))
-    creationflags = subprocess.CREATE_NO_WINDOW if sys.platform.startswith('win') else 0
-
-    for tag in ('PreviewImage', 'JpgFromRaw', 'ThumbnailImage'):
-        cmd = [exiftool_path, '-b', f'-{tag}', source_path]
-        try:
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=False,
-                timeout=30,
-                creationflags=creationflags,
-                cwd=exiftool_cwd,
-            )
-        except Exception:
-            continue
-
-        preview_bytes = result.stdout or b""
-        if result.returncode != 0 or not preview_bytes:
-            continue
-
-        try:
-            with open(target_jpg_path, 'wb') as f:
-                f.write(preview_bytes)
-            return True
-        except Exception:
-            continue
-
-    return False
-
-
-# 内嵌预览若最长边低于此值则视为过小，改用 Pillow 生成原图/半尺寸预览
-HEIF_MIN_PREVIEW_LONGEST_SIDE = 1000
-
-
-def _heif_to_jpeg(heif_file_path: str, jpg_file_path: str):
-    """
-    将 HEIF/HEIC/HIF 转为临时 JPEG，用于处理的预览为原图尺寸（或 ExifTool 大图预览）。
-
-    优先 ExifTool 提取内嵌预览；若提取到的预览过小则用 Pillow 按原图尺寸生成。
-    """
-    from PIL import Image
-
-    # 1) ExifTool 预览提取；若预览尺寸过小则不用，改走 Pillow
-    if _extract_preview_with_exiftool_to_jpeg(heif_file_path, jpg_file_path):
-        try:
-            with Image.open(jpg_file_path) as check:
-                w, h = check.size
-                if max(w, h) >= HEIF_MIN_PREVIEW_LONGEST_SIDE:
-                    return
-            os.remove(jpg_file_path)
-        except Exception:
-            try:
-                os.remove(jpg_file_path)
-            except Exception:
-                pass
-
-    # 2) Pillow 路径：原图尺寸保存，供 AI/评分使用
-    try:
-        try:
-            import pillow_heif  # type: ignore
-            pillow_heif.register_heif_opener()
-        except Exception:
-            pass
-
-        with Image.open(heif_file_path) as im:
-            rgb = im.convert("RGB")
-            rgb.save(jpg_file_path, format="JPEG", quality=95)
-        return
-    except Exception:
-        pass
-
-    raise RuntimeError("无法解码 HEIF/HEIC/HIF（ExifTool 预览提取与 Pillow 均失败）")
 
 def raw_to_jpeg(raw_file_path):
     filename = os.path.basename(raw_file_path)
@@ -112,27 +23,20 @@ def raw_to_jpeg(raw_file_path):
     
     # 文件名不带 tmp_ 前缀，直接使用原名前缀
     jpg_file_path = os.path.join(cache_dir, f"{file_prefix}.jpg")
-
-    # HEIC/HIF/HEIF：若目标预览已存在且不小于 128K 则跳过生成
-    if os.path.exists(jpg_file_path):
-        if file_ext.lower() not in HEIF_EXTENSIONS:
-            return jpg_file_path  # 非 HEIF：缓存命中即用
-        try:
-            if os.path.getsize(jpg_file_path) >= 128 * 1024:
-                return jpg_file_path  # HEIF 族：已有预览且不小于 128K 则跳过
-        except OSError:
-            pass
-        # HEIF 且预览不存在或过小：继续生成并覆盖
-
+    
+    if os.path.exists(jpg_file_path) and os.path.getsize(jpg_file_path) >= 128 * 1024:
+        return jpg_file_path  # 返回完整路径（缓存命中且 ≥128KB，无需重新生成）
+        
     if not os.path.exists(raw_file_path):
         log_message(f"ERROR, file [{filename}] cannot be found in RAW form", directory_path)
         return None
 
-    try:
-        if file_ext.lower() in HEIF_EXTENSIONS:
-            _heif_to_jpeg(raw_file_path, jpg_file_path)
-            return jpg_file_path
+    # HEIF/HIF 格式（rawpy 不支持）：用 pillow-heif 解码全分辨率图
+    heif_exts = {'.hif', '.heif', '.heic'}
+    if file_ext.lower() in heif_exts:
+        return _raw_to_jpeg_via_heif(raw_file_path, jpg_file_path, directory_path)
 
+    try:
         with rawpy.imread(raw_file_path) as raw:
             thumbnail = raw.extract_thumb()
             if thumbnail is None:
@@ -150,8 +54,26 @@ def raw_to_jpeg(raw_file_path):
         # 回退：使用 exiftool -b -JpgFromRaw 提取相机内嵌 JPEG
         return _raw_to_jpeg_via_exiftool(raw_file_path, jpg_file_path, directory_path)
     except Exception as e:
-        log_message(f"Error occurred while converting the RAW-like file:{raw_file_path}, Error: {e}", directory_path)
+        log_message(f"Error occurred while converting the RAW file:{raw_file_path}, Error: {e}", directory_path)
         raise e  # 抛出异常供调用者捕获
+
+
+def _raw_to_jpeg_via_heif(raw_file_path, jpg_file_path, directory_path):
+    """使用 pillow-heif 解码 HEIF/HIF 文件并保存为 JPEG。"""
+    try:
+        import pillow_heif
+        from PIL import Image as _Image
+        heif_file = pillow_heif.read_heif(raw_file_path)
+        img = _Image.frombytes(heif_file.mode, heif_file.size, heif_file.data, "raw").convert("RGB")
+        img.save(jpg_file_path, "JPEG", quality=92)
+        log_message(f"[HEIF] pillow-heif 解码成功: {img.size[0]}x{img.size[1]}", directory_path)
+        return jpg_file_path
+    except ImportError:
+        log_message("pillow-heif 未安装，回退到 ExifTool", directory_path)
+        return _raw_to_jpeg_via_exiftool(raw_file_path, jpg_file_path, directory_path)
+    except Exception as e:
+        log_message(f"HEIF 解码失败 ({os.path.basename(raw_file_path)}): {e}", directory_path)
+        return _raw_to_jpeg_via_exiftool(raw_file_path, jpg_file_path, directory_path)
 
 
 def _raw_to_jpeg_via_exiftool(raw_file_path, jpg_file_path, directory_path):
@@ -349,10 +271,8 @@ def reset(directory, log_callback=None, i18n=None):
         log("\n🏷️  重置EXIF元数据...")
 
     # 支持的图片格式
-    image_extensions = []
-    for ext in RAW_EXTENSIONS + JPG_EXTENSIONS:
-        image_extensions.append(f"*{ext.lower()}")
-        image_extensions.append(f"*{ext.upper()}")
+    image_extensions = ['*.NEF', '*.nef', '*.CR2', '*.cr2', '*.ARW', '*.arw',
+                       '*.JPG', '*.jpg', '*.JPEG', '*.jpeg', '*.DNG', '*.dng']
 
     # 收集所有图片文件（跳过隐藏文件）
     image_files = []

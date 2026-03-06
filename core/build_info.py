@@ -5,5 +5,7 @@
 """
 
 # 在打包时会被替换为实际的 commit hash
-COMMIT_HASH = None  # 打包时由脚本自动替换为实际 git commit hash
+COMMIT_HASH = "c869d64"
+
+
 
