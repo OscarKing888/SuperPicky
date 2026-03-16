@@ -74,12 +74,82 @@ class MergedReportDB:
         
         return sql, params
     
-    def get_all_photos(self) -> List[dict]:
-        """获取所有目录的照片记录"""
+    def update_burst_ids(self, burst_map: dict) -> int:
+        """
+        跨数据库批量更新 burst_id。
+        因为 merged_db 是用多数据库联合挂载的，所以要分配给对应的子数据库更新。
+        
+        Args:
+            burst_map: 字典，格式为
+                {(source_dir, filename): (burst_id, burst_position)}，
+                兼容旧格式 {filename: (burst_id, burst_position)}。
+        """
+        if not burst_map:
+            return 0
+            
+        total_updated = 0
+        from .report_db import _now_iso
+        now = _now_iso()
+        
         with self._lock:
-            sql, params = self._build_union_sql()
-            cursor = self._conn.execute(sql, params)
-            return [dict(row) for row in cursor.fetchall()]
+            # Group updates by alias
+            updates_by_alias = {alias: [] for alias in self._db_aliases}
+            rel_dir_to_alias = {
+                os.path.relpath(self._alias_to_dir[alias], self.root_dir): alias
+                for alias in self._db_aliases
+            }
+            
+            # 新格式：source_dir + filename，可安全定位到唯一子数据库。
+            # 旧格式：仅 filename，仅在全局唯一时更新，避免误写到同名文件。
+            legacy_pending = []
+            for photo_key, burst_info in burst_map.items():
+                if isinstance(photo_key, tuple) and len(photo_key) >= 2:
+                    source_dir, filename = photo_key[0], photo_key[1]
+                    alias = rel_dir_to_alias.get(source_dir)
+                    if alias and filename:
+                        bid, pos = burst_info
+                        updates_by_alias[alias].append((bid, pos, now, filename))
+                else:
+                    legacy_pending.append((photo_key, burst_info))
+
+            if legacy_pending:
+                filename_to_aliases: Dict[str, List[str]] = {}
+                for alias in self._db_aliases:
+                    cursor = self._conn.execute(f"SELECT filename FROM {alias}.photos")
+                    for row in cursor.fetchall():
+                        filename_to_aliases.setdefault(row[0], []).append(alias)
+
+                for filename, burst_info in legacy_pending:
+                    aliases = filename_to_aliases.get(filename, [])
+                    if len(aliases) != 1:
+                        continue
+                    bid, pos = burst_info
+                    updates_by_alias[aliases[0]].append((bid, pos, now, filename))
+            
+            for alias, updates in updates_by_alias.items():
+                if updates:
+                    sql = f"""
+                    UPDATE {alias}.photos 
+                    SET burst_id = ?, burst_position = ?, updated_at = ? 
+                    WHERE filename = ?
+                    """
+                    cursor = self._conn.executemany(sql, updates)
+                    total_updated += cursor.rowcount
+            
+            self._safe_commit()
+            
+        return total_updated
+
+    def _safe_commit(self):
+        if not self._conn:
+            return
+        try:
+            if self._conn.in_transaction:
+                self._conn.commit()
+        except sqlite3.OperationalError as e:
+            if "no transaction is active" in str(e).lower():
+                return
+            raise
     
     def get_photos_by_filters(self, filters: Optional[dict] = None) -> List[dict]:
         """按筛选条件查询（兼容 ReportDB 接口）"""
