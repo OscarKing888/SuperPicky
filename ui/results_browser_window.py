@@ -252,7 +252,11 @@ def _show_context_menu_impl(parent_widget, photo: dict, pos, directory: str):
                 QProcess.startDetached("explorer", [win_target.replace("/", "\\")])
 
     _i18n = get_i18n()
-    finder_action = QAction(_i18n.t('browser.ctx_show_in_finder'), parent_widget)
+    if sys.platform == "win32":
+        reveal_label = "在资源管理器中显示" if not _i18n.current_lang.startswith('en') else "Show in Explorer"
+    else:
+        reveal_label = _i18n.t('browser.ctx_show_in_finder')
+    finder_action = QAction(reveal_label, parent_widget)
     finder_action.setEnabled(bool(filepath))
     finder_action.triggered.connect(_reveal)
     menu.addAction(finder_action)
@@ -777,6 +781,7 @@ class ResultsBrowserWindow(QMainWindow):
                 if bid not in burst_map:
                     burst_map[bid] = []
                 burst_map[bid].append(p)
+        burst_map = {bid: photos for bid, photos in burst_map.items() if len(photos) > 1}
 
         best_burst_photos = {}
         for bid, photos in burst_map.items():
@@ -789,7 +794,7 @@ class ResultsBrowserWindow(QMainWindow):
         for p in self._raw_filtered_photos:
             bid = p.get("burst_id")
             
-            if bid is None:
+            if bid is None or bid not in burst_map:
                 # Normal photo
                 grouped_photos.append(dict(p))
             else:
@@ -849,6 +854,9 @@ class ResultsBrowserWindow(QMainWindow):
             
     @Slot(int)
     def _toggle_burst(self, burst_id: int):
+        if len([p for p in self._raw_filtered_photos if p.get("burst_id") == burst_id]) <= 1:
+            self._expanded_bursts.discard(burst_id)
+            return
         if burst_id in self._expanded_bursts:
             self._expanded_bursts.remove(burst_id)
         else:
@@ -1706,6 +1714,7 @@ class ResultsBrowserWidget(QWidget):
             if burst_id is None:
                 continue
             burst_map.setdefault(burst_id, []).append(photo)
+        burst_map = {burst_id: photos for burst_id, photos in burst_map.items() if len(photos) > 1}
 
         best_burst_photos = {}
         for burst_id, photos in burst_map.items():
@@ -1716,7 +1725,7 @@ class ResultsBrowserWidget(QWidget):
         processed_bursts = set()
         for photo in self._raw_filtered_photos:
             burst_id = photo.get("burst_id")
-            if burst_id is None:
+            if burst_id is None or burst_id not in burst_map:
                 grouped_photos.append(dict(photo))
                 continue
             if burst_id in processed_bursts:
@@ -1757,6 +1766,9 @@ class ResultsBrowserWidget(QWidget):
 
     @Slot(int)
     def _toggle_burst(self, burst_id: int):
+        if len([p for p in self._raw_filtered_photos if p.get("burst_id") == burst_id]) <= 1:
+            self._expanded_bursts.discard(burst_id)
+            return
         if burst_id in self._expanded_bursts:
             self._expanded_bursts.remove(burst_id)
         else:
