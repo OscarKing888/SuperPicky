@@ -1007,7 +1007,7 @@ class FullscreenViewer(QWidget):
             self._locked_ox = lbl._draw_ox
             self._locked_oy = lbl._draw_oy
 
-        filename = photo.get("filename", "")
+        filename = os.path.basename(photo.get("current_path") or photo.get("original_path") or "") or photo.get("filename", "")
         self._filename_label.setText(filename)
         self._update_burst_info(photo)
 

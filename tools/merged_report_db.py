@@ -222,6 +222,26 @@ class MergedReportDB:
             
         return total_updated
 
+    def clear_burst_ids(self) -> int:
+        """清空所有附加数据库里的连拍分组字段。"""
+        from .report_db import _now_iso
+
+        total_updated = 0
+        now = _now_iso()
+        with self._lock:
+            for alias in self._db_aliases:
+                cursor = self._conn.execute(
+                    f"""
+                    UPDATE {alias}.photos
+                    SET burst_id = NULL, burst_position = NULL, updated_at = ?
+                    WHERE burst_id IS NOT NULL OR burst_position IS NOT NULL
+                    """,
+                    (now,),
+                )
+                total_updated += cursor.rowcount
+            self._safe_commit()
+        return total_updated
+
     def _safe_commit(self):
         if not self._conn:
             return

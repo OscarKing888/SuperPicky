@@ -724,6 +724,18 @@ class ReportDB:
             self._safe_commit()
             return cursor.rowcount
 
+    def clear_burst_ids(self) -> int:
+        """清空全部连拍分组字段。"""
+        sql = """
+        UPDATE photos
+        SET burst_id = NULL, burst_position = NULL, updated_at = ?
+        WHERE burst_id IS NOT NULL OR burst_position IS NOT NULL
+        """
+        with self._lock:
+            cursor = self._conn.execute(sql, [_now_iso()])
+            self._safe_commit()
+            return cursor.rowcount
+
     def delete_photo(self, filename: str) -> bool:
         """从 photos 表中删除指定文件名的记录。
 

@@ -69,6 +69,25 @@ def _make_section_label(text: str) -> QLabel:
     return lbl
 
 
+def _display_filename(photo: dict) -> str:
+    path = photo.get("current_path") or photo.get("original_path") or ""
+    if path:
+        return os.path.basename(path)
+    return photo.get("filename") or ""
+
+
+def _format_file_size(num_bytes: int) -> str:
+    units = ["B", "KB", "MB", "GB", "TB"]
+    size = float(max(num_bytes, 0))
+    for unit in units:
+        if size < 1024 or unit == units[-1]:
+            if unit == "B":
+                return f"{int(size)} {unit}"
+            return f"{size:.1f} {unit}"
+        size /= 1024.0
+    return "\u2014"
+
+
 def _make_value_label(text: str = "—") -> QLabel:
     lbl = QLabel(text)
     lbl.setStyleSheet(f"""
@@ -315,6 +334,7 @@ class DetailPanel(QWidget):
         self._val_iso = _make_value_label()
         self._val_focal = _make_value_label()
         self._val_confidence = _make_value_label()
+        self._val_filesize = _make_value_label()
         self._val_filename = _make_value_label()
         self._val_datetime = _make_value_label()
         self._val_caption = _make_value_label()
@@ -333,6 +353,7 @@ class DetailPanel(QWidget):
             ("browser.meta_iso",        self._val_iso),
             ("browser.meta_focal",      self._val_focal),
             ("browser.meta_confidence", self._val_confidence),
+            ("browser.meta_filesize",   self._val_filesize),
             ("browser.meta_filename",   self._val_filename),
             ("browser.meta_datetime",   self._val_datetime),
         ]
@@ -420,7 +441,7 @@ class DetailPanel(QWidget):
             self._val_caption,
             self._val_camera, self._val_lens, self._val_shutter,
             self._val_iso, self._val_focal, self._val_confidence,
-            self._val_filename, self._val_datetime,
+            self._val_filesize, self._val_filename, self._val_datetime,
         ):
             val.setText("—")
         self._rating_label.setText("—")
@@ -727,8 +748,17 @@ class DetailPanel(QWidget):
         conf = p.get("confidence")
         self._val_confidence.setText(f"{conf*100:.1f}%" if conf else _unknown)
 
+        file_path = p.get("current_path") or p.get("original_path") or ""
+        if file_path and os.path.exists(file_path):
+            try:
+                self._val_filesize.setText(_format_file_size(os.path.getsize(file_path)))
+            except OSError:
+                self._val_filesize.setText(_unknown)
+        else:
+            self._val_filesize.setText(_unknown)
+
         # 文件名
-        fn = p.get("filename") or _unknown
+        fn = _display_filename(p) or _unknown
         burst_pos = p.get("burst_position_index")
         burst_total = p.get("burst_total_count")
         if burst_pos and burst_total:

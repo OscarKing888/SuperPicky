@@ -94,48 +94,38 @@ def _burst_sort_key(photo: dict) -> tuple:
     return (capture_time or fallback, photo.get("filename", ""))
 
 
-def _build_burst_update_map(photos: list) -> dict:
-    untagged = [
-        p for p in photos
-        if p.get("burst_id") is None and p.get("date_time_original") and p.get("filename")
-    ]
-    if not untagged:
-        return {}
-
-    sortable = []
-    for photo in untagged:
-        capture_time = _parse_capture_time(photo.get("date_time_original"))
-        if capture_time is None:
+def _extract_burst_group_key(photo: dict) -> Optional[str]:
+    source_prefix = photo.get("source_dir") or ""
+    for key in ("current_path", "original_path"):
+        path = photo.get(key)
+        if not path:
             continue
-        sortable.append((capture_time, photo.get("filename", ""), photo))
-    if not sortable:
+        normalized = os.path.normpath(path)
+        parts = normalized.split(os.sep)
+        for idx, part in enumerate(parts):
+            if part.startswith("burst_"):
+                return f"{source_prefix}|{'/'.join(parts[:idx + 1])}"
+    return None
+
+
+def _build_burst_update_map(photos: list) -> dict:
+    grouped = {}
+    for photo in photos:
+        group_key = _extract_burst_group_key(photo)
+        if not group_key:
+            continue
+        grouped.setdefault(group_key, []).append(photo)
+
+    if not grouped:
         return {}
 
-    sortable.sort(key=lambda item: (item[0], item[1]))
-
-    max_bid = max([p.get("burst_id") or -1 for p in photos] + [-1])
-    burst_id = max_bid + 1
     burst_map = {}
-    group = []
-    prev_capture_time = None
-
-    def flush_group(group_items: list, current_burst_id: int):
-        if len(group_items) <= 1:
-            return
-        for pos, photo in enumerate(group_items, 1):
-            burst_map[_photo_identity(photo)] = (current_burst_id, pos)
-
-    for capture_time, _, photo in sortable:
-        if prev_capture_time is None or (capture_time - prev_capture_time).total_seconds() <= 1.0:
-            group.append(photo)
-        else:
-            flush_group(group, burst_id)
-            if len(group) > 1:
-                burst_id += 1
-            group = [photo]
-        prev_capture_time = capture_time
-
-    flush_group(group, burst_id)
+    for burst_id, group_key in enumerate(sorted(grouped), 1):
+        burst_photos = sorted(grouped[group_key], key=_burst_sort_key)
+        if len(burst_photos) <= 1:
+            continue
+        for pos, photo in enumerate(burst_photos, 1):
+            burst_map[_photo_identity(photo)] = (burst_id, pos)
     return burst_map
 
 
@@ -252,7 +242,11 @@ def _show_context_menu_impl(parent_widget, photo: dict, pos, directory: str):
                 QProcess.startDetached("explorer", [win_target.replace("/", "\\")])
 
     _i18n = get_i18n()
-    finder_action = QAction(_i18n.t('browser.ctx_show_in_finder'), parent_widget)
+    if sys.platform == "win32":
+        reveal_label = "在资源管理器中显示" if not _i18n.current_lang.startswith('en') else "Show in Explorer"
+    else:
+        reveal_label = _i18n.t('browser.ctx_show_in_finder')
+    finder_action = QAction(reveal_label, parent_widget)
     finder_action.setEnabled(bool(filepath))
     finder_action.triggered.connect(_reveal)
     menu.addAction(finder_action)
@@ -710,10 +704,13 @@ class ResultsBrowserWindow(QMainWindow):
             return
 
         photos = self._db.get_all_photos()
+        self._db.clear_burst_ids()
         burst_map = _build_burst_update_map(photos)
         if burst_map:
             self._db.update_burst_ids(burst_map)
             self._all_photos = self._db.get_all_photos()
+        else:
+            self._all_photos = photos
 
         if not self._all_photos:
             self._burst_totals = Counter()
@@ -777,6 +774,7 @@ class ResultsBrowserWindow(QMainWindow):
                 if bid not in burst_map:
                     burst_map[bid] = []
                 burst_map[bid].append(p)
+        burst_map = {bid: photos for bid, photos in burst_map.items() if len(photos) > 1}
 
         best_burst_photos = {}
         for bid, photos in burst_map.items():
@@ -789,7 +787,7 @@ class ResultsBrowserWindow(QMainWindow):
         for p in self._raw_filtered_photos:
             bid = p.get("burst_id")
             
-            if bid is None:
+            if bid is None or bid not in burst_map:
                 # Normal photo
                 grouped_photos.append(dict(p))
             else:
@@ -849,6 +847,9 @@ class ResultsBrowserWindow(QMainWindow):
             
     @Slot(int)
     def _toggle_burst(self, burst_id: int):
+        if len([p for p in self._raw_filtered_photos if p.get("burst_id") == burst_id]) <= 1:
+            self._expanded_bursts.discard(burst_id)
+            return
         if burst_id in self._expanded_bursts:
             self._expanded_bursts.remove(burst_id)
         else:
@@ -1626,10 +1627,13 @@ class ResultsBrowserWidget(QWidget):
             return
 
         photos = self._db.get_all_photos()
+        self._db.clear_burst_ids()
         burst_map = _build_burst_update_map(photos)
         if burst_map:
             self._db.update_burst_ids(burst_map)
             self._all_photos = self._db.get_all_photos()
+        else:
+            self._all_photos = photos
 
         if not self._all_photos:
             self._burst_totals = Counter()
@@ -1706,6 +1710,7 @@ class ResultsBrowserWidget(QWidget):
             if burst_id is None:
                 continue
             burst_map.setdefault(burst_id, []).append(photo)
+        burst_map = {burst_id: photos for burst_id, photos in burst_map.items() if len(photos) > 1}
 
         best_burst_photos = {}
         for burst_id, photos in burst_map.items():
@@ -1716,7 +1721,7 @@ class ResultsBrowserWidget(QWidget):
         processed_bursts = set()
         for photo in self._raw_filtered_photos:
             burst_id = photo.get("burst_id")
-            if burst_id is None:
+            if burst_id is None or burst_id not in burst_map:
                 grouped_photos.append(dict(photo))
                 continue
             if burst_id in processed_bursts:
@@ -1757,6 +1762,9 @@ class ResultsBrowserWidget(QWidget):
 
     @Slot(int)
     def _toggle_burst(self, burst_id: int):
+        if len([p for p in self._raw_filtered_photos if p.get("burst_id") == burst_id]) <= 1:
+            self._expanded_bursts.discard(burst_id)
+            return
         if burst_id in self._expanded_bursts:
             self._expanded_bursts.remove(burst_id)
         else:
