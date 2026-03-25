@@ -1101,7 +1101,8 @@ class PhotoProcessor:
             file_prefix: str,
             image_path: str,
             title_targets: List[str],
-            source_filename: Optional[str] = None
+            source_filename: Optional[str] = None,
+            bird_crop_pil=None,  # 主流水线已裁剪的 PIL Image，避免 BirdID 重跑 YOLO
         ):
             if birdid_executor is None or identify_bird_fn is None:
                 return
@@ -1120,7 +1121,8 @@ class PhotoProcessor:
                     self.settings.birdid_country_code,
                     self.settings.birdid_region_code,
                     1,      # top_k
-                    nf      # name_format
+                    nf,     # name_format
+                    bird_crop_pil,  # preloaded_crop
                 )
                 self._perf_add_stage('birdid_submit', (time.time() - submit_start) * 1000)
                 birdid_tasks.append((future, file_prefix, list(title_targets), source_display))
@@ -2176,11 +2178,22 @@ class PhotoProcessor:
                     
                     # BirdID 异步提交（2星及以上）
                     if self.settings.auto_identify and rating_value >= 2:
+                        _birdid_crop_pil = None
+                        if bird_crop_bgr is not None:
+                            try:
+                                from PIL import Image as _PILImage
+                                import cv2 as _cv2_birdid
+                                _birdid_crop_pil = _PILImage.fromarray(
+                                    _cv2_birdid.cvtColor(bird_crop_bgr, _cv2_birdid.COLOR_BGR2RGB)
+                                )
+                            except Exception:
+                                pass
                         submit_birdid_task(
                             original_prefix,
                             filepath,
                             birdid_title_targets,
-                            os.path.basename(target_file_path)
+                            os.path.basename(target_file_path),
+                            _birdid_crop_pil,
                         )
             else:
                 # V3.4: 纯 JPEG 文件（没有对应 RAW）
@@ -2200,11 +2213,22 @@ class PhotoProcessor:
                     })
                     # BirdID 异步提交（2星及以上）
                     if self.settings.auto_identify and rating_value >= 2:
+                        _birdid_crop_pil = None
+                        if bird_crop_bgr is not None:
+                            try:
+                                from PIL import Image as _PILImage
+                                import cv2 as _cv2_birdid
+                                _birdid_crop_pil = _PILImage.fromarray(
+                                    _cv2_birdid.cvtColor(bird_crop_bgr, _cv2_birdid.COLOR_BGR2RGB)
+                                )
+                            except Exception:
+                                pass
                         submit_birdid_task(
                             original_prefix,
                             filepath,
                             [target_file_path],
-                            os.path.basename(target_file_path)
+                            os.path.basename(target_file_path),
+                            _birdid_crop_pil,
                         )
 
             # V3.4: 以下操作对 RAW 和纯 JPEG 都执行
