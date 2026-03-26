@@ -2693,15 +2693,26 @@ class SuperPickyMainWindow(QMainWindow):
         def _do_check():
             try:
                 from tools.update_checker import UpdateChecker
-                checker = UpdateChecker()  # 使用 update_checker.CURRENT_VERSION
-                has_update, update_info = checker.check_for_updates()
+                from advanced_config import get_advanced_config as _get_cfg
+                _cfg = _get_cfg()
+                checker = UpdateChecker()
+                has_update, update_info = checker.check_for_updates(
+                    include_prerelease=_cfg.include_prerelease
+                )
                 print(f"[DEBUG] Update check done: has_update={has_update}, silent={silent}")
                 
                 # 静默模式下，只有有更新时才弹窗
                 if silent and not has_update:
                     print("[DEBUG] Silent mode, no update, skipping dialog")
                     return
-                    
+
+                # 静默模式：跳过用户已选择忽略的版本
+                if silent and has_update and update_info:
+                    latest = update_info.get('version', '')
+                    if latest and latest == _cfg.ignored_update_version:
+                        print(f"[DEBUG] Silent mode, version {latest} is ignored, skipping dialog")
+                        return
+
                 # 使用信号发送到主线程
                 self._update_signals.update_check_done.emit(has_update, update_info)
             except Exception as e:
