@@ -1543,6 +1543,19 @@ class PhotoProcessor:
             if should_update:
                 progress = int((i / total_files) * 100)
                 self._progress(progress)
+
+            # 周期性 GPU 显存清理（每 200 张）
+            # MPS 不像 CUDA 会自动回收，长批次（如 13000 张）会导致显存耗尽
+            if i % 200 == 0:
+                try:
+                    import torch, gc
+                    if torch.backends.mps.is_available():
+                        torch.mps.empty_cache()
+                    elif torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                    gc.collect()
+                except Exception:
+                    pass
             
             result = yolo_item.get('result')
             if result is None:
