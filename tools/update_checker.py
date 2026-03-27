@@ -40,38 +40,92 @@ PLATFORM_ARCH_PATTERNS = {
 }
 
 
+def get_version_channel(ver: str) -> str:
+    """
+    判定版本渠道
+
+    规则：
+    - 纯 X.Y.Z（三段数字）→ 'official'（正式版，必须提示更新）
+    - 含 -RC（不区分大小写）    → 'nightly'（预发布，可选更新）
+    - 其他（含 -beta、-hotfix 等后缀）→ 'dev'（开发版，不检查更新）
+
+    Args:
+        ver: 版本字符串，如 "4.2.5"、"4.2.5-RC3"、"4.2.5-beta"
+
+    Returns:
+        'official' | 'nightly' | 'dev'
+    """
+    ver = ver.strip().lstrip('vV')
+    if re.fullmatch(r'\d+\.\d+\.\d+', ver):
+        return 'official'
+    if re.search(r'-rc', ver, re.IGNORECASE):
+        return 'nightly'
+    return 'dev'
+
+
 class UpdateChecker:
     """更新检测器"""
-    
+
     def __init__(self, current_version: str = CURRENT_VERSION):
         self.current_version = current_version
         self._latest_info: Optional[Dict] = None
-    
+
+    @property
+    def channel(self) -> str:
+        """当前版本渠道：'official' | 'nightly' | 'dev'"""
+        return get_version_channel(self.current_version)
+
+    def should_check_updates(self) -> bool:
+        """是否需要检查更新（dev 渠道不检查）"""
+        return self.channel != 'dev'
+
     def check_for_updates(self, timeout: int = 10, include_prerelease: bool = False) -> Tuple[bool, Optional[Dict]]:
         """
         检查是否有更新
-        
+
+        渠道规则：
+        - official：只与正式 Release 比较
+        - nightly：与最新 Release（含预发布）比较
+        - dev：直接返回 False，不发起网络请求
+
         Args:
             timeout: 请求超时时间（秒）
-            
+            include_prerelease: 为 True 时拉取所有 releases（含预发布）列表
+
         Returns:
             (has_update, update_info) - update_info 包含:
                 - version: 最新版本号
                 - current_version: 当前版本号
+                - channel: 当前版本渠道
                 - download_url: 当前平台的下载链接
                 - release_notes: 发布说明
                 - release_url: GitHub Release 页面链接
         """
+        # dev 渠道不检查更新
+        if not self.should_check_updates():
+            return False, {
+                'version': self.current_version,
+                'current_version': self.current_version,
+                'channel': 'dev',
+                'download_url': None,
+                'release_notes': '',
+                'release_url': GITHUB_RELEASES_URL,
+            }
+
+        # nightly 渠道自动包含预发布版本
+        if self.channel == 'nightly':
+            include_prerelease = True
+
         try:
             # macOS SSL证书问题修复
             import ssl
             import urllib.request
-            
+
             # 创建自定义的SSL上下文，禁用证书验证
             ssl_context = ssl.create_default_context()
             ssl_context.check_hostname = False
             ssl_context.verify_mode = ssl.CERT_NONE
-            
+
             # 选择 API 端点
             api_url = GITHUB_RELEASES_LIST_URL if include_prerelease else GITHUB_API_URL
 
@@ -102,25 +156,27 @@ class UpdateChecker:
                 return False, {
                     'version': self.current_version,
                     'current_version': self.current_version,
+                    'channel': self.channel,
                     'download_url': None,
                     'release_notes': '',
                     'release_url': GITHUB_RELEASES_URL,
                 }
-            
+
             # 比较版本
             try:
                 has_update = version.parse(latest_version) > version.parse(self.current_version)
             except Exception:
                 # 简单字符串比较作为回退
                 has_update = latest_version != self.current_version
-            
+
             # 获取当前平台的下载链接
             download_url = self._find_platform_download(data.get('assets', []))
-            
+
             # 始终返回版本信息
             update_info = {
                 'version': latest_version,
                 'current_version': self.current_version,
+                'channel': self.channel,
                 'download_url': download_url,
                 'release_notes': data.get('body', ''),
                 'release_url': data.get('html_url', GITHUB_RELEASES_URL),
@@ -261,14 +317,19 @@ def check_update_async(callback, current_version: str = CURRENT_VERSION):
 if __name__ == "__main__":
     print("=== SuperPicky 更新检测器测试 ===\n")
     print(f"当前版本: {CURRENT_VERSION}")
+    print(f"版本渠道: {get_version_channel(CURRENT_VERSION)}")
     print(f"当前平台: {UpdateChecker.get_platform_name()}")
     print(f"平台标识: {UpdateChecker.get_platform_short_name()}")
     print(f"CPU 架构: {platform.machine()}\n")
 
     checker = UpdateChecker()
+    print(f"渠道: {checker.channel}  是否检查更新: {checker.should_check_updates()}\n")
+
     has_update, info = checker.check_for_updates()
 
-    if has_update:
+    if not checker.should_check_updates():
+        print("⏭ DEV 渠道，跳过更新检查")
+    elif has_update:
         print(f"✅ 发现新版本: {info['version']}")
         print(f"📦 下载链接: {info['download_url']}")
         print(f"🔗 Release 页面: {info['release_url']}")
