@@ -26,6 +26,12 @@ from typing import Optional, Dict, Tuple
 # GitHub Release Asset 文件名
 PATCH_META_FILENAME = "patch_meta.json"
 
+# GitCode（中国大陆优先 fallback）
+GITCODE_FILE_BASE = "https://gitcode.com/Jamesphotography/SuperPicky/-/package_files/generic/release"
+
+# 北京镜像服务器（最终兜底）
+MIRROR_BASE_URL = "http://1.119.150.179:59080/superpicky"
+
 
 def _get_app_data_dir() -> Path:
     """返回 SuperPicky 用户数据目录（跨平台）"""
@@ -155,6 +161,122 @@ def clear_patch() -> None:
     print("[PatchManager] 补丁已清除")
 
 
+def check_and_apply_patch_from_gitcode(
+    gitcode_links: list,
+    current_app_version: str,
+    timeout: int = 30,
+) -> Tuple[bool, str]:
+    """
+    从 GitCode release asset links 检查并应用补丁（GitHub API 不可达时使用）。
+
+    Args:
+        gitcode_links: GitCode release assets.links 列表（每项含 name + url）
+        current_app_version: 当前应用版本号
+        timeout: 超时秒数
+
+    Returns:
+        (patched, message)
+    """
+    # 找 patch_meta.json 链接
+    meta_url = None
+    for link in gitcode_links:
+        if link.get("name", "") == PATCH_META_FILENAME:
+            meta_url = link.get("url")
+            break
+    if not meta_url:
+        return False, "GitCode release 中没有 patch_meta.json"
+
+    remote_meta = _fetch_json(meta_url, timeout=10)
+    if not remote_meta:
+        return False, "拉取 GitCode patch_meta.json 失败"
+
+    base_version = remote_meta.get("base_version", "")
+    if base_version != current_app_version:
+        return False, f"补丁 base_version={base_version} 与当前版本 {current_app_version} 不匹配"
+
+    remote_patch_version = remote_meta.get("patch_version", "")
+    local_meta = read_local_meta()
+    local_patch_version = local_meta.get("patch_version", "") if local_meta else ""
+
+    if remote_patch_version == local_patch_version:
+        return False, f"补丁已是最新（{local_patch_version}）"
+
+    # 找 zip 链接
+    zip_url = None
+    target = f"code_patch_{remote_patch_version}.zip"
+    for link in gitcode_links:
+        if link.get("name", "") == target:
+            zip_url = link.get("url")
+            break
+
+    print(f"[PatchManager] 从 GitCode 下载补丁 {remote_patch_version} ...")
+    tmp_path = _download_to_temp(zip_url, timeout=timeout) if zip_url else None
+    if not tmp_path:
+        # GitCode CDN 失败，降级到北京镜像
+        mirror_zip_url = f"{MIRROR_BASE_URL}/code_patch_{remote_patch_version}.zip"
+        print(f"[PatchManager] GitCode CDN 失败，尝试北京镜像: {mirror_zip_url}")
+        tmp_path = _download_to_temp(mirror_zip_url, timeout=timeout)
+    if not tmp_path:
+        return False, "补丁 zip 下载失败（GitCode + 北京镜像均不可用）"
+
+    try:
+        success = apply_patch_file(tmp_path, remote_meta)
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+    if success:
+        return True, f"补丁 {remote_patch_version} 已从 GitCode 应用"
+    else:
+        return False, "补丁解压失败"
+
+
+def check_and_apply_patch_from_mirror(
+    current_app_version: str,
+    timeout: int = 30,
+) -> Tuple[bool, str]:
+    """
+    完全从镜像服务器检查并应用补丁（GitHub 不可达时使用）。
+
+    Args:
+        current_app_version: 当前应用版本号
+        timeout: 超时秒数
+
+    Returns:
+        (patched, message)
+    """
+    meta_url = f"{MIRROR_BASE_URL}/patch_meta.json"
+    remote_meta = _fetch_json(meta_url, timeout=10)
+    if not remote_meta:
+        return False, "镜像服务器不可用"
+
+    base_version = remote_meta.get("base_version", "")
+    if base_version != current_app_version:
+        return False, f"补丁 base_version={base_version} 与当前版本 {current_app_version} 不匹配"
+
+    remote_patch_version = remote_meta.get("patch_version", "")
+    local_meta = read_local_meta()
+    local_patch_version = local_meta.get("patch_version", "") if local_meta else ""
+
+    if remote_patch_version == local_patch_version:
+        return False, f"补丁已是最新（{local_patch_version}）"
+
+    zip_url = f"{MIRROR_BASE_URL}/code_patch_{remote_patch_version}.zip"
+    print(f"[PatchManager] 从镜像下载补丁 {remote_patch_version} ...")
+    tmp_path = _download_to_temp(zip_url, timeout=timeout)
+    if not tmp_path:
+        return False, "镜像补丁 zip 下载失败"
+
+    try:
+        success = apply_patch_file(tmp_path, remote_meta)
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+    if success:
+        return True, f"补丁 {remote_patch_version} 已从镜像应用"
+    else:
+        return False, "补丁解压失败"
+
+
 def check_and_apply_patch(
     release_assets: list,
     current_app_version: str,
@@ -200,11 +322,19 @@ def check_and_apply_patch(
     if not zip_url:
         return False, f"Release 中找不到 code_patch_{remote_patch_version}.zip"
 
-    # 6. 下载 zip
+    # 6. 下载 zip（三级降级：GitHub CDN → GitCode → 北京镜像）
     print(f"[PatchManager] 下载补丁 {remote_patch_version} ...")
     tmp_path = _download_to_temp(zip_url, timeout=timeout)
     if not tmp_path:
-        return False, "补丁 zip 下载失败"
+        gitcode_zip_url = f"{GITCODE_FILE_BASE}/{remote_patch_version}/code_patch_{remote_patch_version}.zip"
+        print(f"[PatchManager] GitHub CDN 失败，尝试 GitCode: {gitcode_zip_url}")
+        tmp_path = _download_to_temp(gitcode_zip_url, timeout=timeout)
+    if not tmp_path:
+        mirror_zip_url = f"{MIRROR_BASE_URL}/code_patch_{remote_patch_version}.zip"
+        print(f"[PatchManager] GitCode 失败，尝试北京镜像: {mirror_zip_url}")
+        tmp_path = _download_to_temp(mirror_zip_url, timeout=timeout)
+    if not tmp_path:
+        return False, "补丁 zip 下载失败（GitHub + GitCode + 北京镜像均不可用）"
 
     # 7. 解压并写入 meta
     try:
