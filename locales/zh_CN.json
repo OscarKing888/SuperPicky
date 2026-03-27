@@ -787,7 +787,11 @@
     "mac_version": "⌘ Mac 版",
     "windows_version": "⊞ Windows 版",
     "close": "关闭",
-    "include_prerelease": "接收预发布版本提醒（Beta / RC）"
+    "include_prerelease": "接收预发布版本提醒（Beta / RC）",
+    "patch_applied_title": "🔧 热补丁已更新",
+    "patch_version_label": "补丁版本:",
+    "patch_restart_hint": "补丁已在后台应用，重启应用后生效",
+    "restart_now": "立即重启"
   },
   "about": {
     "window_title": "关于",

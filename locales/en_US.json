@@ -813,7 +813,11 @@
     "mac_version": "⌘ Mac",
     "windows_version": "⊞ Windows",
     "close": "Close",
-    "include_prerelease": "Notify me about pre-release versions (Beta / RC)"
+    "include_prerelease": "Notify me about pre-release versions (Beta / RC)",
+    "patch_applied_title": "🔧 Patch Applied",
+    "patch_version_label": "Patch version:",
+    "patch_restart_hint": "A patch has been applied in the background. Restart the app to take effect.",
+    "restart_now": "Restart Now"
   },
   "about": {
     "window_title": "About James",

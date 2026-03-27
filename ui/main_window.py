@@ -2876,9 +2876,10 @@ class SuperPickyMainWindow(QMainWindow):
                 has_update, update_info = checker.check_for_updates(
                     include_prerelease=_cfg.include_prerelease
                 )
-                # 静默模式下，只有有更新时才弹窗
+                # 静默模式下，只有有更新或应用了补丁时才弹窗
                 if silent and not has_update:
-                    return
+                    if not (update_info and update_info.get('patch_applied')):
+                        return
 
                 # 静默模式：跳过用户已选择忽略的版本
                 if silent and has_update and update_info:
@@ -2928,7 +2929,94 @@ class SuperPickyMainWindow(QMainWindow):
             current_version = update_info.get('current_version', '4.0.0') if update_info else '4.0.0'
             latest_version = update_info.get('version', '未知') if update_info else '未知'
             has_error = update_info.get('error') if update_info else None
-            
+            patch_applied = update_info.get('patch_applied', False) if update_info else False
+            patch_version = update_info.get('patch_version') if update_info else None
+
+            # 补丁模式：无整包更新但应用了热补丁
+            if not has_update and not has_error and patch_applied:
+                title = QLabel(self.i18n.t("update.patch_applied_title"))
+                title.setStyleSheet(f"color: {COLORS['accent']}; font-size: 18px; font-weight: 600;")
+                layout.addWidget(title)
+                layout.addSpacing(4)
+
+                info_frame = QFrame()
+                info_frame.setStyleSheet(f"background-color: {COLORS['bg_elevated']}; border-radius: 8px;")
+                info_layout = QVBoxLayout(info_frame)
+                info_layout.setContentsMargins(16, 12, 16, 12)
+                info_layout.setSpacing(8)
+
+                cur_row = QHBoxLayout()
+                cur_label = QLabel(self.i18n.t("update.current_version_label"))
+                cur_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 13px;")
+                cur_row.addWidget(cur_label)
+                cur_row.addStretch()
+                cur_val = QLabel(f"V{current_version}")
+                cur_val.setStyleSheet(f"color: {COLORS['text_primary']}; font-size: 13px; font-weight: 500;")
+                cur_row.addWidget(cur_val)
+                info_layout.addLayout(cur_row)
+
+                if patch_version:
+                    pv_row = QHBoxLayout()
+                    pv_label = QLabel(self.i18n.t("update.patch_version_label"))
+                    pv_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 13px;")
+                    pv_row.addWidget(pv_label)
+                    pv_row.addStretch()
+                    pv_val = QLabel(patch_version)
+                    pv_val.setStyleSheet(f"color: {COLORS['accent']}; font-size: 13px; font-weight: 600;")
+                    pv_row.addWidget(pv_val)
+                    info_layout.addLayout(pv_row)
+
+                layout.addWidget(info_frame)
+
+                hint = QLabel(self.i18n.t("update.patch_restart_hint"))
+                hint.setStyleSheet(f"color: {COLORS['text_tertiary']}; font-size: 12px;")
+                hint.setWordWrap(True)
+                layout.addWidget(hint)
+
+                layout.addSpacing(8)
+                btn_row = QHBoxLayout()
+                btn_row.addStretch()
+
+                restart_btn = QPushButton(self.i18n.t("update.restart_now"))
+                restart_btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: {COLORS['accent']};
+                        color: {COLORS['bg_void']};
+                        border: none;
+                        border-radius: 6px;
+                        padding: 10px 20px;
+                        font-size: 13px;
+                        font-weight: 500;
+                    }}
+                    QPushButton:hover {{ background-color: {COLORS['accent_hover']}; }}
+                """)
+                from PySide6.QtWidgets import QApplication
+                restart_btn.clicked.connect(lambda: (dialog.accept(), QApplication.instance().quit()))
+                btn_row.addWidget(restart_btn)
+
+                btn_row.addSpacing(8)
+                close_btn2 = QPushButton(self.i18n.t("update.close"))
+                close_btn2.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: {COLORS['bg_card']};
+                        border: 1px solid {COLORS['border']};
+                        color: {COLORS['text_secondary']};
+                        border-radius: 6px;
+                        padding: 10px 20px;
+                        font-size: 13px;
+                    }}
+                    QPushButton:hover {{
+                        border-color: {COLORS['text_muted']};
+                        color: {COLORS['text_primary']};
+                    }}
+                """)
+                close_btn2.clicked.connect(dialog.accept)
+                btn_row.addWidget(close_btn2)
+                layout.addLayout(btn_row)
+
+                dialog.exec()
+                return
+
             if has_error:
                 title = QLabel(self.i18n.t("update.check_failed_title"))
                 title.setStyleSheet(f"color: {COLORS['warning']}; font-size: 18px; font-weight: 600;")
