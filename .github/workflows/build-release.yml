@@ -138,6 +138,7 @@ jobs:
             release_assets/*
 
       - name: Upload Windows assets to GitCode
+        continue-on-error: true
         shell: pwsh
         env:
           GITCODE_TOKEN: ${{ secrets.GITCODE_TOKEN }}
@@ -392,6 +393,7 @@ jobs:
             ${{ env.PATCH_META }}
 
       - name: Upload Mac DMG to GitCode
+        continue-on-error: true
         env:
           GITCODE_TOKEN: ${{ secrets.GITCODE_TOKEN }}
           TAG: ${{ steps.release_meta.outputs.tag }}
