@@ -2479,17 +2479,27 @@ class SuperPickyMainWindow(QMainWindow):
         
         def start_server_task():
             try:
-                from server_manager import get_server_status, start_server_daemon
-                
+                from server_manager import get_server_status, start_server_daemon, start_server_thread
+
                 # 检查是否已有服务器在运行
                 status = get_server_status()
                 if status['healthy']:
                     self.log_signal.emit(self.i18n.t("server.api_reused"), "success")
                     return
-                
-                # 启动服务器（守护进程模式）
-                success, msg, pid = start_server_daemon(log_callback=lambda m: print(m))
-                
+
+                # pythonw.exe 无控制台窗口，subprocess 会报错，改用线程模式
+                use_thread_mode = (
+                    sys.platform == "win32"
+                    and not getattr(sys, "frozen", False)
+                    and os.path.basename(sys.executable).lower() == "pythonw.exe"
+                )
+
+                if use_thread_mode:
+                    success, msg, pid = start_server_thread()
+                else:
+                    # 启动服务器（守护进程模式）
+                    success, msg, pid = start_server_daemon(log_callback=lambda m: print(m))
+
                 if success:
                     self.log_signal.emit(self.i18n.t("server.api_auto_started", port=5156), "success")
                 else:
