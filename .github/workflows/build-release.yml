@@ -90,10 +90,8 @@ jobs:
           New-Item -ItemType Directory -Path release_assets -Force | Out-Null
 
           $assetPatterns = @(
-            "output/SuperPicky_Win64_*_cpu.zip",
             "output/cuda_patch_installer/Output/SuperPicky_CUDA_Patch_Win64_*.exe",
-            "output/installer_cpu/Output/SuperPicky_Setup_Win64_*.exe",
-            "output/SuperPicky_Win64_*_cuda_patch.zip"
+            "output/installer_cpu/Output/SuperPicky_Setup_Win64_*.exe"
           )
 
           foreach ($pattern in $assetPatterns) {
