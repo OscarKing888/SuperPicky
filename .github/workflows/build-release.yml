@@ -106,7 +106,7 @@ jobs:
         shell: pwsh
         run: |
           $version = .\\.venv\\Scripts\\python.exe -c "from constants import APP_VERSION; print(APP_VERSION)"
-          $patchVersion = "v${version}"
+          $patchVersion = "${{ steps.release_meta.outputs.tag }}"
           $zipName = "code_patch_${patchVersion}.zip"
           $zipPath = "release_assets/$zipName"
 
