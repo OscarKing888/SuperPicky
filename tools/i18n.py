@@ -13,6 +13,19 @@ import sys
 from pathlib import Path
 from typing import Dict, Any, Optional
 
+from config import get_lazy_registry
+
+
+def _safe_print(message: str) -> None:
+    """避免在非 UTF-8 控制台输出时抛出编码异常。"""
+    try:
+        print(message)
+    except UnicodeEncodeError:
+        stream = getattr(sys, "stdout", None)
+        encoding = getattr(stream, "encoding", None) or locale.getpreferredencoding(False) or "utf-8"
+        sanitized = message.encode(encoding, errors="replace").decode(encoding, errors="replace")
+        print(sanitized)
+
 
 class I18n:
     """国际化管理器"""
@@ -28,8 +41,15 @@ class I18n:
             # PyInstaller packaged mode
             base_dir = Path(sys._MEIPASS)
         else:
-            # Normal development mode
-            base_dir = Path(__file__).parent.parent
+            # Development mode: handle patch overlay (code_updates/) correctly
+            candidate = Path(__file__).parent.parent
+            if not (candidate / "locales").exists():
+                # Loaded from code_updates/, walk sys.path to find real project root
+                for p in sys.path:
+                    if p and (Path(p) / "locales").exists():
+                        candidate = Path(p)
+                        break
+            base_dir = candidate
 
         self.locales_dir = base_dir / "locales"
         self.translations: Dict[str, Any] = {}
@@ -95,20 +115,20 @@ class I18n:
         locale_file = self.locales_dir / f"{self.current_lang}.json"
 
         if not locale_file.exists():
-            print(f"警告: 语言包 {self.current_lang}.json 不存在，使用默认语言")
+            _safe_print(f"警告: 语言包 {self.current_lang}.json 不存在，使用默认语言")
             # 尝试加载fallback语言
             locale_file = self.locales_dir / f"{self.fallback_lang}.json"
             if not locale_file.exists():
-                print(f"错误: Fallback语言包 {self.fallback_lang}.json 也不存在")
+                _safe_print(f"错误: Fallback语言包 {self.fallback_lang}.json 也不存在")
                 self.translations = {}
                 return
 
         try:
             with open(locale_file, 'r', encoding='utf-8') as f:
                 self.translations = json.load(f)
-            print(f"✅ Language pack loaded: {self.current_lang}")
+            _safe_print(f"✅ Language pack loaded: {self.current_lang}")
         except Exception as e:
-            print(f"❌ 加载语言包失败: {e}")
+            _safe_print(f"❌ 加载语言包失败: {e}")
             self.translations = {}
 
     def t(self, key: str, **params) -> str:
@@ -146,7 +166,7 @@ class I18n:
             try:
                 return value.format(**params) if params else value
             except KeyError as e:
-                print(f"警告: 翻译参数缺失: {key}, 缺少参数: {e}")
+                _safe_print(f"警告: 翻译参数缺失: {key}, 缺少参数: {e}")
                 return value
         else:
             return str(value)
@@ -163,7 +183,7 @@ class I18n:
         """
         locale_file = self.locales_dir / f"{lang}.json"
         if not locale_file.exists():
-            print(f"错误: 语言包 {lang}.json 不存在")
+            _safe_print(f"错误: 语言包 {lang}.json 不存在")
             return False
 
         self.current_lang = lang
@@ -203,10 +223,6 @@ class I18n:
         return languages
 
 
-# 全局实例
-_i18n_instance: Optional[I18n] = None
-
-
 def get_i18n(lang: str = None) -> I18n:
     """
     获取国际化实例（单例模式）
@@ -217,10 +233,9 @@ def get_i18n(lang: str = None) -> I18n:
     Returns:
         I18n实例
     """
-    global _i18n_instance
-    if _i18n_instance is None:
-        _i18n_instance = I18n(default_lang=lang)
-    return _i18n_instance
+    registry = get_lazy_registry()
+    key = f"i18n.instance::{lang or 'auto'}"
+    return registry.get_or_create(key, lambda: I18n(default_lang=lang))
 
 
 # 便捷函数

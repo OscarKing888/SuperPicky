@@ -2,7 +2,7 @@
   "_meta": {
     "language_name": "English",
     "language_code": "en_US",
-    "version": "4.1.0"
+    "version": "4.2.0"
   },
   "app": {
     "title": "SuperPicky - AI Bird Photo Culling Tool v{version} ({hash})",
@@ -25,12 +25,15 @@
     "language": "Language",
     "lang_zh": "简体中文",
     "lang_en": "English",
-    "check_update": "Check for Updates...",
+    "check_update": "Online Update...",
     "background_mode": "Run in Background",
     "background_mode_title": "Background Mode",
     "background_mode_msg": "App will enter background mode\n\n• Bird ID service continues running\n• Lightroom plugin works normally\n• Reopen app to restore interface\n\nNote: Server uses ~250MB memory",
     "view_results": "View Results",
-    "results_browser": "Photo Browser"
+    "results_browser": "Photo Browser",
+    "recent_dirs": "Recent Folders",
+    "recent_dirs_clear": "Clear History",
+    "recent_dirs_offline": "(Offline)"
   },
   "buttons": {
     "select_dir": "📁 Select Source Folder",
@@ -134,7 +137,8 @@
     "files_restored": "Files restored: {count}",
     "exif_reset_count": "EXIF reset: {count}",
     "ready_for_analysis": "Ready for new analysis",
-    "reset_failed_log": "Reset failed"
+    "reset_failed_log": "Reset failed",
+    "dir_unavailable": "Folder unavailable. Please make sure the external drive is connected."
   },
   "logs": {
     "reset_start": "🔄 Starting directory reset",
@@ -414,9 +418,24 @@
     "yolo_loaded": "✅ YOLO detection model loaded",
     "keypoint_loaded": "✅ Keypoint model loaded",
     "flight_loaded": "✅ Flight detection model loaded",
+    "iqa_loaded": "✅ Aesthetic scoring model loaded",
     "birdid_loaded": "✅ Bird ID model loaded",
-    "preload_complete": "🎉 All models preloaded!\n",
+    "preload_complete": "🎉 All models preloaded!",
+    "preload_complete_with_errors": "⚠️ Preload done, some models failed: {failed}",
     "preload_failed": "⚠️ Model preload failed: {error}"
+  },
+  "health": {
+    "disk_status": "📁 Disk: {free} GB free / {total} GB total {space_icon}  Write: {write_icon} {write_label}",
+    "writable": "OK",
+    "not_writable": "No write permission",
+    "disk_check_failed": "⚠️ Disk check failed: {error}",
+    "ram_ok": "💾 Available RAM: {free} GB ✅",
+    "ram_low": "⚠️ Low RAM: {free} GB — model loading may be slow",
+    "exiftool_error_title": "ExifTool Unavailable",
+    "exiftool_error_msg": "ExifTool could not be started. Star ratings will not be written to EXIF metadata.\n\nError: {error}\n\nPlease reinstall the app or check for file corruption.",
+    "no_photos_title": "No Photos Found",
+    "no_photos_msg": "No supported photo files (JPG / RAW / HEIF) found in:\n{directory}",
+    "models_still_loading": "⚠️ Models are still loading in background — first photo may process slowly"
   },
   "stats": {
     "total": "Total",
@@ -573,9 +592,6 @@
     "xmp_write_mode": "Metadata Write Mode",
     "burst_fps": "Burst Speed",
     "burst_fps_hint": "Continuous shots faster than this will be grouped together",
-    "raw_max_concurrency": "RAW conversion max concurrency",
-    "raw_max_concurrency_hint": "Max threads for RAW/HEIC conversion; keep at or below CPU count",
-    "raw_max_concurrency_value": "{n} threads",
     "reset_defaults": "Reset Defaults",
     "cancel": "Cancel",
     "save": "Save",
@@ -796,7 +812,30 @@
     "download_hint": "To download, visit the official website:",
     "mac_version": "⌘ Mac",
     "windows_version": "⊞ Windows",
-    "close": "Close"
+    "close": "Close",
+    "include_prerelease": "Notify me about pre-release versions (Beta / RC)",
+    "patch_applied_title": "🔧 Patch Applied",
+    "patch_version_label": "Patch version:",
+    "patch_restart_hint": "A patch has been applied in the background. Restart the app to take effect.",
+    "restart_now": "Restart Now",
+    "update_center_title": "Online Update",
+    "update_center_channel_label": "Channel:",
+    "update_center_channel_official": "Official",
+    "update_center_channel_nightly": "Nightly (RC)",
+    "update_center_channel_dev": "Development (DEV)",
+    "update_center_patch_label": "Hot Patch:",
+    "update_center_patch_none": "None",
+    "update_center_result_label": "Latest version:",
+    "update_center_result_pending": "─── Click \"Check\" to fetch",
+    "update_center_result_latest": "✅ You're up to date",
+    "update_center_result_has_update": "🎉 New version available",
+    "update_center_result_patch_applied": "🔧 Patch applied, restart to take effect",
+    "update_center_result_failed": "⚠️ Check failed",
+    "update_center_auto_check": "Auto-check for updates on startup",
+    "update_center_include_prerelease": "Receive RC pre-release updates",
+    "update_center_btn_check": "Check for Updates",
+    "update_center_btn_clear_patch": "Clear Patch",
+    "update_center_checking": "Checking..."
   },
   "about": {
     "window_title": "About James",
@@ -899,6 +938,9 @@
     "stats_complete": "Analysis Complete  |  {total} photos  |  {time_min:.1f} min",
     "stats_flying": "🔵 Flying: {count}",
     "stats_focus_precise": "🟢 Precise Focus: {count}",
+    "btn_screenshot": "Screenshot",
+    "screenshot_hint": "Take a screenshot to identify...",
+    "click_to_copy": "Click to copy name",
     "stats_species": "🦜 {count} species: {names}"
   },
   "cli": {
@@ -1007,6 +1049,7 @@
     "meta_focal": "Focal Length",
     "meta_confidence": "Confidence",
     "meta_birdid_conf": "Bird ID Conf.",
+    "meta_filesize": "File Size",
     "meta_filename": "Filename",
     "meta_datetime": "Date/Time",
     "flying_yes": "Yes",

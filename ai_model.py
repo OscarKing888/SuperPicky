@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 from ultralytics import YOLO
 from tools.utils import log_message
-from config import config
+from config import config, get_lazy_registry
 # V3.2: 移除未使用的 sharpness 计算器导入
 from iqa_scorer import get_iqa_scorer
 from advanced_config import get_advanced_config
@@ -64,17 +64,12 @@ def preprocess_image(image_path, target_size=None):
 
 # V3.2: 移除 _get_sharpness_calculator（锐度现在由 keypoint_detector 计算）
 
-# 初始化全局 IQA 评分器（延迟加载）
-_iqa_scorer = None
-
-
 def _get_iqa_scorer():
     """获取 IQA 评分器单例"""
-    global _iqa_scorer
-    if _iqa_scorer is None:
-        from config import get_best_device
-        _iqa_scorer = get_iqa_scorer(device=get_best_device().type)
-    return _iqa_scorer
+    from config import get_best_device
+    registry = get_lazy_registry()
+    key = f"ai_model.iqa_scorer::{get_best_device().type}"
+    return registry.get_or_create(key, lambda: get_iqa_scorer(device=get_best_device().type))
 
 
 def detect_and_draw_birds(image_path, model, output_path, dir, ui_settings, i18n=None, skip_nima=False, focus_point=None, report_db=None):
@@ -136,14 +131,21 @@ def detect_and_draw_birds(image_path, model, output_path, dir, ui_settings, i18n
     try:
         from config import get_best_device
         device = get_best_device()
-        device_str = device.type if device.type != 'cuda' else 'cuda:0'
-        
+
         # 使用最佳设备进行推理
-        results = model(image, device=device_str)
+        results = model(image, device=device.type)
     except Exception as device_error:
-        # 设备推理失败，降级到CPU
+        # 设备推理失败，清理 GPU 显存后降级到 CPU
         t = i18n.t if i18n else get_i18n().t
         log_message(t("ai.device_inference_failed", error=device_error), dir)
+        try:
+            import torch
+            if torch.backends.mps.is_available():
+                torch.mps.empty_cache()
+            elif torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except Exception:
+            pass
         try:
             results = model(image, device='cpu')
         except Exception as cpu_error:
@@ -172,7 +174,7 @@ def detect_and_draw_birds(image_path, model, output_path, dir, ui_settings, i18n
     # else:
     #     log_message(f"  ⏱️  [2/4] YOLO推理: {yolo_time:.1f}ms", dir)
 
-    # Step 3: 解析检测结果
+    # Step 3: 解析检测结果（立即提取为 numpy，释放 GPU tensor）
     step_start = time.time()
     detections = results[0].boxes.xyxy.cpu().numpy()
     confidences = results[0].boxes.conf.cpu().numpy()
@@ -182,6 +184,9 @@ def detect_and_draw_birds(image_path, model, output_path, dir, ui_settings, i18n
     masks = None
     if hasattr(results[0], 'masks') and results[0].masks is not None:
         masks = results[0].masks.data.cpu().numpy()
+
+    # 数据已转为 numpy，立即释放 YOLO results（含 GPU tensor），避免长批次显存堆积
+    del results
 
     # V4.2: 收集所有检测到的鸟
     all_birds = []
@@ -230,6 +235,13 @@ def detect_and_draw_birds(image_path, model, output_path, dir, ui_settings, i18n
 
     # 如果没有找到鸟，记录到CSV并返回（V3.1）
     if bird_idx == -1:
+        # 诊断日志：记录 YOLO 实际返回的最高置信度，便于排查跨设备差异
+        if len(confidences) == 0:
+            log_message(f"DEBUG YOLO no_bird: {os.path.basename(image_path)} → 0 detections (all below YOLO conf_thresh=0.25)", dir)
+        else:
+            best_conf = float(confidences.max())
+            best_cls = int(class_ids[confidences.argmax()])
+            log_message(f"DEBUG YOLO no_bird: {os.path.basename(image_path)} → {len(confidences)} detections, best_conf={best_conf:.3f} cls={best_cls} (bird_class={config.ai.BIRD_CLASS_ID})", dir)
         # V3.3: 使用英文列名
         data = {
             "filename": os.path.splitext(os.path.basename(image_path))[0],

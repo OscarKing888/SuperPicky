@@ -21,6 +21,24 @@ multiprocessing.freeze_support()
 # 确保模块路径正确
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# 在线补丁层：优先加载用户数据目录下的 code_updates/（覆盖内置模块）
+def _inject_patch_path():
+    if sys.platform == "darwin":
+        _patch_dir = os.path.join(os.path.expanduser("~"), "Library", "Application Support", "SuperPicky", "code_updates")
+    elif sys.platform == "win32":
+        _patch_dir = os.path.join(os.path.expanduser("~"), "AppData", "Local", "SuperPicky", "code_updates")
+    else:
+        _patch_dir = os.path.join(os.path.expanduser("~"), ".config", "SuperPicky", "code_updates")
+    if os.path.isdir(_patch_dir) and _patch_dir not in sys.path:
+        sys.path.insert(0, _patch_dir)
+    # 记录真实 app 根目录，供补丁中的模块查找资源文件（模型、exiftool 等）
+    if not hasattr(sys, '_SUPERPICKY_APP_ROOT'):
+        if hasattr(sys, '_MEIPASS'):
+            sys._SUPERPICKY_APP_ROOT = sys._MEIPASS
+        else:
+            sys._SUPERPICKY_APP_ROOT = os.path.dirname(os.path.abspath(__file__))
+_inject_patch_path()
+
 # Fix Windows console encoding: default cp1252 cannot render emoji/CJK characters,
 # causing UnicodeEncodeError crashes on print(). Reconfigure to UTF-8 with replacement
 # fallback so all log output survives regardless of the console codepage.
@@ -57,6 +75,18 @@ from PySide6.QtGui import QIcon
 from app_user_stat.telemetry import bootstrap_telemetry
 from ui.main_window import SuperPickyMainWindow
 from ui.styles import APP_TOOLTIP_STYLE
+from tools.system_logger import setup_error_logging
+
+# 尽早捕获未处理异常，写入 superpicky.log（或 config dir fallback）
+setup_error_logging()
+
+# 内存监视器（开发调试用）：设置环境变量 SP_MEMORY_MONITOR=1 启用
+# 例：SP_MEMORY_MONITOR=1 python main.py
+# 日志写入 <SuperPicky 配置目录>/memory_monitor.log
+_memory_monitor = None
+if os.environ.get("SP_MEMORY_MONITOR") == "1":
+    from tools.memory_monitor import MemoryMonitor
+    _memory_monitor = MemoryMonitor(interval=30)
 
 # V3.9.3: 全局窗口引用，防止重复创建
 _main_window = None
@@ -131,6 +161,9 @@ def main():
         bootstrap_telemetry(_main_window, on_ready=_main_window.run_startup_prompts)
         # 统一退出清理：无论通过 X / 托盘 / Cmd+Q 退出，都会经由 aboutToQuit 信号
         app.aboutToQuit.connect(_main_window._cleanup_on_quit)
+        if _memory_monitor is not None:
+            _memory_monitor.start()
+            app.aboutToQuit.connect(_memory_monitor.stop)
     else:
         print("⚠️  检测到已存在的主窗口实例")
         _main_window.raise_()
