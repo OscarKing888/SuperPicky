@@ -33,6 +33,15 @@ def _reconfigure_text_stream(stream: object) -> None:
 _reconfigure_text_stream(sys.stdout)
 _reconfigure_text_stream(sys.stderr)
 
+# 当以 `python scripts/download_models.py` 直接运行时，sys.path[0] 是 scripts/ 目录，
+# 项目根不在搜索路径里，下方 `from core.*` 会 ModuleNotFoundError。
+# When invoked as `python scripts/download_models.py`, sys.path[0] is the
+# scripts/ directory and the project root is not on the import path, so the
+# `from core.*` imports below would raise ModuleNotFoundError without this.
+_PROJECT_ROOT = str(Path(__file__).resolve().parent.parent)
+if _PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, _PROJECT_ROOT)
+
 HF_MIRROR_ENDPOINT = "https://hf-mirror.com"
 HF_OFFICIAL_ENDPOINT = "https://huggingface.co"
 os.environ["HF_ENDPOINT"] = HF_MIRROR_ENDPOINT
