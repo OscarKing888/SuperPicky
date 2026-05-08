@@ -381,6 +381,29 @@ def _estimate_remote_file_size(repo_id: str, filename: str) -> int | None:
     return None
 
 
+# huggingface_hub 1.x 起移除了 hf_hub_download(tqdm_class=...) 参数，
+# 旧版仍支持。运行时探测一次并缓存结果，避免向新版传入会触发 TypeError 的 kwarg。
+# Older huggingface_hub accepted tqdm_class= in hf_hub_download(); newer
+# versions removed it. Probe once at runtime and cache so we don't pass an
+# unsupported kwarg into newer libs (which raises TypeError).
+_HF_SUPPORTS_TQDM_CLASS_CACHE: Optional[bool] = None
+
+
+def _hf_supports_tqdm_class() -> bool:
+    global _HF_SUPPORTS_TQDM_CLASS_CACHE
+    if _HF_SUPPORTS_TQDM_CLASS_CACHE is not None:
+        return _HF_SUPPORTS_TQDM_CLASS_CACHE
+    try:
+        import inspect as _inspect
+        _HF_SUPPORTS_TQDM_CLASS_CACHE = (
+            hf_hub_download is not None
+            and "tqdm_class" in _inspect.signature(hf_hub_download).parameters
+        )
+    except (ValueError, TypeError):
+        _HF_SUPPORTS_TQDM_CLASS_CACHE = False
+    return _HF_SUPPORTS_TQDM_CLASS_CACHE
+
+
 def _build_download_tqdm_class(
     resource: Dict[str, Any],
     source_name: str,
@@ -393,6 +416,8 @@ def _build_download_tqdm_class(
     创建一个把字节级下载更新转发为结构化事件的 tqdm 子类。
     """
     if progress_cb is None or tqdm_base is None:
+        return None
+    if not _hf_supports_tqdm_class():
         return None
 
     class ResourceDownloadTqdm(tqdm_base):

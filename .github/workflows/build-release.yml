@@ -183,6 +183,14 @@ jobs:
         run: |
           python build_release_mac.py --build-type full --arch arm64 --copy-dir output/mac --sign-p12 $RUNNER_TEMP/certificate.p12 --sign-p12-password-env MACOS_CERTIFICATE_PWD --notarize --apple-id ${{ secrets.APPLE_ID }} --team-id ${{ secrets.MACOS_TEAM_ID }}
 
+      - name: Build notarized macOS Lite release
+        env:
+          RELEASE_TAG: ${{ steps.release_meta.outputs.tag }}
+          MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          python build_release_mac.py --build-type lite --arch arm64 --copy-dir output/mac --sign-p12 $RUNNER_TEMP/certificate.p12 --sign-p12-password-env MACOS_CERTIFICATE_PWD --notarize --apple-id ${{ secrets.APPLE_ID }} --team-id ${{ secrets.MACOS_TEAM_ID }}
+
       - name: Build code patch zip
         run: python scripts/ci_release.py build-patch --output-dir output/mac --patch-version ${{ steps.release_meta.outputs.tag }}
 
