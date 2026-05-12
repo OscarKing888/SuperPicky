@@ -844,7 +844,21 @@
     "update_center_include_prerelease": "Receive RC pre-release updates",
     "update_center_btn_check": "Check for Updates",
     "update_center_btn_clear_patch": "Clear Patch",
-    "update_center_checking": "Checking..."
+    "update_center_checking": "Checking...",
+    "download_and_install": "📥 Download and Install",
+    "downloading_title": "Downloading Installer",
+    "download_progress_template": "{done_mb:.1f} MB / {total_mb:.1f} MB ({pct}%)",
+    "download_speed_eta_template": "{rate_mb:.1f} MB/s · ~{eta_seconds}s remaining",
+    "cancel": "Cancel",
+    "cancelling": "Cancelling...",
+    "download_failed_title": "⚠️ Download Failed",
+    "download_failed_retry": "Retry",
+    "download_failed_open_browser": "Open in Browser Instead",
+    "ready_title": "✅ Installer Ready",
+    "ready_message_template": "Ready to install v{version}? SuperPicky will close and launch the installer.",
+    "ready_path_label": "Installer location:",
+    "install_later": "Install Later",
+    "install_now": "Install Now"
   },
   "repair": {
     "window_title": "Environment Repair",

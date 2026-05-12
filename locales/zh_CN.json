@@ -818,7 +818,21 @@
     "update_center_include_prerelease": "接收 RC 测试版本更新",
     "update_center_btn_check": "检查更新",
     "update_center_btn_clear_patch": "清除补丁",
-    "update_center_checking": "检查中..."
+    "update_center_checking": "检查中...",
+    "download_and_install": "📥 下载并安装",
+    "downloading_title": "下载安装包",
+    "download_progress_template": "{done_mb:.1f} MB / {total_mb:.1f} MB ({pct}%)",
+    "download_speed_eta_template": "{rate_mb:.1f} MB/s · 剩余约 {eta_seconds}s",
+    "cancel": "取消",
+    "cancelling": "正在取消...",
+    "download_failed_title": "⚠️ 下载失败",
+    "download_failed_retry": "重试",
+    "download_failed_open_browser": "改用浏览器下载",
+    "ready_title": "✅ 安装包已下载",
+    "ready_message_template": "准备好安装 v{version} 吗？SuperPicky 将关闭并启动安装程序。",
+    "ready_path_label": "安装包位置:",
+    "install_later": "稍后安装",
+    "install_now": "立即安装"
   },
   "repair": {
     "window_title": "环境修复",

@@ -3317,58 +3317,103 @@ class SuperPickyMainWindow(QMainWindow):
             
             # 提示和下载按钮
             if not has_error:
-                msg = QLabel(self.i18n.t("update.download_hint"))
-                msg.setStyleSheet(f"color: {COLORS['text_tertiary']}; font-size: 12px;")
-                layout.addWidget(msg)
-                
-                layout.addSpacing(8)
-                
                 download_url = app_config.endpoints.UPDATE_DOWNLOAD_PAGE
-                
-                # 下载按钮区域
+
+                # 选当前平台对应的 installer asset；选到了用"下载并安装"流程，
+                # 选不到 fallback 到打开下载页（旧行为）。
+                # Pick the installer asset for this platform. When found we use
+                # the in-app download/install flow; otherwise fall back to the
+                # legacy "open browser to download page" buttons.
+                from tools.installer_updater import select_installer_asset
+                assets = (update_info or {}).get('assets', [])
+                installer_asset = select_installer_asset(assets) if assets else None
+
                 btn_frame = QFrame()
                 btn_frame.setStyleSheet(f"background-color: {COLORS['bg_elevated']}; border-radius: 8px;")
                 btn_layout = QHBoxLayout(btn_frame)
                 btn_layout.setContentsMargins(16, 12, 16, 12)
                 btn_layout.setSpacing(12)
-                
-                mac_btn = QPushButton(self.i18n.t("update.mac_version"))
-                mac_btn.setStyleSheet(f"""
-                    QPushButton {{
-                        background-color: {COLORS['accent']};
-                        color: {COLORS['bg_void']};
-                        border: none;
-                        border-radius: 6px;
-                        padding: 10px 16px;
-                        font-size: 13px;
-                        font-weight: 500;
-                    }}
-                    QPushButton:hover {{
-                        background-color: {COLORS['accent_hover']};
-                    }}
-                """)
-                mac_btn.clicked.connect(lambda: webbrowser.open(download_url))
-                btn_layout.addWidget(mac_btn)
-                
-                win_btn = QPushButton(self.i18n.t("update.windows_version"))
-                win_btn.setStyleSheet(f"""
-                    QPushButton {{
-                        background-color: {COLORS['bg_card']};
-                        border: 1px solid {COLORS['border']};
-                        color: {COLORS['text_secondary']};
-                        border-radius: 6px;
-                        padding: 10px 16px;
-                        font-size: 13px;
-                        font-weight: 500;
-                    }}
-                    QPushButton:hover {{
-                        border-color: {COLORS['text_muted']};
-                        color: {COLORS['text_primary']};
-                    }}
-                """)
-                win_btn.clicked.connect(lambda: webbrowser.open(download_url))
-                btn_layout.addWidget(win_btn)
-                
+
+                if installer_asset is not None:
+                    install_btn = QPushButton(self.i18n.t("update.download_and_install"))
+                    install_btn.setStyleSheet(f"""
+                        QPushButton {{
+                            background-color: {COLORS['accent']};
+                            color: {COLORS['bg_void']};
+                            border: none;
+                            border-radius: 6px;
+                            padding: 10px 16px;
+                            font-size: 13px;
+                            font-weight: 500;
+                        }}
+                        QPushButton:hover {{ background-color: {COLORS['accent_hover']}; }}
+                    """)
+                    install_btn.clicked.connect(
+                        lambda: self._start_installer_update(
+                            installer_asset, latest_version, dialog, download_url
+                        )
+                    )
+                    btn_layout.addWidget(install_btn)
+
+                    open_browser_btn = QPushButton(self.i18n.t("update.download_failed_open_browser"))
+                    open_browser_btn.setStyleSheet(f"""
+                        QPushButton {{
+                            background-color: {COLORS['bg_card']};
+                            border: 1px solid {COLORS['border']};
+                            color: {COLORS['text_secondary']};
+                            border-radius: 6px;
+                            padding: 10px 16px;
+                            font-size: 13px;
+                        }}
+                        QPushButton:hover {{
+                            border-color: {COLORS['text_muted']};
+                            color: {COLORS['text_primary']};
+                        }}
+                    """)
+                    open_browser_btn.clicked.connect(lambda: webbrowser.open(download_url))
+                    btn_layout.addWidget(open_browser_btn)
+                else:
+                    # 选不到 asset（如 Linux 或未来未知平台）：保留原来的"去官网"按钮
+                    msg = QLabel(self.i18n.t("update.download_hint"))
+                    msg.setStyleSheet(f"color: {COLORS['text_tertiary']}; font-size: 12px;")
+                    layout.addWidget(msg)
+                    layout.addSpacing(8)
+
+                    mac_btn = QPushButton(self.i18n.t("update.mac_version"))
+                    mac_btn.setStyleSheet(f"""
+                        QPushButton {{
+                            background-color: {COLORS['accent']};
+                            color: {COLORS['bg_void']};
+                            border: none;
+                            border-radius: 6px;
+                            padding: 10px 16px;
+                            font-size: 13px;
+                            font-weight: 500;
+                        }}
+                        QPushButton:hover {{ background-color: {COLORS['accent_hover']}; }}
+                    """)
+                    mac_btn.clicked.connect(lambda: webbrowser.open(download_url))
+                    btn_layout.addWidget(mac_btn)
+
+                    win_btn = QPushButton(self.i18n.t("update.windows_version"))
+                    win_btn.setStyleSheet(f"""
+                        QPushButton {{
+                            background-color: {COLORS['bg_card']};
+                            border: 1px solid {COLORS['border']};
+                            color: {COLORS['text_secondary']};
+                            border-radius: 6px;
+                            padding: 10px 16px;
+                            font-size: 13px;
+                            font-weight: 500;
+                        }}
+                        QPushButton:hover {{
+                            border-color: {COLORS['text_muted']};
+                            color: {COLORS['text_primary']};
+                        }}
+                    """)
+                    win_btn.clicked.connect(lambda: webbrowser.open(download_url))
+                    btn_layout.addWidget(win_btn)
+
                 layout.addWidget(btn_frame)
             
             layout.addSpacing(8)
@@ -3445,6 +3490,49 @@ class SuperPickyMainWindow(QMainWindow):
             import traceback
             print(f"[ERROR] 显示更新弹窗失败: {e}")
             traceback.print_exc()
+
+    def _start_installer_update(self, asset, version: str, source_dialog, fallback_url: str):
+        """启动"下载并安装"流程：下载进度 → 确认 → 触发安装包 → 退出主程序。
+
+        Start the in-app installer update flow: progress dialog → confirm
+        dialog → hand off to the OS installer and quit this application.
+
+        Args:
+            asset: 由 select_installer_asset 选出的 InstallerAsset。
+            version: 新版本号字符串（用于 UI 文案）。
+            source_dialog: 调用方的 update result dialog；触发流程前先关闭。
+            fallback_url: 下载失败时退路（浏览器打开下载页）。
+        """
+        # 关掉触发本流程的更新检测对话框，避免它阻挡进度窗。
+        try:
+            source_dialog.accept()
+        except Exception:
+            pass
+
+        from ui.installer_update_dialog import run_installer_update_flow
+        from PySide6.QtWidgets import QApplication
+
+        try:
+            should_quit = run_installer_update_flow(
+                asset,
+                version,
+                self.i18n,
+                parent=self,
+                fallback_browser_url=fallback_url,
+            )
+        except Exception as e:
+            import traceback
+            print(f"[ERROR] installer update flow 失败: {e}")
+            traceback.print_exc()
+            return
+
+        if should_quit:
+            # 用户已确认"立即安装"，installer 已启动；当前进程退出让出
+            # 文件占用，确保 Windows Inno Setup / macOS DMG 替换不被挡。
+            self._log(self.i18n.t("update.install_now"), "info")
+            app = QApplication.instance()
+            if app is not None:
+                app.quit()
 
     # ========== V4.3: 摄影水平预设 ==========
     

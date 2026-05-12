@@ -198,11 +198,14 @@ class UpdateChecker:
             download_url = self._find_platform_download(data.get('assets', []))
 
             # 始终返回版本信息
+            # 'assets' 字段供 UI 层 select_installer_asset 选择平台对应安装包；
+            # 'assets' is consumed by the UI layer's installer selection logic.
             update_info = {
                 'version': latest_version,
                 'current_version': self.current_version,
                 'channel': self.channel,
                 'download_url': download_url,
+                'assets': data.get('assets', []),
                 'release_notes': data.get('body', ''),
                 'release_url': data.get('html_url', GITHUB_RELEASES_URL),
                 'published_at': data.get('published_at', ''),
