@@ -114,30 +114,45 @@ def select_installer_asset(
 
 
 def _select_mac_installer(assets: List[dict]) -> Optional[InstallerAsset]:
-    # 优先 arm64 dmg、排除 Lite（已废弃）。
+    # 按当前机器架构选 dmg：arm64 / x86_64；排除 Lite 字样（已废弃）。
+    # Pick the dmg matching the local machine arch; reject "Lite" variants
+    # (Lite is no longer built for macOS).
+    import platform
+
+    machine = platform.machine().lower()
+    # 归一化常见别名 / Normalize common aliases.
+    if machine in ("amd64", "x86_64"):
+        arch_token = "x86_64"
+    elif machine in ("arm64", "aarch64"):
+        arch_token = "arm64"
+    else:
+        arch_token = machine
+
+    # 第一层：精确架构匹配。
     for asset in assets:
         name = asset.get("name", "")
-        if name.endswith(".dmg") and "arm64" in name and "Lite" not in name:
+        if name.endswith(".dmg") and arch_token in name and "Lite" not in name:
             return _make_asset(asset)
-    # 退到任意 dmg（Intel 用户也能拿到，至少有个安装入口）。
+
+    # 第二层：任意非 Lite dmg —— 给未来 Universal 包或意外发布留个兜底。
     for asset in assets:
-        if asset.get("name", "").endswith(".dmg"):
+        name = asset.get("name", "")
+        if name.endswith(".dmg") and "Lite" not in name:
             return _make_asset(asset)
     return None
 
 
 def _select_windows_installer(assets: List[dict]) -> Optional[InstallerAsset]:
-    # 优先 Lite (体积小 + runtime/models 不丢失)。
+    # 优先 Lite（首次启动按硬件下 CUDA/CPU PyTorch；Win Full 已废弃）。
+    # Prefer Lite — Lite picks CUDA or CPU PyTorch on first launch based on
+    # detected hardware. Win Full (CPU-only) is no longer built.
     for asset in assets:
         name = asset.get("name", "")
         if name.endswith(".exe") and "Lite_Win64" in name:
             return _make_asset(asset)
-    # 退到 Full。
-    for asset in assets:
-        name = asset.get("name", "")
-        if name.endswith(".exe") and "Full_Win64" in name:
-            return _make_asset(asset)
-    # 最终兜底 — 任意 SuperPicky Setup .exe。
+    # 兜底：任意 SuperPicky Setup .exe（兼容老 release 仍有 Full_Win64 时的情况）。
+    # Fallback to any SuperPicky Setup .exe to handle older releases that still
+    # carry the discontinued Full_Win64 installer.
     for asset in assets:
         name = asset.get("name", "")
         if name.endswith(".exe") and "Setup" in name:
