@@ -856,9 +856,8 @@
         var CN_PROXY_PREFIX = 'https://gh-proxy.com/';
 
         var PLATFORMS = [
-            { key: 'mac_arm64',  labelCn: 'macOS · Apple Silicon (M1/M2/M3/M4/M5)',                                   labelEn: 'macOS · Apple Silicon (M1/M2/M3/M4/M5)',                                badge: 'macOS',   cardClass: 'featured', tooltipCn: null, tooltipEn: null },
-            { key: 'mac_x86_64', labelCn: 'macOS · Intel (2020 年前 iMac / MacBook)',                                  labelEn: 'macOS · Intel (pre-2020 iMac / MacBook)',                               badge: 'macOS',   cardClass: '',         tooltipCn: '⚠️ Intel Mac 仅支持 CPU 推理，速度低于 Apple Silicon', tooltipEn: '⚠️ Intel Mac runs on CPU only, slower than Apple Silicon' },
-            { key: 'win_lite',   labelCn: 'Windows · x64（按硬件自动选 CPU 或 NVIDIA CUDA 运行时）',                    labelEn: 'Windows · x64 (auto-selects CPU or NVIDIA CUDA runtime by hardware)',  badge: 'Windows', cardClass: 'windows',  tooltipCn: '⚠️ 首次启动会联网下载匹配硬件的 PyTorch 与 AI 模型', tooltipEn: '⚠️ First launch downloads hardware-matched PyTorch + AI models' },
+            { key: 'mac_arm64', labelCn: 'macOS · Apple Silicon (M1/M2/M3/M4/M5)',                            labelEn: 'macOS · Apple Silicon (M1/M2/M3/M4/M5)',                              badge: 'macOS',   cardClass: 'featured', tooltipCn: null, tooltipEn: null },
+            { key: 'win_lite',  labelCn: 'Windows · x64（按硬件自动选 CPU 或 NVIDIA CUDA 运行时）',           labelEn: 'Windows · x64 (auto-selects CPU or NVIDIA CUDA runtime by hardware)', badge: 'Windows', cardClass: 'windows',  tooltipCn: '⚠️ 首次启动会联网下载匹配硬件的 PyTorch 与 AI 模型', tooltipEn: '⚠️ First launch downloads hardware-matched PyTorch + AI models' },
         ];
 
         function mkEl(tag, cls) { var e = document.createElement(tag); if (cls) e.className = cls; return e; }

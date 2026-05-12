@@ -114,27 +114,20 @@ def select_installer_asset(
 
 
 def _select_mac_installer(assets: List[dict]) -> Optional[InstallerAsset]:
-    # 按当前机器架构选 dmg：arm64 / x86_64；排除 Lite 字样（已废弃）。
-    # Pick the dmg matching the local machine arch; reject "Lite" variants
-    # (Lite is no longer built for macOS).
-    import platform
-
-    machine = platform.machine().lower()
-    # 归一化常见别名 / Normalize common aliases.
-    if machine in ("amd64", "x86_64"):
-        arch_token = "x86_64"
-    elif machine in ("arm64", "aarch64"):
-        arch_token = "arm64"
-    else:
-        arch_token = machine
-
-    # 第一层：精确架构匹配。
+    # 选 arm64 dmg。PyTorch 在 macOS x86_64 上的最后 wheel 是 2.2.2 (2024-03)，
+    # 之后官方不再发 Intel wheel，SuperPicky v4.2.6 起也不再为 Intel mac 出包。
+    # 排除 Lite 字样（mac 端从未发布 Lite 包；保留过滤是为未来留兜底）。
+    # macOS dmg selection. PyTorch's last macOS x86_64 wheel was 2.2.2 (Mar
+    # 2024); from SuperPicky v4.2.6 we no longer ship Intel mac builds.
+    # We also filter "Lite" defensively — macOS never shipped a Lite variant
+    # for production users.
     for asset in assets:
         name = asset.get("name", "")
-        if name.endswith(".dmg") and arch_token in name and "Lite" not in name:
+        if name.endswith(".dmg") and "arm64" in name and "Lite" not in name:
             return _make_asset(asset)
 
-    # 第二层：任意非 Lite dmg —— 给未来 Universal 包或意外发布留个兜底。
+    # 兜底：任意非 Lite dmg。给未来 Universal 包或意外发布留个口子。
+    # Fallback to any non-Lite dmg, in case a future universal build shows up.
     for asset in assets:
         name = asset.get("name", "")
         if name.endswith(".dmg") and "Lite" not in name:
