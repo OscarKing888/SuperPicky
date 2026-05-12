@@ -856,10 +856,9 @@
         var CN_PROXY_PREFIX = 'https://gh-proxy.com/';
 
         var PLATFORMS = [
-            { key: 'mac_arm64',      labelCn: 'macOS · 完整版（内置全部 AI 模型）· Apple Silicon',                  labelEn: 'macOS · Full (all AI models bundled) · Apple Silicon',                badge: 'macOS',   cardClass: 'featured', tooltipCn: null, tooltipEn: null },
-            { key: 'mac_arm64_lite', labelCn: 'macOS · 轻量版（首次启动时联网下载模型）· Apple Silicon',             labelEn: 'macOS · Lite (downloads models on first launch) · Apple Silicon',     badge: 'macOS',   cardClass: '',         tooltipCn: '⚠️ 首次启动需要联网下载约 350 MB 模型', tooltipEn: '⚠️ First launch downloads ~350 MB of models' },
-            { key: 'win_full',       labelCn: 'Windows · 完整版（内置全部 AI 模型）· x64',                          labelEn: 'Windows · Full (all AI models bundled) · x64',                        badge: 'Windows', cardClass: 'windows',  tooltipCn: null, tooltipEn: null },
-            { key: 'win_lite',       labelCn: 'Windows · 轻量版（首次启动时联网下载模型）· x64',                     labelEn: 'Windows · Lite (downloads models on first launch) · x64',             badge: 'Windows', cardClass: 'windows',  tooltipCn: '⚠️ 首次启动需要联网下载约 600 MB 模型', tooltipEn: '⚠️ First launch downloads ~600 MB of models' },
+            { key: 'mac_arm64', labelCn: 'macOS · Apple Silicon (M1/M2/M3/M4/M5)',                          labelEn: 'macOS · Apple Silicon (M1/M2/M3/M4/M5)',                          badge: 'macOS',   cardClass: 'featured', tooltipCn: null, tooltipEn: null },
+            { key: 'win_full',  labelCn: 'Windows · 完整版（内置全部 AI 模型）· x64',                       labelEn: 'Windows · Full (all AI models bundled) · x64',                    badge: 'Windows', cardClass: 'windows',  tooltipCn: null, tooltipEn: null },
+            { key: 'win_lite',  labelCn: 'Windows · 轻量版（按硬件自动选 CPU/CUDA 运行时）· x64',           labelEn: 'Windows · Lite (auto-selects CPU/CUDA runtime by hardware) · x64', badge: 'Windows', cardClass: 'windows',  tooltipCn: '⚠️ 首次启动会联网下载匹配硬件的 PyTorch 与 AI 模型', tooltipEn: '⚠️ First launch downloads hardware-matched PyTorch + AI models' },
         ];
 
         function mkEl(tag, cls) { var e = document.createElement(tag); if (cls) e.className = cls; return e; }
