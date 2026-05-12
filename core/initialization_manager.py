@@ -57,9 +57,56 @@ logging.basicConfig(level=logging.INFO)
 
 
 PIPY_SOURCES = [
+    {"name": "tsinghua", "url": "https://pypi.tuna.tsinghua.edu.cn/simple"},
+    {"name": "aliyun", "url": "https://mirrors.aliyun.com/pypi/simple/"},
     {"name": "cernet", "url": "https://mirrors.cernet.edu.cn/pypi/web/simple"},
     {"name": "official", "url": "https://pypi.org/simple"},
 ]
+
+# 镜像源相对官方源的最大可接受延迟倍率：在此倍率以内时优先选用镜像（降低对官方源
+# 的请求负载、对大陆用户加速），超出后改用官方避免边缘地区被慢镜像拖累
+# （例如 HK/SG ISP 偶尔能通 cernet 但延迟 800ms 而 pypi.org 仅 50ms 的场景）。
+# Maximum acceptable mirror-to-official latency ratio: prefer the mirror when it
+# is within this ratio of the fastest official source, otherwise fall back to
+# the official source so edge-locale users (e.g. HK/SG ISPs that can reach
+# cernet at 800ms while pypi.org responds in 50ms) don't get slowed down.
+PREFERRED_SOURCE_MIRROR_RATIO_THRESHOLD = 2.0
+
+
+def _pick_preferred_with_ratio(successful):
+    """
+    在镜像与官方源之间按"镜像优先、但不显著慢于官方"的规则挑选最佳源。
+
+    Pick the best source preferring mirrors when they aren't dramatically
+    slower than the fastest official. ``successful`` 是已经过滤为 ok=True 的
+    ``ProbeResult`` 列表。
+
+    规则 / Rule:
+    - 仅有官方或仅有镜像 → 返回该侧最快
+    - 两侧都有 → 取镜像最快；若 mirror.total_ms 超过
+      ``official.total_ms * PREFERRED_SOURCE_MIRROR_RATIO_THRESHOLD``
+      则改用官方。这样大陆用户（镜像几百 ms vs 官方超时）继续走镜像，
+      海外/边缘地区用户（镜像 800ms vs 官方 50ms）正确走官方。
+    """
+    if not successful:
+        return None
+
+    non_official = [
+        item for item in successful if "official" not in item.name.lower()
+    ]
+    official = [
+        item for item in successful if "official" in item.name.lower()
+    ]
+
+    best_mirror = pick_best_source(non_official) if non_official else None
+    best_official = pick_best_source(official) if official else None
+
+    if best_mirror and best_official:
+        if best_mirror.total_ms <= best_official.total_ms * PREFERRED_SOURCE_MIRROR_RATIO_THRESHOLD:
+            return best_mirror
+        return best_official
+    return best_mirror or best_official
+
 
 FULL_FEATURE_SET = ("core_detection", "quality", "keypoint", "flight", "birdid")
 
@@ -1013,31 +1060,16 @@ class InitializationManager(QObject):
 
     @staticmethod
     def _pick_preferred_source(results):
-        successful = [item for item in results if item.ok]
-        if not successful:
-            return None
-
-        non_official = [
-            item for item in successful if "official" not in item.name.lower()
-        ]
-        if non_official:
-            return pick_best_source(non_official)
-        return pick_best_source(successful)
+        return _pick_preferred_with_ratio(
+            [item for item in results if item.ok]
+        )
 
     @staticmethod
     def _resolve_fallback_url(results, primary_url: str) -> str:
         successful = [item for item in results if item.ok and item.url != primary_url]
         if not successful:
             return primary_url
-
-        non_official = [
-            item for item in successful if "official" not in item.name.lower()
-        ]
-        if non_official:
-            fallback = pick_best_source(non_official)
-            return fallback.url if fallback else primary_url
-
-        fallback = pick_best_source(successful)
+        fallback = _pick_preferred_with_ratio(successful)
         return fallback.url if fallback else primary_url
 
     def _prepare_runtime(self, runtime_variant: str) -> None:

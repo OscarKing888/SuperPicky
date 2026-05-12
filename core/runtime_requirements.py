@@ -98,8 +98,14 @@ def get_cpu_requirements() -> RuntimeRequirements:
         torchvision_version="0.22.1+cpu",
         torchaudio_version="2.7.1+cpu",
         timm_version=">=0.9.0",
+        # 多镜像候选避免单点故障：南大 (校园网快)、阿里 (海内外都可达，海外亦能 200)、
+        # 官方 (兜底)。源探测会现场实测延迟挑最快的（见 _pick_preferred_with_ratio）。
+        # Multiple mirrors guard against single-point failure: NJU (fast on
+        # campus nets), Aliyun (reachable both inside and outside CN), and the
+        # official source as a fallback. Latency is probed at install time.
         extra_index_urls=[
             "https://mirror.nju.edu.cn/pytorch/whl/cpu/",
+            "https://mirrors.aliyun.com/pytorch-wheels/cpu/",
             "https://download.pytorch.org/whl/cpu",
         ],
     )
@@ -114,6 +120,7 @@ def get_cuda_requirements() -> RuntimeRequirements:
         timm_version=">=0.9.0",
         extra_index_urls=[
             "https://mirror.nju.edu.cn/pytorch/whl/cu118/",
+            "https://mirrors.aliyun.com/pytorch-wheels/cu118/",
             "https://download.pytorch.org/whl/cu118",
         ],
     )
