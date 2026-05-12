@@ -1,11 +1,11 @@
 {
   "beta": {
-    "tag": "v4.2.6-RC6",
-    "updated_at": "2026-05-08T13:55:00.0000000+00:00",
+    "tag": "v4.2.6-RC8",
+    "updated_at": "2026-05-12T06:05:00.0000000+00:00",
     "files": {
-      "mac_arm64": "SuperPicky_v4.2.6_arm64_7dfbf16.dmg",
-      "win_full": "SuperPicky_Setup_Full_Win64_v4.2.6_7dfbf16.exe",
-      "win_lite": "SuperPicky_Setup_Lite_Win64_v4.2.6_7dfbf16.exe"
+      "mac_arm64": "SuperPicky_v4.2.6_arm64_056f212.dmg",
+      "win_full": "SuperPicky_Setup_Full_Win64_v4.2.6_056f212.exe",
+      "win_lite": "SuperPicky_Setup_Lite_Win64_v4.2.6_056f212.exe"
     }
   }
 }
