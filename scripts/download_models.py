@@ -207,6 +207,18 @@ def verify_resource(resource: Dict[str, Any], file_path: Path) -> bool:
     return file_path.exists() and _sha256_file(file_path) == expected_sha256.lower()
 
 
+# 镜像源相对官方源的最大可接受延迟倍率：mirror 延迟 ≤ official 延迟 × 此值
+# 时优先用 mirror，否则用 official。与 core/initialization_manager.py 的
+# PREFERRED_SOURCE_MIRROR_RATIO_THRESHOLD 保持一致。修复 GitHub Actions runner
+# (海外) 跑 CI 时强行用 hf-mirror.com (慢 20+ 倍) 导致 LocalEntryNotFoundError
+# 的问题——mirror 探测通过但下载端点对 GitHub IP 不稳。
+# Match initialization_manager's 2x ratio rule for endpoint selection. Fixes
+# the case where GitHub Actions (overseas) was forced onto hf-mirror.com — its
+# probe endpoint returned 200 but the download endpoint rejected runner IPs,
+# causing LocalEntryNotFoundError on every model download.
+HF_ENDPOINT_MIRROR_RATIO_THRESHOLD = 2.0
+
+
 def _resolve_hf_endpoints() -> List[Tuple[str, str]]:
     if probe_sources is None or pick_best_source is None:
         return list(DOWNLOAD_ENDPOINTS)
@@ -217,13 +229,26 @@ def _resolve_hf_endpoints() -> List[Tuple[str, str]]:
     if not successful:
         return list(DOWNLOAD_ENDPOINTS)
 
-    non_official = [item for item in successful if "official" not in item.name.lower()]
-    preferred = non_official or successful
-    ordered_results = sorted(preferred, key=lambda item: (item.total_ms, item.first_byte_ms))
-    if non_official:
-        return [(item.name, item.url) for item in ordered_results]
+    non_official = sorted(
+        [item for item in successful if "official" not in item.name.lower()],
+        key=lambda item: (item.total_ms, item.first_byte_ms),
+    )
+    official = sorted(
+        [item for item in successful if "official" in item.name.lower()],
+        key=lambda item: (item.total_ms, item.first_byte_ms),
+    )
 
-    return [(item.name, item.url) for item in ordered_results]
+    # 镜像优先，但 mirror 显著慢于 official 时退到 official。
+    # Prefer mirror, but fall back to official when mirror is dramatically slower.
+    use_official_first = (
+        non_official
+        and official
+        and non_official[0].total_ms
+        > official[0].total_ms * HF_ENDPOINT_MIRROR_RATIO_THRESHOLD
+    )
+
+    ordered = (official + non_official) if use_official_first else (non_official + official)
+    return [(item.name, item.url) for item in ordered]
 
 
 def _resource_matches_selection(resource: Dict[str, Any], selected: set[str]) -> bool:
