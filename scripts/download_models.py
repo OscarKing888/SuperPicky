@@ -670,6 +670,111 @@ def _download_with_fallback(
         repo_id,
         " | ".join(errors),
     )
+
+    # ── urllib 直拉兜底 ─────────────────────────────────────────────────
+    # huggingface_hub 1.x 在某些 CI / 海外网络环境下会立即抛
+    # LocalEntryNotFoundError / RemoteEntryNotFoundError（毫秒级失败，且
+    # 重试无效），疑似 hf-xet 后端或反爬识别造成。raw URL
+    # (`/resolve/main/`) 走 Xet CDN 公开 S3 签名链路，没有 anti-bot 检测，
+    # 可以稳定下载。这里在 hf_hub_download 全失败后再试一次直拉。
+    # urllib direct fallback: huggingface_hub 1.x can fail instantly
+    # in CI/overseas networks (LocalEntryNotFoundError in ~0.1s, retries
+    # don't help). Raw URL goes through public Xet CDN with no anti-bot,
+    # so this is a reliable backstop.
+    logging.info("尝试 urllib 直拉兜底 (绕过 huggingface_hub)...")
+    direct_path = _urllib_direct_download(
+        repo_id=repo_id,
+        filename=filename,
+        full_dest_dir=full_dest_dir,
+        endpoints=endpoints,
+        expected_bytes=expected_bytes,
+        progress_cb=progress_cb,
+        resource=resource,
+    )
+    if direct_path:
+        return direct_path
+
+    return None
+
+
+def _urllib_direct_download(
+    repo_id: str,
+    filename: str,
+    full_dest_dir: str,
+    endpoints: List[Tuple[str, str]],
+    expected_bytes: int | None = None,
+    progress_cb: Optional[Callable[[InitializationProgressEvent], None]] = None,
+    resource: Optional[Dict[str, Any]] = None,
+) -> Optional[str]:
+    """
+    用 urllib 按 `{endpoint}/{repo_id}/resolve/main/{filename}` 直拉下载，
+    绕过 huggingface_hub。仅作为 hf_hub_download 全失败后的兜底。
+
+    Direct urllib download against the raw HF resolve URL, bypassing
+    huggingface_hub. Used as a backstop after hf_hub_download exhausts.
+    """
+    import urllib.request
+    import shutil
+
+    dest_path = Path(full_dest_dir) / filename
+    dest_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = dest_path.with_suffix(dest_path.suffix + ".part")
+
+    ssl_ctx = ssl.create_default_context() if False else None  # 使用默认 SSL 上下文
+    # 注: 默认 SSL 上下文走 certifi/系统 CA。HF + Xet CDN 均为 Let's Encrypt /
+    # AWS 公开证书链，无需禁用证书验证。
+
+    for source_name, endpoint in endpoints:
+        url = f"{endpoint.rstrip('/')}/{repo_id}/resolve/main/{filename}"
+        logging.info("urllib 直拉: 尝试 %s → %s", source_name, url)
+        try:
+            req = urllib.request.Request(
+                url,
+                headers={"User-Agent": "SuperPicky-Downloader/4.2.6"},
+            )
+            start = time.perf_counter()
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                tmp_path.unlink(missing_ok=True)
+                with open(tmp_path, "wb") as f:
+                    shutil.copyfileobj(resp, f)
+            elapsed = time.perf_counter() - start
+
+            dest_path.unlink(missing_ok=True)
+            tmp_path.rename(dest_path)
+            file_size = dest_path.stat().st_size
+            logging.info(
+                "urllib 直拉成功: %s 通过 %s 完成, %d 字节 (%.1f MB), 耗时 %.2f 秒",
+                filename,
+                source_name,
+                file_size,
+                file_size / 1048576,
+                elapsed,
+            )
+
+            if resource is not None and progress_cb is not None:
+                _emit_resource_progress(
+                    progress_cb,
+                    _build_resource_progress_event(
+                        resource,
+                        f"{filename}: downloaded via {source_name} (urllib fallback)",
+                        ratio=1.0,
+                        bytes_done=file_size,
+                        bytes_total=file_size,
+                        source=source_name,
+                        is_terminal=True,
+                    ),
+                )
+
+            return str(dest_path)
+        except Exception as exc:
+            tmp_path.unlink(missing_ok=True)
+            logging.warning(
+                "urllib 直拉 %s 失败: %s",
+                source_name,
+                _format_download_error(exc),
+            )
+            continue
+
     return None
 
 
