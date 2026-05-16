@@ -1,6 +1,9 @@
-name: Build and Release SuperPicky Legacy CPU
+name: Build and Release SuperPicky
 
 on:
+  push:
+    tags:
+      - 'v*.*.*'
   workflow_dispatch:
     inputs:
       version:
@@ -8,7 +11,7 @@ on:
         required: true
 
 jobs:
-  build:
+  build-windows:
     runs-on: windows-latest
     permissions:
       contents: write
@@ -22,63 +25,173 @@ jobs:
         with:
           python-version: '3.12'
           cache: 'pip'
-          cache-dependency-path: requirements.txt
+          cache-dependency-path: |
+            requirements.txt
+            requirements_cuda.txt
+
+      - name: Prepare telemetry build override
+        env:
+          COUNTLY_APP_KEY: ${{ secrets.COUNTLY_APP_KEY }}
+          COUNTLY_SERVER_URL: ${{ secrets.COUNTLY_SERVER_URL }}
+        run: python scripts/prepare_telemetry_build.py --output _telemetry_build.py
 
       - name: Resolve release metadata
         id: release_meta
-        shell: pwsh
-        run: |
-          $rawVersion = "${{ github.event.inputs.version }}"
-          if (-not $rawVersion) {
-            throw "Release version is required."
-          }
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+        run: python scripts/ci_release.py resolve-metadata
 
-          $tag = if ($rawVersion.StartsWith("v")) { $rawVersion } else { "v$rawVersion" }
-          "tag=$tag" >> $env:GITHUB_OUTPUT
-          "name=SuperPicky $tag" >> $env:GITHUB_OUTPUT
+      # Windows 只构建 Lite —— Full (build-type=cpu) 仅打包了 CPU PyTorch，对
+       # 有 NVIDIA GPU 的用户不能用 CUDA 加速；Lite 在首次启动时按硬件下载匹配的
+      # PyTorch wheel，覆盖所有 Win 用户群体。Full 仅离线安装场景有意义但用户少。
+      - name: Build Lite release
+        env:
+          RELEASE_TAG: ${{ steps.release_meta.outputs.tag }}
+        run: python build_release_win.py --build-type lite --copy-dir output --no-zip
 
-      - name: Create build virtual environment
-        shell: pwsh
-        run: python -m venv .venv
-
-      - name: Install dependencies
-        shell: pwsh
-        run: |
-          .\.venv\Scripts\python.exe -m pip install --upgrade pip
-          .\.venv\Scripts\python.exe -m pip install -r requirements.txt
-
-      - name: Build CPU version
-        shell: pwsh
-        run: .\.venv\Scripts\python.exe build_release_win.py --build-type cpu --copy-dir output --debug
-
-      - name: Create installer with Inno Setup
+      - name: Create Lite installer with Inno Setup
         uses: Minionguyjpro/Inno-Setup-Action@v1.2.7
         with:
-          path: ./output/installer_cpu/SuperPicky.iss
+          path: ./output/installer_lite/SuperPicky-lite.iss
 
       - name: Prepare release assets
-        shell: pwsh
         run: |
-          New-Item -ItemType Directory -Path release_assets -Force | Out-Null
+          python scripts/ci_release.py collect-assets --output-dir release_assets --pattern output/installer_lite/Output/SuperPicky_Setup_Lite_Win64_*.exe
 
-          $assetPatterns = @(
-            "output/SuperPicky_Win64_*_cpu.zip",
-            "output/installer_cpu/Output/SuperPicky_Setup_Win64_*.exe"
-          )
+      - name: Build code patch zip
+        run: python scripts/ci_release.py build-patch --output-dir release_assets --patch-version ${{ steps.release_meta.outputs.tag }}
 
-          foreach ($pattern in $assetPatterns) {
-            $matches = Get-ChildItem -Path $pattern -File -ErrorAction Stop
-            if ($matches.Count -ne 1) {
-              throw "Expected exactly one asset for pattern '$pattern', found $($matches.Count)."
-            }
-            Copy-Item -Path $matches[0].FullName -Destination release_assets/
-          }
+      - name: Clean telemetry build override
+        if: always()
+        run: python scripts/ci_release.py cleanup-paths --path _telemetry_build.py
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.release_meta.outputs.tag }}
           name: ${{ steps.release_meta.outputs.name }}
           body_path: ChangeLog.md
+          fail_on_unmatched_files: true
           files: |
             release_assets/*
+
+      # - name: Create GitCode Release
+      #   continue-on-error: true
+      #   shell: pwsh
+      #   env:
+      #     GITCODE_TOKEN: ${{ secrets.GITCODE_TOKEN }}
+      #     TAG: ${{ steps.release_meta.outputs.tag }}
+      #   run: |
+      #     $baseUrl = "https://gitcode.com/api/v4/projects/Jamesphotography%2FSuperPicky"
+      #     $tag = $env:TAG
+      #     $headers = @{ "PRIVATE-TOKEN" = $env:GITCODE_TOKEN; "Content-Type" = "application/json" }
+      #     $body = @{ tag_name = $tag; name = "SuperPicky $tag"; description = "See GitHub release for details." } | ConvertTo-Json
+      #     try {
+      #       Invoke-RestMethod -Uri "$baseUrl/releases" -Method Post -Body $body -Headers $headers -ErrorAction Stop
+      #     } catch {
+      #       Write-Host "Release already exists or creation failed, continuing..."
+      #     }
+
+      # - name: Update downloads_github.json and push
+      #   shell: pwsh
+      #   env:
+      #     TAG: ${{ steps.release_meta.outputs.tag }}
+      #     GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      #     REF: ${{ github.ref_name }}
+      #   run: |
+      #     $tag = $env:TAG
+      #     $assets = gh release view $tag --json assets --jq '.assets[].name' 2>$null
+      #     $macArm64 = ($assets | Where-Object { $_ -match '(?i)arm64.*\.dmg$' } | Select-Object -First 1)
+      #     $winCpu   = ($assets | Where-Object { $_ -match '(?i)Setup.*Win.*\.exe$' } | Select-Object -First 1)
+      #     $winCuda  = ($assets | Where-Object { $_ -match '(?i)CUDA.*Win.*\.exe$' } | Select-Object -First 1)
+      #     $json = [ordered]@{
+      #       beta = [ordered]@{
+      #         tag        = $tag
+      #         updated_at = (Get-Date -Format "o")
+      #         files      = [ordered]@{
+      #           mac_arm64 = if ($macArm64) { $macArm64 } else { $null }
+      #           win_cpu   = if ($winCpu)   { $winCpu }   else { $null }
+      #           win_cuda  = if ($winCuda)  { $winCuda }  else { $null }
+      #         }
+      #       }
+      #     }
+      #     $jsonContent = $json | ConvertTo-Json -Depth 5
+      #     git config user.name "github-actions[bot]"
+      #     git config user.email "github-actions[bot]@users.noreply.github.com"
+      #     git fetch origin nightly
+      #     git checkout -B nightly origin/nightly
+      #     $jsonContent | Out-File -Encoding utf8NoBOM "docs/downloads_github.json"
+      #     git add docs/downloads_github.json
+      #     git diff --cached --quiet && exit 0
+      #     git commit -m "chore(web): 自动更新 downloads_github.json → $tag [skip ci]"
+      #     git push origin HEAD:nightly
+
+  build-mac:
+    runs-on: macos-14
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: requirements_mac.txt
+
+      - name: Prepare telemetry build override
+        env:
+          COUNTLY_APP_KEY: ${{ secrets.COUNTLY_APP_KEY }}
+          COUNTLY_SERVER_URL: ${{ secrets.COUNTLY_SERVER_URL }}
+        run: python scripts/prepare_telemetry_build.py --output _telemetry_build.py
+
+      - name: Resolve release metadata
+        id: release_meta
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+        run: python scripts/ci_release.py resolve-metadata
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements_mac.txt
+
+      - name: Materialize signing certificate
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+        run: python scripts/ci_release.py materialize-secret-file --env-name MACOS_CERTIFICATE --output $RUNNER_TEMP/certificate.p12 --decode-base64
+
+      - name: Build notarized macOS release
+        env:
+          RELEASE_TAG: ${{ steps.release_meta.outputs.tag }}
+          MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          python build_release_mac.py --build-type full --arch arm64 --copy-dir output/mac --sign-p12 $RUNNER_TEMP/certificate.p12 --sign-p12-password-env MACOS_CERTIFICATE_PWD --notarize --apple-id ${{ secrets.APPLE_ID }} --team-id ${{ secrets.MACOS_TEAM_ID }}
+
+      - name: Build code patch zip
+        run: python scripts/ci_release.py build-patch --output-dir output/mac --patch-version ${{ steps.release_meta.outputs.tag }}
+
+      - name: Clean up
+        if: always()
+        run: python scripts/ci_release.py cleanup-paths --path _telemetry_build.py --path $RUNNER_TEMP/certificate.p12
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.release_meta.outputs.tag }}
+          name: ${{ steps.release_meta.outputs.name }}
+          body_path: ChangeLog.md
+          fail_on_unmatched_files: true
+          files: |
+            output/mac/*.dmg
+            output/mac/code_patch_*.zip
+            output/mac/patch_meta.json
+

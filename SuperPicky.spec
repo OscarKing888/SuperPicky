@@ -5,6 +5,14 @@ import sys
 sys.path.append(os.path.abspath('.'))
 from constants import APP_VERSION
 
+
+def _env_or_none(name):
+    value = os.environ.get(name, "").strip()
+    return value or None
+
+
+APP_VERSION = os.environ.get("SUPERPICKY_APP_VERSION", APP_VERSION)
+
 # 获取当前工作目录
 base_path = os.path.abspath('.')
 
@@ -49,6 +57,8 @@ all_datas = [
     (os.path.join(base_path, 'birdid/data'), 'birdid/data'),
     # V4.0.0: Lightroom 插件
     (os.path.join(base_path, 'SuperBirdIDPlugin.lrplugin'), 'SuperBirdIDPlugin.lrplugin'),
+    # V4.2.x: 鸟名查询数据库 (ioc/birdname.db)
+    (os.path.join(base_path, 'ioc'), 'ioc'),
 ]
 
 # 添加动态收集的数据
@@ -104,7 +114,7 @@ a = Analysis(
         'multiprocessing',
         'multiprocessing.spawn',
         # V3.9.5: 更新检测模块
-        'update_checker',
+        'tools.update_checker',
         'packaging',
         'packaging.version',
         # V4.0.0: 鸟类识别模块
@@ -117,11 +127,29 @@ a = Analysis(
         'flask.json',
         'cryptography',
         'cryptography.fernet',
+        # V4.2.1: Countly telemetry build config (dynamically imported via importlib,
+        # PyInstaller cannot auto-discover it, must be listed explicitly)
+        '_telemetry_build',
+        'app_user_stat._telemetry_build',
+        'app_user_stat',
+        'app_user_stat.telemetry',
+        'app_user_stat.consent_texts',
+        'app_user_stat.consent_texts.en_US',
+        'app_user_stat.consent_texts.zh_CN',
     ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=['pyi_rth_cv2.py'] if os.path.exists('pyi_rth_cv2.py') else [],
-    excludes=['PyQt5', 'PyQt6', 'tkinter'],
+    excludes=[
+        'PyQt5', 'PyQt6', 'tkinter',
+        # 僵尸依赖拦截：polars 仅用于 ultralytics W&B 训练回调，生产推理不触发
+        'polars',
+        # 防御性排除：facexlib/datasets 已卸载，防止意外重装时被打入包
+        'numba', 'llvmlite',
+        'pyarrow',
+        'facexlib',
+        'datasets',
+    ],
     noarchive=False,
     optimize=0,
 )
@@ -141,9 +169,9 @@ exe = EXE(
     console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
-    target_arch=None,
-    codesign_identity=None,
-    entitlements_file=None,
+    target_arch=_env_or_none("SUPERPICKY_TARGET_ARCH"),
+    codesign_identity=_env_or_none("SUPERPICKY_CODESIGN_IDENTITY"),
+    entitlements_file=_env_or_none("SUPERPICKY_ENTITLEMENTS_FILE"),
     icon=os.path.join(base_path, 'img', 'SuperPicky-V0.02.icns') if os.path.exists(os.path.join(base_path, 'img', 'SuperPicky-V0.02.icns')) else None,
 )
 

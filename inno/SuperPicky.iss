@@ -1,78 +1,62 @@
+; SuperPicky Full 安装脚本
+; SuperPicky Full installer script
+; Non-commercial use only
+
+#define MyAppName "SuperPicky"
+#define MyAppVersion "unknown"
+#define MyAppPublisher "JamesPhotography"
+#define MyAppURL "superpicky.app"
+#define MyAppExeName "SuperPicky.exe"
+#define MyAppCommitHash "unknown"
+#define OutputBaseFilename "SuperPicky_Setup_Full_Win64_" + MyAppVersion + "_" + MyAppCommitHash
+
 [Setup]
-AppName=SuperPicky
-AppVersion=4.1.0-627f50d
-DefaultDirName={commonpf}\SuperPicky
-DefaultGroupName=SuperPicky
-AppPublisherURL=https://superpicky.app/
-OutputBaseFilename=SuperPicky_Setup_Win64
+AppId={{B7E3F2A1-8D4C-4F5A-9E6B-1C2D3E4F5A6B}
+AppName={#MyAppName}
+AppVersion={#MyAppVersion}
+AppVerName={#MyAppName} {#MyAppVersion}
+AppPublisher={#MyAppPublisher}
+AppPublisherURL={#MyAppURL}
+AppSupportURL={#MyAppURL}
+AppUpdatesURL={#MyAppURL}
+DefaultDirName={autopf}\SuperPicky
+UninstallDisplayIcon={app}\{#MyAppExeName}
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
+DisableProgramGroupPage=yes
+PrivilegesRequired=lowest
+OutputDir=output
+OutputBaseFilename={#OutputBaseFilename}
+SetupIconFile=img\icon.ico
 Compression=lzma2/ultra64
 LZMAUseSeparateProcess=yes
 LZMADictionarySize=1048576
 LZMANumFastBytes=273
 SolidCompression=yes
-CreateAppDir=yes
-UninstallDisplayIcon={app}\SuperPicky.exe
-SetupIconFile=_internal\img\icon.ico
 WizardStyle=modern
-DisableProgramGroupPage=yes
-DisableDirPage=no
-DisableReadyPage=no
-DisableFinishedPage=no
-VersionInfoCompany=https://superpicky.app/
-WizardImageFile=_internal\img\icon.png
-WizardSmallImageFile=_internal\img\icon.png
-AlwaysShowComponentsList=no
-AlwaysShowGroupOnReadyPage=no
-WindowVisible=yes
-
-[Registry]
-Root: HKLM; Subkey: SOFTWARE\SuperPicky; ValueType: string; ValueName: InstallDir; ValueData: {app}; Flags: uninsdeletevalue
-Root: HKLM; Subkey: SOFTWARE\SuperPicky; ValueType: string; ValueName: Version; ValueData: {#SetupSetting("AppVersion")}; Flags: uninsdeletevalue
-
-[Code]
-function InitializeSetup(): Boolean;
-var
-  OldInstallDir: string;
-  dummy: Integer;
-begin
-  Result := True;
-  // 检查是否已安装旧版本
-  if RegValueExists(HKLM, 'SOFTWARE\SuperPicky', 'InstallDir') then
-  begin
-    // 读取旧安装目录
-    if RegQueryStringValue(HKLM, 'SOFTWARE\SuperPicky', 'InstallDir', OldInstallDir) then
-    begin
-      // 停止正在运行的进程
-      Exec('taskkill.exe', '/f /im SuperPicky.exe', '', SW_HIDE, ewWaitUntilTerminated, dummy);
-      // 删除旧文件
-      DelTree(OldInstallDir, True, True, True);
-    end;
-  end;
-end;
-
-function ShouldSkipPage(PageID: Integer): Boolean;
-begin
-  Result := False;
-end;
-
-[Files]
-Source: "SuperPicky.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "_internal\*"; DestDir: "{app}\_internal"; Flags: ignoreversion recursesubdirs createallsubdirs
-
-[Icons]
-Name: "{group}\SuperPicky"; Filename: "{app}\SuperPicky.exe"
-Name: "{commondesktop}\SuperPicky"; Filename: "{app}\SuperPicky.exe"; Tasks: desktopicon
-
-[Tasks]
-Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: checkedonce
-
-[Run]
-Filename: "{app}\SuperPicky.exe"; Description: "{cm:LaunchProgram,SuperPicky}"; Flags: nowait postinstall skipifsilent
-Filename: "https://superpicky.app/"; Description: "访问项目网站"; Flags: postinstall skipifsilent shellexec
-
-[UninstallRun]
-Filename: "taskkill.exe"; Parameters: "/f /im SuperPicky.exe"; Flags: skipifdoesntexist; RunOnceId: "KillSuperPickyProcess"
+WizardImageFile=img\icon.png
+WizardSmallImageFile=img\icon.png
+CloseApplications=yes
+RestartApplications=no
 
 [Languages]
 Name: "chinesesimplified"; MessagesFile: "ChineseSimplified.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
+
+[Tasks]
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: checkablealone
+
+[Files]
+Source: "{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "_internal\*"; DestDir: "{app}\_internal"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+[Icons]
+Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+
+[Run]
+Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+Filename: "https://superpicky.app/"; Description: "访问项目网站"; Flags: postinstall skipifsilent shellexec
+
+[UninstallDelete]
+Type: filesandordirs; Name: "{app}\_internal"
