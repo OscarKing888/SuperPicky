@@ -13,9 +13,10 @@ from PySide6.QtWidgets import (
     QSizePolicy
 )
 from PySide6.QtCore import Qt, Signal, QSize, QThread, Slot, QTimer
-from PySide6.QtGui import QPixmap, QFont, QGuiApplication
+from PySide6.QtGui import QPixmap, QFont, QGuiApplication, QImage
 
 from ui.styles import COLORS, FONTS
+from core.rarity_tier import gbif_score_to_tier, tier_name, tier_icon, tier_color
 
 
 # ============================================================
@@ -38,12 +39,12 @@ class _ImageLoader(QThread):
         if self._cancelled:
             return
         if self._path and os.path.exists(self._path):
-            px = QPixmap(self._path)
+            img = QImage(self._path)
             if not self._cancelled:
-                self.ready.emit(px)
+                self.ready.emit(img)
         else:
             if not self._cancelled:
-                self.ready.emit(QPixmap())
+                self.ready.emit(QImage())
 
 
 # 对焦状态显示颜色（与缩略图圆点、筛选面板保持一致）
@@ -53,6 +54,43 @@ _FOCUS_COLORS = {
     "BAD":   COLORS['focus_bad'],     # 近白灰 — 失焦
     "WORST": COLORS['focus_worst'],   # 灰 — 脱焦
 }
+
+# IUCN 红色名录等级 → (中文全名, 英文全名, 官方色)
+# IUCN Red List category → (Chinese, English, official color)
+_IUCN_INFO = {
+    "LC":       ("无危",                 "Least Concern",                         "#60C659"),
+    "NT":       ("近危",                 "Near Threatened",                       "#CCE226"),
+    "VU":       ("易危",                 "Vulnerable",                            "#F9E814"),
+    "EN":       ("濒危",                 "Endangered",                            "#FC7F3F"),
+    "CR":       ("极危",                 "Critically Endangered",                 "#D81E05"),
+    "CR (PE)":  ("极危（可能已灭绝）",      "Critically Endangered (Possibly Extinct)", "#D81E05"),
+    "CR (PEW)": ("极危（野外可能已灭绝）",   "Critically Endangered (Possibly Extinct in the Wild)", "#D81E05"),
+    "EW":       ("野外灭绝",              "Extinct in the Wild",                   "#542344"),
+    "EX":       ("灭绝",                 "Extinct",                               "#000000"),
+    "DD":       ("数据不足",              "Data Deficient",                        "#B2B2B2"),
+    "NE":       ("未评估",                "Not Evaluated",                         "#B2B2B2"),
+}
+
+
+def _format_iucn(category: str, is_zh: bool) -> tuple:
+    """
+    根据 IUCN 等级代码返回 (显示文本, 颜色)。
+
+    Args:
+        category: IUCN 缩写（LC/NT/VU/EN/CR/...）
+        is_zh: 当前是否为中文界面
+
+    Returns:
+        (display_text, color) — display_text 形如「易危 (VU)」/「Vulnerable (VU)」
+
+    Format an IUCN category code into (display_text, color).
+    """
+    info = _IUCN_INFO.get(category)
+    if not info:
+        return (category, COLORS['text_primary'])
+    zh_name, en_name, color = info
+    name = zh_name if is_zh else en_name
+    return (f"{name} ({category})", color)
 
 
 def _make_section_label(text: str) -> QLabel:
@@ -67,6 +105,25 @@ def _make_section_label(text: str) -> QLabel:
         }}
     """)
     return lbl
+
+
+def _display_filename(photo: dict) -> str:
+    path = photo.get("current_path") or photo.get("original_path") or ""
+    if path:
+        return os.path.basename(path)
+    return photo.get("filename") or ""
+
+
+def _format_file_size(num_bytes: int) -> str:
+    units = ["B", "KB", "MB", "GB", "TB"]
+    size = float(max(num_bytes, 0))
+    for unit in units:
+        if size < 1024 or unit == units[-1]:
+            if unit == "B":
+                return f"{int(size)} {unit}"
+            return f"{size:.1f} {unit}"
+        size /= 1024.0
+    return "\u2014"
 
 
 def _make_value_label(text: str = "—") -> QLabel:
@@ -84,10 +141,20 @@ def _make_value_label(text: str = "—") -> QLabel:
 
 
 class _NoWrapLabel(QLabel):
-    """单行不换行的 QLabel：minimumSizeHint 返回小宽度，避免撑宽父容器。"""
+    """单行不换行的 QLabel：minimumSizeHint 返回小宽度，避免撑宽父容器。
+
+    V4.2.7: 增加 clicked 信号 — 鸟种行用它实现「点击复制鸟名」。
+    """
+    clicked = Signal()
+
     def minimumSizeHint(self):
         h = super().minimumSizeHint()
         return QSize(40, h.height())
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(event)
 
 
 class _ZoomableImageLabel(QLabel):
@@ -142,11 +209,11 @@ class DetailPanel(QWidget):
     信号:
         prev_requested()              用户点击"上一张"
         next_requested()              用户点击"下一张"
-        rating_change_requested(str, int)  用户点击 ▼/▲ 修改评分 (filename, new_rating)
+        rating_change_requested(object, int)  用户点击 ▼/▲ 修改评分 (photo, new_rating)
     """
     prev_requested = Signal()
     next_requested = Signal()
-    rating_change_requested = Signal(str, int)
+    rating_change_requested = Signal(object, int)
 
     def __init__(self, i18n, parent=None):
         super().__init__(parent)
@@ -298,6 +365,9 @@ class DetailPanel(QWidget):
             l.setStyleSheet(f"color: {COLORS['text_tertiary']}; font-size: 11px; background: transparent;")
             return l
 
+        # V4.2.7: GBIF 全球罕见度（0-100 分制，AWS Open Data 2026-05 snapshot 派生）
+        # V4.2.7: GBIF-derived global rarity (0-100, from AWS Open Data snapshot)
+        self._val_gbif_rarity = _make_value_label()
         self._val_focus = _make_value_label()
         self._val_sharpness = _make_value_label()
         self._val_aesthetic = _make_value_label()
@@ -306,6 +376,14 @@ class DetailPanel(QWidget):
         self._val_species.setStyleSheet(f"color: {COLORS['accent']}; font-size: 12px; background: transparent;")
         self._val_species.setWordWrap(False)
         self._val_species.setMinimumHeight(28)
+        # V4.2.7: 鸟种行点击复制鸟名到剪贴板
+        # V4.2.7: Click the species label to copy the name to clipboard.
+        self._val_species.setCursor(Qt.PointingHandCursor)
+        self._val_species.clicked.connect(self._on_species_clicked)
+        self._species_revert_text: Optional[str] = None
+        # V4.2.7: IUCN 红色名录等级，紧贴鸟种之下显示
+        # V4.2.7: IUCN Red List category, pinned directly under Species
+        self._val_iucn = _make_value_label()
         self._val_camera = _make_value_label()
         self._val_lens = _NoWrapLabel()
         self._val_lens.setStyleSheet(f"color: {COLORS['text_primary']}; font-size: 12px; font-family: {FONTS['mono']}; background: transparent;")
@@ -315,6 +393,7 @@ class DetailPanel(QWidget):
         self._val_iso = _make_value_label()
         self._val_focal = _make_value_label()
         self._val_confidence = _make_value_label()
+        self._val_filesize = _make_value_label()
         self._val_filename = _make_value_label()
         self._val_datetime = _make_value_label()
         self._val_caption = _make_value_label()
@@ -322,17 +401,22 @@ class DetailPanel(QWidget):
         self._val_caption.setWordWrap(True)
 
         rows = [
+            # V4.2.7: 鸟类信息 3 行连续（鸟种 → 全球罕见度 → IUCN）
+            # V4.2.7: Three bird-related rows kept adjacent for natural reading.
+            ("browser.meta_species",    self._val_species),
+            ("browser.meta_gbif_rarity", self._val_gbif_rarity),
+            ("browser.meta_iucn",       self._val_iucn),
             ("browser.meta_focus",      self._val_focus),
             ("browser.meta_sharpness",  self._val_sharpness),
             ("browser.meta_aesthetic",  self._val_aesthetic),
             ("browser.meta_flying",     self._val_flying),
-            ("browser.meta_species",    self._val_species),
             ("browser.meta_camera",     self._val_camera),
             ("browser.meta_lens",       self._val_lens),
             ("browser.meta_shutter",    self._val_shutter),
             ("browser.meta_iso",        self._val_iso),
             ("browser.meta_focal",      self._val_focal),
             ("browser.meta_confidence", self._val_confidence),
+            ("browser.meta_filesize",   self._val_filesize),
             ("browser.meta_filename",   self._val_filename),
             ("browser.meta_datetime",   self._val_datetime),
         ]
@@ -415,12 +499,14 @@ class DetailPanel(QWidget):
         self._copy_exif_btn.setEnabled(False)
         self._img_label.set_pixmap(QPixmap())
         for val in (
+            self._val_gbif_rarity,
             self._val_focus, self._val_sharpness,
             self._val_aesthetic, self._val_flying, self._val_species,
+            self._val_iucn,
             self._val_caption,
             self._val_camera, self._val_lens, self._val_shutter,
             self._val_iso, self._val_focal, self._val_confidence,
-            self._val_filename, self._val_datetime,
+            self._val_filesize, self._val_filename, self._val_datetime,
         ):
             val.setText("—")
         self._rating_label.setText("—")
@@ -452,8 +538,7 @@ class DetailPanel(QWidget):
             return
         self._current_photo["rating"] = new_val
         self._refresh_metadata()
-        fn = self._current_photo.get("filename", "")
-        self.rating_change_requested.emit(fn, new_val)
+        self.rating_change_requested.emit(dict(self._current_photo), new_val)
 
     def _on_rating_inc(self):
         """▲ 按钮：评分 +1（最高 5）。"""
@@ -465,8 +550,7 @@ class DetailPanel(QWidget):
             return
         self._current_photo["rating"] = new_val
         self._refresh_metadata()
-        fn = self._current_photo.get("filename", "")
-        self.rating_change_requested.emit(fn, new_val)
+        self.rating_change_requested.emit(dict(self._current_photo), new_val)
 
     def _on_copy_exif(self):
         """复制当前照片的 EXIF 信息到剪贴板。"""
@@ -494,6 +578,13 @@ class DetailPanel(QWidget):
         else:
             species = p.get("bird_species_en") or p.get("bird_species_cn") or "—"
 
+        gbif_r = p.get("gbif_rarity_100")
+        iucn_raw = p.get("iucn_category")
+        if iucn_raw:
+            iucn_text, _ = _format_iucn(iucn_raw, is_zh)
+        else:
+            iucn_text = "—"
+
         lines = [
             f"{t('browser.meta_filename')}: {p.get('filename') or '—'}",
             f"{t('browser.meta_datetime')}: {(p.get('date_time_original') or '—')[:19]}",
@@ -503,6 +594,8 @@ class DetailPanel(QWidget):
             f"{t('browser.meta_iso')}: {iso if iso else '—'}",
             f"{t('browser.meta_focal')}: {f'{fl:.0f}mm' if fl else '—'}",
             f"{t('browser.meta_species')}: {species}",
+            f"{t('browser.meta_gbif_rarity')}: {f'{tier_icon(gbif_score_to_tier(gbif_r))} {tier_name(gbif_score_to_tier(gbif_r), is_zh=is_zh)} ({gbif_r:.1f})' if gbif_r is not None else '—'}",
+            f"{t('browser.meta_iucn')}: {iucn_text}",
             f"{t('browser.meta_focus')}: {focus}",
             f"{t('browser.meta_sharpness')}: {f'{sharp:.1f}' if sharp is not None else '—'}",
             f"{t('browser.meta_aesthetic')}: {f'{topiq:.2f}' if topiq is not None else '—'}",
@@ -520,6 +613,32 @@ class DetailPanel(QWidget):
     def _reset_copy_btn(self):
         self._copy_exif_btn.setText(self.i18n.t("browser.copy_exif"))
         self._copy_exif_btn.setStyleSheet(self._inactive_btn_style())
+
+    def _on_species_clicked(self):
+        """点击鸟种行 → 复制鸟名到剪贴板 + 1.5s 反馈。"""
+        text = (self._val_species.text() or "").strip()
+        if not text or text == "—":
+            return
+        # 如果当前已经在「复制成功」反馈中，再点不重复处理
+        if self._species_revert_text is not None:
+            return
+        QGuiApplication.clipboard().setText(text)
+        self._species_revert_text = text
+        self._val_species.setText(self.i18n.t("browser.species_copied"))
+        self._val_species.setToolTip(self.i18n.t("browser.species_copied"))
+        QTimer.singleShot(1500, self._restore_species_text)
+
+    def _restore_species_text(self):
+        """1.5s 后把鸟种行文本恢复（仅当用户没切换照片）。"""
+        if self._species_revert_text is None:
+            return
+        original = self._species_revert_text
+        self._species_revert_text = None
+        # 当前 label 仍是「复制成功」时才恢复；用户已经切换照片就不动
+        cur = (self._val_species.text() or "").strip()
+        if cur == self.i18n.t("browser.species_copied"):
+            self._val_species.setText(original)
+            self._val_species.setToolTip(original)
 
     def _nav_btn_style(self) -> str:
         """导航按钮（◀/▶）样式 — 比一般次级按钮更明显。"""
@@ -596,6 +715,13 @@ class DetailPanel(QWidget):
         else:
             self._img_label.set_pixmap(QPixmap())
 
+    def cleanup(self):
+        if self._loader:
+            self._loader.cancel()
+            if self._loader.isRunning():
+                self._loader.wait(1000)
+            self._loader = None
+
     def _resolve_image_path(self) -> Optional[str]:
         """根据当前视图模式解析目标图片路径。"""
         p = self._current_photo
@@ -618,9 +744,10 @@ class DetailPanel(QWidget):
         return path if path and os.path.exists(path) else None
 
     @Slot(object)
-    def _on_image_ready(self, pixmap: QPixmap):
+    def _on_image_ready(self, img: QImage):
         """后台加载完成，更新图片显示。"""
-        self._img_label.set_pixmap(pixmap)
+        px = QPixmap.fromImage(img)
+        self._img_label.set_pixmap(px)
 
     @staticmethod
     def _format_shutter(val) -> str:
@@ -660,6 +787,25 @@ class DetailPanel(QWidget):
         }
         self._rating_label.setText(_rating_text.get(rating, _unknown))
 
+        # GBIF 全球罕见度 → 5-tier 圆形充填图标 + tier 名 + 小字分数
+        # GBIF rarity → 5-tier circle glyph + tier label + small score
+        gbif_r = p.get("gbif_rarity_100")
+        if gbif_r is not None:
+            tidx = gbif_score_to_tier(gbif_r)
+            is_zh = not self.i18n.current_lang.startswith('en')
+            icon = tier_icon(tidx)
+            name = tier_name(tidx, is_zh=is_zh)
+            color = tier_color(tidx) or COLORS['text_primary']
+            self._val_gbif_rarity.setText(f"{icon} {name}  ({gbif_r:.1f})")
+            self._val_gbif_rarity.setStyleSheet(
+                f"color: {color}; font-size: 13px; font-weight: 600; background: transparent;"
+            )
+        else:
+            self._val_gbif_rarity.setText(_unknown)
+            self._val_gbif_rarity.setStyleSheet(
+                f"color: {COLORS['text_primary']}; font-size: 12px; background: transparent;"
+            )
+
         # 对焦
         focus = p.get("focus_status") or _unknown
         self._val_focus.setText(focus)
@@ -698,6 +844,22 @@ class DetailPanel(QWidget):
         self._val_species.setText(species)
         self._val_species.setToolTip(species)
 
+        # IUCN 红色名录（中英全名 + 缩写，按官方色着色）
+        # IUCN Red List (full name + abbreviation, official color)
+        iucn = p.get("iucn_category")
+        if iucn:
+            is_zh = not self.i18n.current_lang.startswith('en')
+            text, color = _format_iucn(iucn, is_zh)
+            self._val_iucn.setText(text)
+            self._val_iucn.setStyleSheet(
+                f"color: {color}; font-size: 12px; font-weight: 600; background: transparent;"
+            )
+        else:
+            self._val_iucn.setText(_unknown)
+            self._val_iucn.setStyleSheet(
+                f"color: {COLORS['text_primary']}; font-size: 12px; background: transparent;"
+            )
+
         # 相机
         self._val_camera.setText(p.get("camera_model") or _unknown)
 
@@ -721,8 +883,25 @@ class DetailPanel(QWidget):
         conf = p.get("confidence")
         self._val_confidence.setText(f"{conf*100:.1f}%" if conf else _unknown)
 
+        file_path = p.get("current_path") or p.get("original_path") or ""
+        if file_path and os.path.exists(file_path):
+            try:
+                self._val_filesize.setText(_format_file_size(os.path.getsize(file_path)))
+            except OSError:
+                self._val_filesize.setText(_unknown)
+        else:
+            self._val_filesize.setText(_unknown)
+
         # 文件名
-        self._val_filename.setText(p.get("filename") or _unknown)
+        fn = _display_filename(p) or _unknown
+        burst_pos = p.get("burst_position_index")
+        burst_total = p.get("burst_total_count")
+        if burst_pos and burst_total:
+            fn = f"{fn} ({burst_pos}/{burst_total})"
+        elif p.get("is_burst_group") and p.get("burst_count", 1) > 1:
+            fn = f"{fn} (1/{p.get('burst_count')})"
+            
+        self._val_filename.setText(fn)
 
         # 拍摄时间
         dt = p.get("date_time_original") or _unknown

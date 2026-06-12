@@ -1,9 +1,9 @@
-# SuperPicky V4.1.0 (Intel) - PKG + DMG 完整打包脚本
+#!/bin/bash
+# SuperPicky - PKG + DMG 完整打包脚本
 # 包含: PyInstaller打包 → PKG组件 → Distribution PKG → DMG → 签名公证
-# 特色: 自动安装 Lightroom 插件
+# 特色: 自动安装 Lightroom 插件，文件名含架构和 commit hash
 # 作者: James Zhen Yu
-# 日期: 2026-02-23
-# 架构: Intel x64
+# 平台: Apple Silicon (arm64) / Intel (x86_64)
 
 set -e  # 遇到错误立即退出
 
@@ -19,11 +19,29 @@ INSTALLER_ID="Developer ID Installer: James Zhen Yu (JWR6FDB52H)"
 APPLE_ID="james@jamesphotography.com.au"
 TEAM_ID="JWR6FDB52H"
 APP_PASSWORD=$(security find-generic-password -a "${APPLE_ID}" -s "SuperPicky-Notarize" -w)
-COMMIT_HASH=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 
-ARCH_TAG="Intel"
+# 检测 CPU 架构
+ARCH=$(uname -m)
+if [ "${ARCH}" = "arm64" ]; then
+    ARCH_TAG="arm64"
+else
+    ARCH_TAG="intel"
+fi
+
+# 从 Python 代码读取 Commit Hash（保证跨平台一致）
+# 优先读 build_info_local.py（本地 override），其次 build_info.py
+COMMIT_HASH=$(python3 -c "
+try:
+    from core.build_info_local import COMMIT_HASH
+except ImportError:
+    from core.build_info import COMMIT_HASH
+print(COMMIT_HASH or 'unknown')
+")
+
+# 文件名格式: SuperPicky_v4.1.0_arm64_f20f9b5.dmg
 PKG_NAME="${APP_NAME}_v${VERSION}_${ARCH_TAG}_${COMMIT_HASH}_Installer.pkg"
 DMG_NAME="${APP_NAME}_v${VERSION}_${ARCH_TAG}_${COMMIT_HASH}.dmg"
+
 # 颜色输出
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -57,9 +75,8 @@ log_success "清理完成"
 # ============================================
 log_step "步骤 2/8: PyInstaller 打包应用"
 
-log_info "激活 Conda 环境..."
-source /usr/local/Caskroom/miniconda/base/etc/profile.d/conda.sh
-conda activate superpicky312
+log_info "激活 .venv 虚拟环境..."
+source .venv/bin/activate
 
 # 注入 Git Commit Hash 到 build_info.py（COMMIT_HASH 已在顶部配置区获取）
 BUILD_INFO_FILE="core/build_info.py"
@@ -141,6 +158,8 @@ log_step "步骤 4/8: 创建 PKG 组件包"
 mkdir -p pkg_root/Applications
 mkdir -p pkg_scripts
 
+# 复制应用（重命名为中文名）
+log_info "复制应用到安装目录..."
 # 复制应用（使用英文名 SuperPicky.app 以支持国际化）
 log_info "复制应用到安装目录..."
 ditto "${APP_PATH}" "pkg_root/Applications/${APP_NAME}.app"
@@ -493,10 +512,10 @@ cat > welcome.html << 'WELCOME_EOF'
 
     <h2>What's New in V__VERSION__ <span class="new-badge">NEW</span></h2>
     <ul>
-        <li><span class="highlight">🔬 Results Browser</span> - Fully upgraded with comparison view, multi-select, and right-click context menu</li>
-        <li><span class="highlight">📊 Rating Controls</span> - Fine-tune scores ±1 directly in the details panel</li>
-        <li><span class="highlight">🖼️ Fullscreen Viewer</span> - Visual enhancements with focus box and dot overlay</li>
-        <li><span class="highlight">🐛 Critical Bug Fix</span> - Database score write reliability improved</li>
+        <li><span class="highlight">1. 架构性能</span> - 全新 ONNX 推理引擎与轻量化关键点模型 (283MB → 95MB)，全面加速</li>
+        <li><span class="highlight">2. 批处理强化</span> - 支持文件夹递归批处理、EXIF 星级双向同步、最近目录历史记录</li>
+        <li><span class="highlight">3. 识鸟工具集</span> - 新增独立的 IOC 鸟名中英词典，以及识别结果右键快捷复制功能</li>
+        <li><span class="highlight">4. 修复跨平台Bug</span> - 修复中文路径崩溃、死锁问题，回收 ExifTool 进程，安全拦截截屏权限</li>
     </ul>
 
     <h3>System Requirements</h3>
@@ -818,15 +837,17 @@ NOTARIZE_OUTPUT=$(xcrun notarytool submit "${DMG_PATH}" \
     --apple-id "${APPLE_ID}" \
     --password "${APP_PASSWORD}" \
     --team-id "${TEAM_ID}" \
-    --wait 2>&1)
+    --wait \
+    --output-format json 2>&1)
 
 echo "${NOTARIZE_OUTPUT}"
 
-if echo "${NOTARIZE_OUTPUT}" | grep -q "status: Accepted"; then
+if echo "${NOTARIZE_OUTPUT}" | grep -Eq '"status"[[:space:]]*:[[:space:]]*"Accepted"'; then
     log_success "公证成功！"
     
     log_info "装订公证票据..."
     xcrun stapler staple "${DMG_PATH}"
+    xcrun stapler validate "${DMG_PATH}"
     
     log_success "✅ V${VERSION} 打包发布全部完成！"
     log_info "最终文件: ${DMG_PATH}"

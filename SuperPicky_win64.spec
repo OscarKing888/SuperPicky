@@ -56,6 +56,7 @@ all_datas = [
     (os.path.join(ultralytics_base, 'ultralytics/cfg'), 'ultralytics/cfg'),
     # V4.0.0: 鸟类识别模块数据 (V4.0.6: 移除旧 birdid/models，改用 models/model20240824.pth OSEA 模型)
     (os.path.join(base_path, 'birdid/data'), 'birdid/data'),
+    (os.path.join(base_path, 'ioc'), 'ioc'),
     # V4.0.0: Lightroom 插件
     (os.path.join(base_path, 'SuperBirdIDPlugin.lrplugin'), 'SuperBirdIDPlugin.lrplugin'),
 ]
@@ -70,6 +71,7 @@ all_datas.extend(copy_metadata('imageio'))
 all_datas.extend(copy_metadata('rawpy'))
 all_datas.extend(copy_metadata('ultralytics'))
 all_datas.extend(copy_metadata('pillow_heif'))
+all_datas.extend(copy_metadata('pi_heif'))
 
 a = Analysis(
     ['main.py'],
@@ -99,6 +101,7 @@ a = Analysis(
         'imagehash',
         'pywt',
         'pillow_heif',   # HEIF/HIF 支持
+        'pi_heif',     # CUDA 版本可能需要这个 HEIF/HIF 支持
         'core',
         'core.burst_detector',
         'core.config_manager',
@@ -126,6 +129,15 @@ a = Analysis(
         'flask.json',
         'cryptography',
         'cryptography.fernet',
+        # V4.2.1: Countly telemetry build config (dynamically imported via importlib,
+        # PyInstaller cannot auto-discover it, must be listed explicitly)
+        '_telemetry_build',
+        'app_user_stat._telemetry_build',
+        'app_user_stat',
+        'app_user_stat.telemetry',
+        'app_user_stat.consent_texts',
+        'app_user_stat.consent_texts.en_US',
+        'app_user_stat.consent_texts.zh_CN',
     ],
     hookspath=[],
     hooksconfig={},

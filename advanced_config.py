@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import sys
 from tools.i18n import t as _t
+from config import get_app_config_dir, get_lazy_registry
 
 
 class AdvancedConfig:
@@ -37,7 +38,7 @@ class AdvancedConfig:
         "raw_max_concurrency": 16,
 
         # 鸟种识别设置 V4.2
-        "birdid_confidence": 70,      # 识别置信度阈值 (50-95) - 低于此值不写入EXIF
+        "birdid_confidence": 50,      # 识别置信度阈值 (30-95) - 低于此值不写入EXIF
 
         # 输出设置
         "save_csv": True,           # 是否保存CSV报告
@@ -67,6 +68,7 @@ class AdvancedConfig:
         
         # 临时文件管理 V4.1
         "keep_temp_files": True,        # 保留临时预览图片（统一控制 tmp JPG + debug crops）
+        "completion_sound_enabled": True,  # 处理完成提示音 / Completion sound after processing
 
         # 鸟种英文名显示格式 V4.x (AviList mapping)
         #   "default"    = OSEA model original names
@@ -76,39 +78,90 @@ class AdvancedConfig:
         #   "scientific" = Scientific name only
         "name_format": "default",
 
+        # V4.2.7 / V4.3 Phase 4: 分目录布局策略
+        # "rating-first"           — 3星_优选/白胸鸲鹟/photo.NEF
+        # "species-first" (默认)   — 白胸鸲鹟/3星_优选/photo.NEF
+        # 1星/0星/-1星 永远聚到「其他鸟类」分支，与本设置无关
+        # V4.3 Phase 4: 默认改为 species-first，让视频和照片共享鸟种目录
+        "folder_layout": "species-first",
+
         # 外部编辑应用（右键菜单 "用 X 打开"）
         # 每项格式：{"name": "显示名称", "path": "/Applications/...app"}
         "external_apps": [],
 
         # 浏览器排序偏好（用户上次选择）
-        # 可选值: "filename" | "sharpness_desc" | "aesthetic_desc"
-        "browser_sort": "sharpness_desc",
+        # 可选值: "rarity_desc" | "filename" | "sharpness_desc" | "aesthetic_desc"
+        "browser_sort": "rarity_desc",
 
         # 浏览器删除确认弹窗（首次弹窗后可勾选「不再确认」关闭）
         "delete_confirm": True,
+
+        # 更新提醒控制
+        "ignored_update_version": None,  # 跳过提醒的版本号，如 "4.3.0"
+        "include_prerelease": False,      # 是否接收 Beta/RC 更新提醒
+        "auto_check_updates": False,       # 启动时自动检查更新（含补丁）
+
+        # V4.3+: 轻量底包首启初始化状态
+        "initialization_completed": False,
+        "initialization_manifest_version": "v1",
+        "initialization_in_progress": False,
+        "last_init_exit_reason": "none",
+        "last_init_mode": "none",
+
+        # V4.3+: 运行时选择与能力探测
+        "selected_runtime_variant": "auto",   # auto | cpu | cuda | mac
+        "detected_cuda_capable": False,
+        "runtime_install_location_preference": None,  # None | default | install
+        "resolved_runtime_dir": None,
+
+        # V4.3+: 首启启用的功能集与资源记录
+        "enabled_feature_set": [
+            "core_detection",
+            "quality",
+            "keypoint",
+            "flight",
+            "birdid",
+        ],
+        "downloaded_resources": {},
+        "resolved_source_map": {},
+        "last_init_error": None,
 
         # 主界面复选框状态
         "flight_check": False,   # 飞鸟检测默认关闭（开启后速度较慢，用户可手动开启）
         "burst_check": False,    # 连拍检测默认关闭（开启后速度较慢，用户可手动开启）
         "exposure_check": False, # 曝光检测默认关闭
+
+        # 最近选鸟目录历史（最多保留 10 个，按最近使用时间倒序）
+        "recent_directories": [],
+
+        # V4.3 Phase 1: 视频分析配置 / Video analysis config
+        # video_max_frames        : 单视频抽帧总数上限（处理时间与视频时长解耦）
+        #                           范围 30-240，默认 60（macOS MPS 下 ~15-25s/视频）
+        # video_yolo_threshold    : YOLO 鸟类检测置信度阈值 (0.3-0.9)
+        # video_min_segment_frames: 时间段最少帧数（过滤误检），默认 2 帧
+        "video_max_frames": 60,
+        "video_yolo_threshold": 0.5,
+        "video_min_segment_frames": 2,
+
+        # V4.3 Phase 4: 主流程视频集成 / Main-flow video integration
+        # video_auto_process_in_main : 选鸟时是否自动分析视频（默认开）
+        # video_species_mode         : 默认识别模式 instant/fast/full（默认 instant 极速）
+        # video_enable_species_id    : 是否启用鸟种识别（默认开）
+        # video_enable_flight        : 是否启用飞行检测（默认开）
+        # video_first_run_prompted   : 首次发现视频弹一次性提示后标记（避免重复弹）
+        "video_auto_process_in_main": True,
+        "video_species_mode": "instant",
+        "video_enable_species_id": True,
+        "video_enable_flight": True,
+        "video_first_run_prompted": False,
     }
 
     def __init__(self, config_file=None):
         """初始化配置"""
         # 如果没有指定配置文件路径，使用用户目录
         if config_file is None:
-            # 获取用户主目录下的配置目录
-            if sys.platform == "darwin":  # macOS
-                config_dir = Path.home() / "Library" / "Application Support" / "SuperPicky"
-            elif sys.platform == "win32":  # Windows
-                config_dir = Path.home() / "AppData" / "Local" / "SuperPicky"
-            else:  # Linux
-                config_dir = Path.home() / ".config" / "SuperPicky"
-
-            # 创建配置目录（如果不存在）
+            config_dir = get_app_config_dir()
             config_dir.mkdir(parents=True, exist_ok=True)
-
-            # 配置文件路径
             self.config_file = str(config_dir / "advanced_config.json")
         else:
             self.config_file = config_file
@@ -188,7 +241,7 @@ class AdvancedConfig:
 
     @property
     def birdid_confidence(self):
-        return self.config.get("birdid_confidence", 70)
+        return self.config.get("birdid_confidence", 50)
 
     @property
     def save_csv(self):
@@ -212,8 +265,8 @@ class AdvancedConfig:
         self.config["min_sharpness"] = max(100, min(500, int(value)))
 
     def set_min_nima(self, value):
-        """设置美学最低阈值 (3.0-5.0)"""
-        self.config["min_nima"] = max(3.0, min(5.0, float(value)))
+        """设置美学最低阈值 (0.0-5.0)"""
+        self.config["min_nima"] = max(0.0, min(5.0, float(value)))
 
     # V3.2: 移除 set_max_brisque 方法
 
@@ -238,8 +291,8 @@ class AdvancedConfig:
         self.config["raw_max_concurrency"] = max(1, min(32, int(value)))
 
     def set_birdid_confidence(self, value):
-        """设置鸟种识别置信度阈值 (50-95)"""
-        self.config["birdid_confidence"] = max(50, min(95, int(value)))
+        """设置鸟种识别置信度阈值 (30-95)"""
+        self.config["birdid_confidence"] = max(30, min(95, int(value)))
 
     def set_save_csv(self, value):
         """设置是否保存CSV"""
@@ -328,6 +381,13 @@ class AdvancedConfig:
     def set_keep_temp_files(self, value):
         self.config["keep_temp_files"] = bool(value)
 
+    @property
+    def completion_sound_enabled(self) -> bool:
+        return self.config.get("completion_sound_enabled", True)
+
+    def set_completion_sound_enabled(self, value: bool):
+        self.config["completion_sound_enabled"] = bool(value)
+
     # V4.x: 鸟种英文名显示格式
     @property
     def name_format(self):
@@ -337,6 +397,18 @@ class AdvancedConfig:
         """设置鸟种英文名显示格式: default | avilist | clements | birdlife | scientific"""
         if value in ("default", "avilist", "clements", "birdlife", "scientific"):
             self.config["name_format"] = value
+
+    # V4.2.7: 分目录布局 (rating-first 或 species-first)
+    # V4.2.7: Output folder layout (rating-first or species-first)
+    @property
+    def folder_layout(self) -> str:
+        from core.folder_layout import normalize_layout
+        return normalize_layout(self.config.get("folder_layout"))
+
+    def set_folder_layout(self, value: str) -> None:
+        """设置分目录布局: rating-first (默认) 或 species-first。"""
+        from core.folder_layout import VALID_LAYOUTS, DEFAULT_LAYOUT
+        self.config["folder_layout"] = value if value in VALID_LAYOUTS else DEFAULT_LAYOUT
 
     # 外部应用配置 getter/setter
     def get_external_apps(self) -> list:
@@ -348,20 +420,147 @@ class AdvancedConfig:
         self.config["external_apps"] = list(apps)
 
     def get_browser_sort(self) -> str:
-        """返回浏览器排序偏好: filename | sharpness_desc | aesthetic_desc"""
-        return self.config.get("browser_sort", "sharpness_desc")
+        """返回浏览器排序偏好: rarity_desc | filename | sharpness_desc | aesthetic_desc"""
+        return self.config.get("browser_sort", "rarity_desc")
 
     def set_browser_sort(self, value: str):
         """保存浏览器排序偏好。"""
-        if value in ("filename", "sharpness_desc", "aesthetic_desc"):
+        if value in ("rarity_desc", "filename", "sharpness_desc", "aesthetic_desc"):
             self.config["browser_sort"] = value
 
     @property
     def delete_confirm(self) -> bool:
         return self.config.get("delete_confirm", True)
 
+    @property
+    def ignored_update_version(self):
+        return self.config.get("ignored_update_version", None)
+
+    @property
+    def include_prerelease(self) -> bool:
+        return self.config.get("include_prerelease", False)
+
     def set_delete_confirm(self, value: bool):
         self.config["delete_confirm"] = bool(value)
+
+    def set_ignored_update_version(self, value):
+        """设置要跳过提醒的版本号，传 None 清除。"""
+        self.config["ignored_update_version"] = value if isinstance(value, str) else None
+
+    def set_include_prerelease(self, value: bool):
+        """设置是否接收预发布版本提醒。"""
+        self.config["include_prerelease"] = bool(value)
+
+    @property
+    def auto_check_updates(self) -> bool:
+        return self.config.get("auto_check_updates", False)
+
+    def set_auto_check_updates(self, value: bool):
+        """设置启动时是否自动检查更新。"""
+        self.config["auto_check_updates"] = bool(value)
+
+    # V4.3+: 首启初始化状态 getter/setter
+    def _set_init_config(self, key: str, value):
+        self.config[key] = value
+
+    @property
+    def initialization_completed(self) -> bool:
+        return self.config.get("initialization_completed", False)
+
+    def set_initialization_completed(self, value: bool):
+        self._set_init_config("initialization_completed", bool(value))
+
+    @property
+    def initialization_manifest_version(self) -> str:
+        return str(self.config.get("initialization_manifest_version", "v1"))
+
+    def set_initialization_manifest_version(self, value: str):
+        self._set_init_config("initialization_manifest_version", str(value or "v1"))
+
+    @property
+    def initialization_in_progress(self) -> bool:
+        return self.config.get("initialization_in_progress", False)
+
+    def set_initialization_in_progress(self, value: bool):
+        self._set_init_config("initialization_in_progress", bool(value))
+
+    @property
+    def last_init_exit_reason(self) -> str:
+        value = str(self.config.get("last_init_exit_reason", "none") or "none")
+        return value if value in ("none", "interrupted", "failed") else "none"
+
+    def set_last_init_exit_reason(self, value: str):
+        normalized = value if value in ("none", "interrupted", "failed") else "none"
+        self._set_init_config("last_init_exit_reason", normalized)
+
+    @property
+    def last_init_mode(self) -> str:
+        value = str(self.config.get("last_init_mode", "none") or "none")
+        return value if value in ("none", "init", "repair") else "none"
+
+    def set_last_init_mode(self, value: str):
+        normalized = value if value in ("none", "init", "repair") else "none"
+        self._set_init_config("last_init_mode", normalized)
+
+    @property
+    def selected_runtime_variant(self) -> str:
+        return str(self.config.get("selected_runtime_variant", "auto"))
+
+    def set_selected_runtime_variant(self, value: str):
+        if value in ("auto", "cpu", "cuda", "mac"):
+            self._set_init_config("selected_runtime_variant", value)
+
+    @property
+    def detected_cuda_capable(self) -> bool:
+        return self.config.get("detected_cuda_capable", False)
+
+    def set_detected_cuda_capable(self, value: bool):
+        self._set_init_config("detected_cuda_capable", bool(value))
+
+    @property
+    def runtime_install_location_preference(self):
+        value = self.config.get("runtime_install_location_preference", None)
+        return value if value in ("default", "install", None) else None
+
+    def set_runtime_install_location_preference(self, value):
+        normalized = value if value in ("default", "install") else None
+        self._set_init_config("runtime_install_location_preference", normalized)
+
+    @property
+    def resolved_runtime_dir(self):
+        value = self.config.get("resolved_runtime_dir", None)
+        return None if value in (None, "") else str(value)
+
+    def set_resolved_runtime_dir(self, value):
+        self._set_init_config("resolved_runtime_dir", None if not value else str(value))
+
+    @property
+    def enabled_feature_set(self) -> list:
+        return list(self.config.get("enabled_feature_set", []))
+
+    def set_enabled_feature_set(self, features: list):
+        self._set_init_config("enabled_feature_set", list(features))
+
+    @property
+    def downloaded_resources(self) -> dict:
+        return dict(self.config.get("downloaded_resources", {}))
+
+    def set_downloaded_resources(self, resources: dict):
+        self._set_init_config("downloaded_resources", dict(resources))
+
+    @property
+    def resolved_source_map(self) -> dict:
+        return dict(self.config.get("resolved_source_map", {}))
+
+    def set_resolved_source_map(self, source_map: dict):
+        self._set_init_config("resolved_source_map", dict(source_map))
+
+    @property
+    def last_init_error(self):
+        return self.config.get("last_init_error", None)
+
+    def set_last_init_error(self, value):
+        self._set_init_config("last_init_error", value if value is None else str(value))
 
     # 主界面复选框状态 getter/setter
     @property
@@ -385,18 +584,33 @@ class AdvancedConfig:
     def set_exposure_check(self, value):
         self.config["exposure_check"] = bool(value)
 
+    # ──────────────────────────────────────────────
+    # 最近选鸟目录历史
+    # ──────────────────────────────────────────────
+    def get_recent_directories(self) -> list:
+        """返回全部历史目录列表（不过滤），最多 10 条，供菜单使用。"""
+        return list(self.config.get("recent_directories", []))
+
+    def get_available_recent_directories(self, n: int = 3) -> list:
+        """返回当前可访问的最近目录（os.path.isdir 过滤），最多 n 条，供地址栏弹出使用。"""
+        return [
+            d for d in self.config.get("recent_directories", [])
+            if os.path.isdir(d)
+        ][:n]
+
+    def add_recent_directory(self, directory: str) -> None:
+        """将目录插入历史列表头部，去重，最多保留 10 条，并保存。"""
+        dirs = [d for d in self.config.get("recent_directories", []) if d != directory]
+        dirs.insert(0, directory)
+        self.config["recent_directories"] = dirs[:10]
+        self.save()
+
     def get_dict(self):
         """获取配置字典（用于传递给其他模块）"""
         return self.config.copy()
 
 
-# 全局配置实例
-_config_instance = None
-
-
 def get_advanced_config():
     """获取全局配置实例（单例模式）"""
-    global _config_instance
-    if _config_instance is None:
-        _config_instance = AdvancedConfig()
-    return _config_instance
+    registry = get_lazy_registry()
+    return registry.get_or_create("advanced_config.instance", AdvancedConfig)
