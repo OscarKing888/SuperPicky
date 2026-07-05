@@ -29,7 +29,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QSystemTrayIcon, QApplication  # V4.0: 系统托盘图标
 )
-from PySide6.QtCore import Qt, Signal, QObject, Slot, QTimer, QPropertyAnimation, QEasingCurve, QMimeData, QThread
+from PySide6.QtCore import Qt, Signal, QObject, Slot, QTimer, QPropertyAnimation, QEasingCurve, QMimeData, QThread, QStandardPaths, QSize
 from PySide6.QtGui import QFont, QPixmap, QIcon, QAction, QTextCursor, QColor, QDragEnterEvent, QDropEvent
 
 from tools.i18n import get_i18n, set_primary_language
@@ -40,6 +40,7 @@ from ui.styles import (
     COLORS, FONTS, LOG_COLORS, PROGRESS_INFO_STYLE, PROGRESS_PERCENT_STYLE
 )
 from ui.custom_dialogs import StyledMessageBox
+from ui.icon_utils import load_tinted_icon, checkbox_indicator_qss, ICON_IDLE
 from ui.skill_level_dialog import SkillLevelDialog, SKILL_PRESETS, get_skill_level_thresholds
 from ui.welcome_onboarding_dialog import EnvironmentRepairDialog, WelcomeOnboardingDialog
 from core.initialization_manager import InitializationManager
@@ -831,8 +832,8 @@ class SuperPickyMainWindow(QMainWindow):
 
         # ── V4.3 Phase 1: 视频分析菜单 ─────────────────────────
         # Standalone video analysis window (YOLO bird/no-bird, macOS only).
-        video_menu = menubar.addMenu("视频")
-        video_analyze_action = QAction("视频分析…", self)
+        video_menu = menubar.addMenu(self.i18n.t("menu.video_menu"))
+        video_analyze_action = QAction(self.i18n.t("menu.video_analysis"), self)
         video_analyze_action.triggered.connect(self._open_video_analyzer)
         video_menu.addAction(video_analyze_action)
         self._video_analyzer_window = None  # 懒加载 / lazy-loaded singleton
@@ -1097,7 +1098,23 @@ class SuperPickyMainWindow(QMainWindow):
                 self._results_browser.cleanup()
             except Exception as e:
                 print(f"⚠️  Results browser cleanup failed: {e}")
+
+        # 先于 Python 解释器析构清理 QThread 密集型组件，防止 SIGABRT 崩溃
+        # Clean up QThread-heavy components before Python finalizer destructs them,
+        # preventing SIGABRT (QThread destroyed while still running -> qFatal).
+        if hasattr(self, 'birdid_dock') and self.birdid_dock is not None:
+            try:
+                self.birdid_dock.cleanup()
+            except Exception as e:
+                print(f"⚠️  BirdID dock cleanup failed: {e}")
+        if hasattr(self, '_video_analyzer_window') and self._video_analyzer_window is not None:
+            try:
+                self._video_analyzer_window.cleanup()
+            except Exception as e:
+                print(f"⚠️  Video analyzer cleanup failed: {e}")
+
         self._stop_birdid_server()        # 停止 Flask/BirdID 进程
+
         
         # 清理 ExifTool 进程
         try:
@@ -1272,7 +1289,9 @@ class SuperPickyMainWindow(QMainWindow):
         self.dir_input.pathDropped.connect(self._on_path_dropped)     # V3.9: 拖放目录
         dir_layout.addWidget(self.dir_input, 1)
 
-        browse_btn = QPushButton(self.i18n.t("labels.browse"))
+        browse_btn = QPushButton("  " + self.i18n.t("labels.browse"))
+        browse_btn.setIcon(load_tinted_icon("folder.svg", ICON_IDLE, 16))
+        browse_btn.setIconSize(QSize(16, 16))
         browse_btn.setObjectName("browse")
         browse_btn.setMinimumWidth(100)
         browse_btn.clicked.connect(self._browse_directory)
@@ -1314,6 +1333,7 @@ class SuperPickyMainWindow(QMainWindow):
 
         self.flight_check = QCheckBox()
         self.flight_check.setChecked(self.config.flight_check)
+        self.flight_check.setStyleSheet(checkbox_indicator_qss(16, COLORS['text_muted'], COLORS['accent']))
         flight_layout.addWidget(self.flight_check)
 
         header_layout.addLayout(flight_layout)
@@ -1328,6 +1348,7 @@ class SuperPickyMainWindow(QMainWindow):
         
         self.burst_check = QCheckBox()
         self.burst_check.setChecked(self.config.burst_check)
+        self.burst_check.setStyleSheet(checkbox_indicator_qss(16, COLORS['text_muted'], COLORS['accent']))
         burst_layout.addWidget(self.burst_check)
         
         header_layout.addLayout(burst_layout)
@@ -1345,6 +1366,7 @@ class SuperPickyMainWindow(QMainWindow):
         birdid_layout.addWidget(birdid_label)
         
         self.birdid_check = QCheckBox()
+        self.birdid_check.setStyleSheet(checkbox_indicator_qss(16, COLORS['text_muted'], COLORS['accent']))
         # 从保存的设置中读取状态
         birdid_saved_state = False
         try:
@@ -1540,7 +1562,10 @@ class SuperPickyMainWindow(QMainWindow):
         btn_layout.addStretch()
 
         # 查看选鸟结果按钮（主按钮，默认隐藏）
-        self.view_results_btn = QPushButton(self.i18n.t("labels.view_results_arrow"))
+        self.view_results_btn = QPushButton(self.i18n.t("labels.view_results_arrow") + "  ")
+        self.view_results_btn.setIcon(load_tinted_icon("arrow-right.svg", ICON_IDLE, 16))
+        self.view_results_btn.setIconSize(QSize(16, 16))
+        self.view_results_btn.setLayoutDirection(Qt.RightToLeft)  # 箭头置于文字右侧
         self.view_results_btn.setMinimumWidth(160)
         self.view_results_btn.setMinimumHeight(40)
         self.view_results_btn.clicked.connect(self._open_results_smart)
@@ -1600,11 +1625,21 @@ class SuperPickyMainWindow(QMainWindow):
 
     @Slot()
     def _browse_directory(self):
-        """浏览目录"""
+        """浏览目录
+
+        起始目录：优先当前输入框/已选目录（若仍存在），否则回退到系统「图片」目录。
+        Start the dialog at the currently selected/entered directory if it still
+        exists, otherwise fall back to the system Pictures location.
+        """
+        start_dir = (self.dir_input.text().strip() or self.directory_path or "")
+        if not (start_dir and os.path.isdir(start_dir)):
+            start_dir = QStandardPaths.writableLocation(
+                QStandardPaths.StandardLocation.PicturesLocation
+            ) or ""
         directory = QFileDialog.getExistingDirectory(
             self,
             self.i18n.t("labels.select_photo_dir"),
-            "",
+            start_dir,
             QFileDialog.Option.ShowDirsOnly
         )
         if directory:
@@ -1699,10 +1734,10 @@ class SuperPickyMainWindow(QMainWindow):
                 return
             resume_reply = StyledMessageBox.question(
                 self,
-                "检测到未完成任务",
-                "这个目录存在未完成的处理记录。选择“继续处理”会从上次中断的位置继续；选择“重新开始”会先恢复目录，再重新处理。",
-                yes_text="继续处理",
-                no_text="重新开始"
+                self.i18n.t("dialogs.unfinished_title"),
+                self.i18n.t("dialogs.unfinished_body"),
+                yes_text=self.i18n.t("dialogs.continue_btn"),
+                no_text=self.i18n.t("dialogs.restart_btn")
             )
             if resume_reply == StyledMessageBox.Yes:
                 self._start_processing()
@@ -2061,10 +2096,10 @@ class SuperPickyMainWindow(QMainWindow):
             elif resume_state.exists():
                 resume_reply = StyledMessageBox.question(
                     self,
-                    "检测到未完成任务",
-                    "这个目录存在未完成的处理记录。选择“继续处理”会从上次中断的位置继续；选择“重新开始”会先恢复目录，再重新处理。",
-                    yes_text="继续处理",
-                    no_text="重新开始"
+                    self.i18n.t("dialogs.unfinished_title"),
+                    self.i18n.t("dialogs.unfinished_body"),
+                    yes_text=self.i18n.t("dialogs.continue_btn"),
+                    no_text=self.i18n.t("dialogs.restart_btn")
                 )
                 if resume_reply == StyledMessageBox.Yes:
                     resume_processing = True
@@ -2282,6 +2317,15 @@ class SuperPickyMainWindow(QMainWindow):
             if reply != StyledMessageBox.Yes:
                 return
 
+        # V4.3.1: 「按目录名摊平」从「无 manifest 才询问」改为 reset 末尾无条件自动兜底
+        # （见 run_reset 内的 force_flatten_directory 调用）。manifest 可能不完整
+        # （如连拍成员从未入库），仅靠 manifest 恢复会把残留在 鸟种/星级/burst_ 子目录
+        # 里的文件永久遗漏；force_flatten 幂等安全（同名不覆盖、只动 SuperPicky 目录、
+        # 不碰用户目录），因此始终执行即可，无需再询问用户。
+        # V4.3.1: name-based flatten is now an unconditional safety net at the end of
+        # run_reset (no longer gated on "no manifest"), because manifests can be
+        # incomplete (e.g. burst members never recorded) and manifest-only restore
+        # would otherwise strand files in species/rating/burst_ subdirs.
         self.log_text.clear()
         self.reset_btn.setEnabled(False)
         self.start_btn.setEnabled(False)
@@ -2314,6 +2358,31 @@ class SuperPickyMainWindow(QMainWindow):
                 import shutil
 
                 exiftool_mgr = get_exiftool_manager()
+
+                # V4.3.0: 先复原视频归类（按「归类清单」把视频移回原位、删 SRT、清空子目录）。
+                # 视频鸟种子目录不是照片评分目录，照片端 reset 不认识，需独立复原。
+                # V4.3.0: Restore video organization first (manifest-driven undo): move videos
+                # back, delete SRTs, prune empty species folders. Video species folders are not
+                # photo rating folders, so the photo reset below won't touch them.
+                try:
+                    from tools.video_organizer import (
+                        restore_organized_videos, VIDEO_MANIFEST_NAME,
+                    )
+                    vid_total = {'restored': 0, 'dirs_removed': 0, 'manifests': 0}
+                    for _root, _dirs, _files in os.walk(directory_path):
+                        _dirs[:] = [d for d in _dirs if not d.startswith('.')]
+                        if VIDEO_MANIFEST_NAME in _files:
+                            vstats = restore_organized_videos(_root, log=emit_log)
+                            if vstats.get('manifest'):
+                                vid_total['manifests'] += 1
+                                vid_total['restored'] += vstats.get('restored', 0)
+                                vid_total['dirs_removed'] += vstats.get('dirs_removed', 0)
+                    if vid_total['manifests']:
+                        emit_log(i18n.t("logs.video_restore_done",
+                                        restored=vid_total['restored'],
+                                        dirs=vid_total['dirs_removed']))
+                except Exception as _ve:
+                    emit_log(i18n.t("logs.video_restore_failed", error=_ve))
 
                 # Batch mode: reset processed subdirectories first (deepest first)
                 from core.recursive_scanner import is_processed
@@ -2358,25 +2427,27 @@ class SuperPickyMainWindow(QMainWindow):
                     for entry in os.listdir(rating_path):
                         entry_path = os.path.join(rating_path, entry)
                         if os.path.isdir(entry_path):
-                            # 递归将所有文件移回评分目录
+                            # 递归将所有文件移回评分目录（V4.3.0: 同名跳过、绝不覆盖删除）
                             for root, dirs, files in os.walk(entry_path):
                                 for filename in files:
                                     src = os.path.join(root, filename)
                                     dst = os.path.join(rating_path, filename)
                                     if os.path.isfile(src):
+                                        if os.path.exists(dst):
+                                            continue  # 同名保留两者，不覆盖（数据安全）
                                         try:
-                                            if os.path.exists(dst):
-                                                os.remove(dst)
                                             shutil.move(src, dst)
                                             subdir_stats['files_restored'] += 1
                                         except Exception as e:
                                             emit_log(i18n.t("logs.move_failed", filename=filename, error=e))
-                            
-                            # 删除子目录
+
+                            # 删除子目录（V4.3.0: 仅当其内已无任何文件，避免误删残留）
                             try:
-                                if os.path.exists(entry_path):
-                                    shutil.rmtree(entry_path)
-                                subdir_stats['dirs_removed'] += 1
+                                if os.path.isdir(entry_path) and not any(
+                                    fs for _r, _d, fs in os.walk(entry_path)
+                                ):
+                                    shutil.rmtree(entry_path, ignore_errors=True)
+                                    subdir_stats['dirs_removed'] += 1
                             except Exception as e:
                                 emit_log(i18n.t("logs.burst_clean_failed", entry=entry, error=e))
                 
@@ -2405,9 +2476,9 @@ class SuperPickyMainWindow(QMainWindow):
                         src = os.path.join(rating_path, filename)
                         dst = os.path.join(directory_path, filename)
                         if os.path.isfile(src):
+                            if os.path.exists(dst):
+                                continue  # V4.3.0: 同名不覆盖根目录原文件（数据安全）
                             try:
-                                if os.path.exists(dst):
-                                    os.remove(dst)
                                 shutil.move(src, dst)
                                 fallback_restored += 1
                             except Exception as e:
@@ -2419,6 +2490,19 @@ class SuperPickyMainWindow(QMainWindow):
                 total_restored = restored_count + fallback_restored
                 if total_restored == 0:
                     emit_log(i18n.t("logs.no_files_to_restore"))
+
+                # V4.3.1: 无条件「按目录名摊平」兜底——把仍残留在 鸟种/星级/burst_
+                # 子目录里的文件递归移回根目录。manifest 可能不完整（连拍成员未入库等），
+                # 仅靠上面的 manifest/根目录评分扫描会遗漏鸟种优先布局下的深层文件。
+                # force_flatten 幂等安全（同名不覆盖、只动 SuperPicky 目录、不碰用户目录），
+                # 无残留时 moved=0，因此始终执行无副作用。
+                # V4.3.1: unconditional name-based flatten safety net — recursively move
+                # any files still stranded in species/rating/burst_ subdirs back to root.
+                try:
+                    from tools.find_bird_util import force_flatten_directory
+                    force_flatten_directory(directory_path, log_callback=emit_log, i18n=i18n)
+                except Exception as _fe:
+                    emit_log(f"⚠️ flatten fallback failed: {_fe}")
 
                 # V4.0.4: 根据模式决定是否重置EXIF
                 if _skip_exif_reset:
@@ -2434,8 +2518,13 @@ class SuperPickyMainWindow(QMainWindow):
                 for rating_dir in rating_dirs:
                     rating_path = os.path.join(directory_path, rating_dir)
                     if os.path.exists(rating_path) and os.path.isdir(rating_path):
+                        # V4.3.0: 仅当评分目录内已无任何文件才删除，避免误删残留（数据安全）
+                        if any(fs for _r, _d, fs in os.walk(rating_path)):
+                            emit_log(i18n.t("logs.empty_dir_delete_failed",
+                                            dir=rating_dir, error="仍有残留文件，保留"))
+                            continue
                         try:
-                            shutil.rmtree(rating_path)
+                            shutil.rmtree(rating_path, ignore_errors=True)
                             emit_log(i18n.t("logs.empty_dir_deleted", dir=rating_dir))
                             deleted_dirs += 1
                         except Exception as e:
@@ -2605,17 +2694,10 @@ class SuperPickyMainWindow(QMainWindow):
             return
 
         # 弹一次性提示 / Show one-time dialog
-        msg = (
-            f"📹 检测到目录中有 {total_videos} 个视频文件。\n\n"
-            f"SuperPicky 现已支持视频鸟类分析 + 自动归类。\n"
-            f"分析完成后会按鸟种分目录（与照片共享同一鸟种目录），\n"
-            f"同时生成 SRT 字幕。\n\n"
-            f"是否启用视频处理？\n"
-            f"（之后可在「参数设置」中切换）"
-        )
+        msg = self.i18n.t("dialogs.video_first_tip_body", count=total_videos)
         reply = StyledMessageBox.question(
-            self, "视频处理 — 首次提示", msg,
-            yes_text="启用", no_text="暂不启用"
+            self, self.i18n.t("dialogs.video_first_tip_title"), msg,
+            yes_text=self.i18n.t("dialogs.enable_btn"), no_text=self.i18n.t("dialogs.skip_btn")
         )
         # 不论用户怎么选，都标记已提示
         # Mark as prompted regardless of choice
@@ -3052,7 +3134,11 @@ class SuperPickyMainWindow(QMainWindow):
                 from iqa_scorer import get_iqa_scorer
                 device = get_best_device()
                 self.log_signal.emit(self.i18n.t("preload.iqa_loading", device=device.type), "info")
-                get_iqa_scorer(device=device.type)
+                # 真正加载 TOPIQ 权重(而非仅创建评分器对象),使其在启动时即就绪,
+                # 之后裁剪建议/选鸟复用同一已热实例,不再触发现加载。
+                # Actually load the TOPIQ weights now (not just create the scorer object),
+                # so crop advisor / bird selection reuse the warm singleton later.
+                get_iqa_scorer(device=device.type).preload()
                 self.log_signal.emit(self.i18n.t("preload.iqa_loaded"), "success")
                 results.append(("IQA", True, None))
             except Exception as e:

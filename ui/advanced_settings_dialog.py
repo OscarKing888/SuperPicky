@@ -23,7 +23,6 @@ from tools.i18n import get_i18n
 from ui.styles import COLORS, FONTS
 from ui.custom_dialogs import StyledMessageBox
 
-
 class AdvancedSettingsDialog(QDialog):
     """参数设置对话框 - 顶部标签页布局"""
 
@@ -100,7 +99,7 @@ class AdvancedSettingsDialog(QDialog):
         # V4.3 Phase 5: Video processing tab
         self.tab_widget.addTab(
             self._create_video_page(),
-            "视频处理"
+            self.i18n.t("video_opts.tab")
         )
 
         main_layout.addWidget(self.tab_widget, 1)
@@ -490,6 +489,23 @@ class AdvancedSettingsDialog(QDialog):
         """)
         preview_layout.addWidget(completion_sound_hint)
 
+        detail_metadata_check = QCheckBox(
+            self.i18n.t("advanced_settings.detail_metadata_for_rejected")
+        )
+        self.vars["detail_meta_for_rejected"] = detail_metadata_check
+        preview_layout.addWidget(detail_metadata_check)
+
+        detail_metadata_hint = QLabel(
+            self.i18n.t("advanced_settings.detail_metadata_hint")
+        )
+        detail_metadata_hint.setWordWrap(True)
+        detail_metadata_hint.setStyleSheet(f"""
+            color: {COLORS['text_muted']};
+            font-size: 11px;
+            margin-left: 24px;
+        """)
+        preview_layout.addWidget(detail_metadata_hint)
+
         # 说明：不保留预览图时，选鸟完成后自动打开 Finder 显示结果目录
 
         layout.addWidget(preview_group_widget)
@@ -648,6 +664,9 @@ class AdvancedSettingsDialog(QDialog):
         self.vars["completion_sound_enabled"].setChecked(
             self.config.completion_sound_enabled
         )
+        self.vars["detail_meta_for_rejected"].setChecked(
+            self.config.get_detail_metadata_for_rejected()
+        )
 
         # V4.3 Phase 5: 加载视频处理设置 / Load video processing config
         # 直接读 config dict（这些键没有 property，由 Phase 4 直接存 dict）
@@ -726,6 +745,9 @@ class AdvancedSettingsDialog(QDialog):
         self.config.set_completion_sound_enabled(
             self.vars["completion_sound_enabled"].isChecked()
         )
+        self.config.set_detail_metadata_for_rejected(
+            self.vars["detail_meta_for_rejected"].isChecked()
+        )
 
         # 保存外部应用列表
         self.config.set_external_apps(self._apps_data)
@@ -778,9 +800,9 @@ class AdvancedSettingsDialog(QDialog):
         layout.setSpacing(12)
 
         # ── 总开关：是否在主流程自动处理视频 / Master toggle ──────────
-        auto_check = QCheckBox("分析照片时同时处理视频")
+        auto_check = QCheckBox(self.i18n.t("video_opts.enable_checkbox"))
         auto_check.setStyleSheet(f"color: {COLORS['text_primary']}; font-size: 13px;")
-        auto_check.setToolTip("勾选后：选鸟时若目录内有视频，自动按鸟种归类 + 生成 SRT 字幕")
+        auto_check.setToolTip(self.i18n.t("video_opts.enable_tooltip"))
         layout.addWidget(auto_check)
         self.vars["video_auto_process_in_main"] = auto_check
 
@@ -789,18 +811,15 @@ class AdvancedSettingsDialog(QDialog):
         # ── 识别模式 / Recognition mode（横排，无独立 hint 行）──────────
         mode_row = QHBoxLayout()
         mode_row.setSpacing(16)
-        mode_label = QLabel("识别模式:")
+        mode_label = QLabel(self.i18n.t("video_opts.mode_label"))
         mode_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 13px; min-width: 80px;")
         mode_row.addWidget(mode_label)
         mode_combo = QComboBox()
-        mode_combo.addItem("极速（识别到即停）", "instant")
-        mode_combo.addItem("标准（每段一帧）", "fast")
-        mode_combo.addItem("完整（多帧投票）", "full")
+        mode_combo.addItem(self.i18n.t("video_opts.mode_fast"), "instant")
+        mode_combo.addItem(self.i18n.t("video_opts.mode_standard"), "fast")
+        mode_combo.addItem(self.i18n.t("video_opts.mode_full"), "full")
         mode_combo.setMinimumWidth(220)
-        mode_combo.setToolTip(
-            "极速：最快，视频开头识别成功即停\n"
-            "标准：保留时间轴，每段最佳帧识别\n"
-            "完整：多帧加权投票，最准最慢")
+        mode_combo.setToolTip(self.i18n.t("video_opts.mode_tooltip"))
         mode_row.addWidget(mode_combo)
         mode_row.addStretch()
         layout.addLayout(mode_row)
@@ -811,11 +830,11 @@ class AdvancedSettingsDialog(QDialog):
         # ── 抽帧上限 / Max sampled frames（精简 hint）───────────────
         self.vars["video_max_frames"] = self._create_slider_setting(
             layout,
-            "抽帧上限",
-            "单视频最多抽帧数（处理时间与视频时长解耦）",
+            self.i18n.t("video_opts.max_frames"),
+            self.i18n.t("video_opts.max_frames_tooltip"),
             min_val=30, max_val=240, default=60,
             step=10,
-            format_func=lambda v: f"{v} 帧"
+            format_func=lambda v: f"{v}{self.i18n.t('video_opts.frames_suffix')}"
         )
 
         self._add_divider(layout)
@@ -823,8 +842,8 @@ class AdvancedSettingsDialog(QDialog):
         # ── YOLO 置信度阈值 ─────────────────────────────────────────
         self.vars["video_yolo_threshold"] = self._create_slider_setting(
             layout,
-            "YOLO 置信度",
-            "鸟类检测置信度阈值（越高漏检越多）",
+            self.i18n.t("video_opts.yolo_conf"),
+            self.i18n.t("video_opts.yolo_conf_tooltip"),
             min_val=30, max_val=90, default=50,
             step=5,
             format_func=lambda v: f"{v/100:.2f}"
@@ -835,15 +854,15 @@ class AdvancedSettingsDialog(QDialog):
         # ── 鸟种 + 飞行检测开关（同一行紧凑显示）/ Compact toggles row ─
         toggles_row = QHBoxLayout()
         toggles_row.setSpacing(20)
-        species_check = QCheckBox("启用鸟种识别")
+        species_check = QCheckBox(self.i18n.t("video_opts.birdid_checkbox"))
         species_check.setStyleSheet(f"color: {COLORS['text_primary']}; font-size: 13px;")
-        species_check.setToolTip("用 BirdID 模型识别每段视频的主要鸟种")
+        species_check.setToolTip(self.i18n.t("video_opts.birdid_tooltip"))
         toggles_row.addWidget(species_check)
         self.vars["video_enable_species_id"] = species_check
 
-        flight_check = QCheckBox("启用飞行 / 停栖检测")
+        flight_check = QCheckBox(self.i18n.t("video_opts.flight_checkbox"))
         flight_check.setStyleSheet(f"color: {COLORS['text_primary']}; font-size: 13px;")
-        flight_check.setToolTip("用 FlightDetector 判断鸟是飞行还是停栖")
+        flight_check.setToolTip(self.i18n.t("video_opts.flight_tooltip"))
         toggles_row.addWidget(flight_check)
         self.vars["video_enable_flight"] = flight_check
         toggles_row.addStretch()

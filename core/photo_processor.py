@@ -31,7 +31,7 @@ from datetime import datetime
 
 # 现有模块
 from tools.find_bird_util import raw_to_jpeg
-from ai_model import load_yolo_model, detect_and_draw_birds
+from ai_model import load_yolo_model, detect_and_draw_birds, read_image_bgr
 from tools.report_db import ReportDB
 from tools.exiftool_manager import get_exiftool_manager
 from tools.file_utils import ensure_hidden_directory, clear_readonly_attribute
@@ -43,7 +43,7 @@ from core.flight_detector import FlightDetector, get_flight_detector, FlightResu
 from core.exposure_detector import ExposureDetector, get_exposure_detector, ExposureResult
 from core.focus_point_detector import get_focus_detector, verify_focus_in_bbox
 
-from constants import RATING_FOLDER_NAMES, RAW_EXTENSIONS, JPG_EXTENSIONS, HEIF_EXTENSIONS, get_rating_folder_name, get_rating_folder_names
+from constants import RATING_FOLDER_NAMES, RAW_EXTENSIONS, JPG_EXTENSIONS, HEIF_EXTENSIONS, get_rating_folder_names
 
 # 国际化
 from tools.i18n import get_i18n
@@ -500,7 +500,8 @@ class PhotoProcessor:
         self.stats['start_time'] = start_time
         exiftool_mgr = None
         exiftool_session_opened = False
-        metadata_write_mode = str(get_advanced_config().get_metadata_write_mode()).strip().lower()
+        advanced_config = get_advanced_config()
+        metadata_write_mode = str(advanced_config.get_metadata_write_mode()).strip().lower()
 
         try:
             if metadata_write_mode != "none":
@@ -701,8 +702,7 @@ class PhotoProcessor:
         from collections import defaultdict
         from core.burst_detector import BurstDetector
         from tools.exiftool_manager import get_exiftool_manager
-        from constants import get_rating_folder_name
-        
+
         stats = {'groups': 0, 'moved': 0}
         
         if not self.burst_map:
@@ -721,7 +721,19 @@ class PhotoProcessor:
         
         detector = BurstDetector(use_phash=True)  # 后期验证用 pHash
         exiftool_mgr = get_exiftool_manager()
-        
+
+        # V4.3.0: 文件已按 layout 落地（rating-first 或 species-first），位置因 layout 而异。
+        # 旧逻辑只按 rating-first 猜路径，species-first 下找不到文件 → 连拍组凑不齐 →
+        # 不建连拍目录。改为先建一次「文件名 → 当前路径」索引，对任意 layout/嵌套都成立。
+        # 排除 .superpicky（避免命中 temp_preview 预览图）与隐藏目录。
+        # Build a filename→path index once so burst consolidation finds files under ANY
+        # layout (rating-first / species-first / nested), fixing missing burst dirs.
+        file_index: Dict[str, str] = {}
+        for _root, _dirs, _files in os.walk(self.dir_path):
+            _dirs[:] = [d for d in _dirs if d != '.superpicky' and not d.startswith('.')]
+            for _fn in _files:
+                file_index.setdefault(_fn, os.path.join(_root, _fn))
+
         for group_id, original_filepaths in groups.items():
             # 找到每个文件当前的实际位置和星级
             current_files = []
@@ -730,27 +742,12 @@ class PhotoProcessor:
                 ext = raw_dict.get(prefix, os.path.splitext(orig_path)[1])
                 rating = self.file_ratings.get(prefix, 0)
                 
-                # 确定当前位置（可能在评分目录或鸟种子目录）
-                rating_folder = get_rating_folder_name(rating)
-                possible_paths = [
-                    os.path.join(self.dir_path, rating_folder, prefix + ext),  # 评分目录根
-                    orig_path,  # 原始位置
-                ]
-                
-                # 检查鸟种子目录
-                rating_dir = os.path.join(self.dir_path, rating_folder)
-                if os.path.isdir(rating_dir):
-                    for subdir in os.listdir(rating_dir):
-                        subdir_path = os.path.join(rating_dir, subdir)
-                        if os.path.isdir(subdir_path) and not subdir.startswith('burst_'):
-                            possible_paths.append(os.path.join(subdir_path, prefix + ext))
-                
-                current_path = None
-                for p in possible_paths:
-                    if os.path.exists(p):
-                        current_path = p
-                        break
-                
+                # V4.3.0: 用索引按文件名定位当前路径（layout 无关），找不到再回退原位
+                # Locate via the layout-agnostic index, falling back to the original path.
+                current_path = file_index.get(prefix + ext)
+                if not current_path or not os.path.exists(current_path):
+                    current_path = orig_path if os.path.exists(orig_path) else None
+
                 if current_path:
                     current_files.append({
                         'path': current_path,
@@ -769,10 +766,7 @@ class PhotoProcessor:
             # V4.0.4: 优化逻辑 - 如果连拍组中所有照片都在 0-1 星，则不合并（不创建 burst 目录）
             if highest_rating < 2:
                 continue
-            
-            highest_rating_folder = get_rating_folder_name(highest_rating)
-            highest_rating_dir = os.path.join(self.dir_path, highest_rating_folder)
-            
+
             # V4.0.5: 查找连拍组中是否有鸟种识别，优先查找最高星级照片的鸟种
             bird_species_name = None
             # 先查找最高星级的照片
@@ -811,23 +805,20 @@ class PhotoProcessor:
             # 按综合分数选最佳
             best_file = max(current_files, key=lambda x: x['sharpness'] * 0.5 + x['topiq'] * 0.5)
             
-            # V4.2.7: 创建 burst 目录 — 通过 compute_target_folder 统一 layout 策略
-            # V4.2.7: Build burst directory via the shared layout helper.
+            # V4.3.0: burst 目录始终走 compute_target_folder，与移动逻辑(_move)完全一致：
+            # 关识鸟时 bird_species_name=None → 落「其他鸟类/{评分}」；highest_rating>=2 已由
+            # 上方 `if highest_rating < 2: continue` 保证。修复 species-first 下连拍目录消失。
+            # Always build the burst dir via the shared layout helper so it matches the move
+            # logic in every case (identify-off → "Other Birds/{rating}").
             from core.folder_layout import compute_target_folder
             other_birds = self.i18n.t("logs.folder_other_birds")
-            if highest_rating >= 2 and self.settings.auto_identify:
-                target = compute_target_folder(
-                    highest_rating,
-                    bird_species_name,
-                    self.config.folder_layout,
-                    other_birds,
-                )
-                burst_dir = os.path.join(self.dir_path, target, f"burst_{group_id:03d}")
-            else:
-                # 未启用识鸟或低星 — 直接放在评分目录
-                # Identification disabled or low star — burst goes straight under
-                # the rating folder regardless of layout.
-                burst_dir = os.path.join(highest_rating_dir, f"burst_{group_id:03d}")
+            target = compute_target_folder(
+                highest_rating,
+                bird_species_name,
+                self.config.folder_layout,
+                other_birds,
+            )
+            burst_dir = os.path.join(self.dir_path, target, f"burst_{group_id:03d}")
             os.makedirs(burst_dir, exist_ok=True)
 
             
@@ -938,6 +929,9 @@ class PhotoProcessor:
     
     def _process_images(self, files_tbr, raw_dict, display_start: int = 1, display_total: int = None):
         """处理所有图片 - AI检测、关键点检测与评分"""
+        advanced_config = get_advanced_config()
+        detail_metadata_for_rejected = advanced_config.get_detail_metadata_for_rejected()
+
         # 获取模型（已在启动时预加载，此处仅获取引用）
         # 用列表包装，使闭包可替换（MPS 周期重载时需要）
         _yolo_model_box = [load_yolo_model()]
@@ -1190,13 +1184,17 @@ class PhotoProcessor:
                         # Prepend species + IUCN lines to the DB caption.
                         existing = self.report_db.get_photo(file_prefix) or {}
                         old_cap = existing.get('caption') or ''
-                        prefix_lines = [f"鸟种：{cn_name or en_name}"]
+                        # V4.3.0: 鸟种名跟随界面语言（bird_title 已按语言选名），标签走 i18n
+                        # V4.3.0: Species name follows UI language (bird_title already
+                        # picks en/cn by locale); labels via i18n.
+                        prefix_lines = [self.i18n.t("logs.caption_species", name=bird_title)]
                         if iucn_category:
-                            prefix_lines.append(f"IUCN：{iucn_category}")
+                            prefix_lines.append(self.i18n.t("logs.caption_iucn", category=iucn_category))
                         prefix_block = "\n".join(prefix_lines)
-                        already_prefixed = (
-                            old_cap.startswith('鸟种：')
-                            or old_cap.startswith('备选鸟种')
+                        # 去重检查兼容中英双语前缀，避免跨语言重复处理时重复添加
+                        # Dedup check covers both zh/en prefixes for cross-language reprocessing.
+                        already_prefixed = old_cap.startswith(
+                            ('鸟种：', 'Species: ', '备选鸟种', 'Alt. species')
                         )
                         if old_cap and not already_prefixed:
                             self.report_db.update_photo(file_prefix, {'caption': prefix_block + '\n' + old_cap})
@@ -1241,8 +1239,14 @@ class PhotoProcessor:
                         try:
                             existing = self.report_db.get_photo(file_prefix) or {}
                             old_cap = existing.get('caption') or ''
-                            bird_line = f"\u5907\u9009\u9e1f\u79cd\uff1a{cn_name}\uff1f\uff08\u628a\u63e1\u5ea6 {birdid_confidence:.0f}%\uff09"
-                            if old_cap and not old_cap.startswith('\u5907\u9009\u9e1f\u79cd'):
+                            # V4.3.0: \u5907\u9009\u9e1f\u79cd\u540d\u8ddf\u968f\u754c\u9762\u8bed\u8a00\uff08low_conf_name\uff09\uff0c\u6807\u7b7e/\u628a\u63e1\u5ea6\u8d70 i18n
+                            # V4.3.0: Alt-species name follows UI language; labels via i18n.
+                            bird_line = self.i18n.t(
+                                "logs.caption_alt_species",
+                                name=low_conf_name,
+                                confidence=f"{birdid_confidence:.0f}",
+                            )
+                            if old_cap and not old_cap.startswith(('\u5907\u9009\u9e1f\u79cd', 'Alt. species')):
                                 self.report_db.update_photo(file_prefix, {'caption': bird_line + '\n' + old_cap})
                             elif not old_cap:
                                 self.report_db.update_photo(file_prefix, {'caption': bird_line})
@@ -1333,13 +1337,18 @@ class PhotoProcessor:
                 'can_read_focus_raw': in_can_read_focus_raw,
             }
         
-        def run_yolo_detection(in_filepath: str, focus_point: Optional[Tuple[float, float]] = None):
+        def run_yolo_detection(
+            in_filepath: str,
+            focus_point: Optional[Tuple[float, float]] = None,
+            decoded_image: Optional[np.ndarray] = None,
+        ):
             # 单模型实例在”预取线程 + 主线程复选”两处复用，串行化推理调用以保证稳定性
             with yolo_infer_lock:
                 return detect_and_draw_birds(
                     in_filepath, _yolo_model_box[0], None, self.dir_path, ui_settings, None,
                     skip_nima=True, focus_point=focus_point,
-                    report_db=self.report_db
+                    report_db=self.report_db,
+                    decoded_image=decoded_image,
                 )
         
         def read_focus_result_safe(in_raw_path: Optional[str]):
@@ -1354,16 +1363,102 @@ class PhotoProcessor:
                 return None
             with focus_exif_lock:
                 return self._read_iso(in_filepath)
+
+        def read_detail_exif_safe(ctx: Dict[str, object], prefetched: Optional[dict]) -> dict:
+            """
+            为早期拒绝照片读取结果浏览器可显示的相机元数据。
+
+            优先复用 EXIF 预取结果；未预取时按 RAW → 当前 JPEG 的顺序读取，避免重复散落的读取逻辑。
+
+            Read camera metadata for early-rejected photos that the result
+            browser can display.
+
+            Reuse prefetched EXIF first; when it is unavailable, read RAW then
+            current JPEG so the fallback order stays consistent in one place.
+            """
+            if prefetched:
+                return dict(prefetched)
+
+            candidates = [
+                ctx.get("raw_path"),
+                ctx.get("filepath"),
+            ]
+            for candidate in candidates:
+                if not candidate or not os.path.exists(str(candidate)):
+                    continue
+                with focus_exif_lock:
+                    exif_data = self._read_all_exif_metadata(str(candidate))
+                if exif_data and any(v is not None for v in exif_data.values()):
+                    return exif_data
+            return {}
+
+        def calculate_rejected_quality_detail(in_filepath: str) -> dict:
+            """
+            为无鸟/早期拒绝照片计算可定义的质量详情。
+
+            无鸟照片没有鸟头区域和鸟框，因此这里使用整张图的 Tenengrad 锐度与整张图 TOPIQ 美学分。
+            这些值仅用于结果浏览器展示，不参与原有评星逻辑。
+
+            Calculate defined quality detail for no-bird/early-rejected photos.
+
+            A no-bird photo has no bird head region or bird bbox, so this uses
+            whole-image Tenengrad sharpness and whole-image TOPIQ aesthetics.
+            These values are for result-browser display only and do not affect
+            the existing rating logic.
+            """
+            nonlocal topiq_scorer
+
+            try:
+                import cv2
+                image_bgr = cv2.imdecode(
+                    np.fromfile(in_filepath, dtype=np.uint8),
+                    cv2.IMREAD_COLOR,
+                )
+            except Exception:
+                image_bgr = None
+
+            if image_bgr is None:
+                return {}
+
+            detail = {}
+            try:
+                image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
+                full_mask = np.ones(image_rgb.shape[:2], dtype=np.uint8)
+                whole_sharpness = keypoint_detector._calculate_sharpness(
+                    image_rgb,
+                    full_mask,
+                )
+                detail["head_sharp"] = whole_sharpness
+                detail["adj_sharpness"] = whole_sharpness
+            except Exception:
+                pass
+
+            try:
+                scorer = topiq_scorer
+                if scorer is None:
+                    from iqa_scorer import get_iqa_scorer
+                    from config import get_best_device
+                    scorer = get_iqa_scorer(device=get_best_device().type)
+                    topiq_scorer = scorer
+                whole_topiq = scorer.calculate_from_array(image_bgr)
+                if whole_topiq is not None:
+                    detail["nima_score"] = whole_topiq
+                    detail["adj_topiq"] = whole_topiq
+            except Exception:
+                pass
+
+            return detail
         
         def build_yolo_item(index: int, in_filename: str) -> Dict[str, any]:
             ctx = resolve_file_context(in_filename)
             in_filepath = ctx['filepath']
             
             yolo_start = time.time()
+            decoded_image = read_image_bgr(in_filepath)
             yolo_result = None
             yolo_error = None
             try:
-                yolo_result = run_yolo_detection(in_filepath, None)
+                yolo_result = run_yolo_detection(in_filepath, None, decoded_image)
                 if yolo_result is None:
                     yolo_error = self.i18n.t("logs.cannot_process", filename=in_filename)
             except Exception as e:
@@ -1378,6 +1473,7 @@ class PhotoProcessor:
                 'raw_ext': ctx['raw_ext'],
                 'raw_path': ctx['raw_path'],
                 'can_read_focus_raw': ctx['can_read_focus_raw'],
+                'decoded_image': decoded_image,
                 'result': yolo_result,
                 'error': yolo_error,
                 'yolo_ms': (time.time() - yolo_start) * 1000,
@@ -1507,8 +1603,14 @@ class PhotoProcessor:
         try:
             import torch as _torch_module
             import gc as _gc_module
-            _use_mps = hasattr(_torch_module, 'backends') and _torch_module.backends.mps.is_available()
-            _use_cuda = not _use_mps and _torch_module.cuda.is_available()
+            # 以 get_best_device() 为唯一真相源，与 Intel Mac 走 CPU 的策略保持一致，
+            # 避免 raw mps.is_available() 在 Intel+老 AMD 卡上误报 True 而做无谓的 mps 缓存清理。
+            # Use get_best_device() as the single source of truth so Intel Macs (which run on
+            # CPU) don't trigger pointless MPS cache clears from a raw is_available() check.
+            from config import get_best_device
+            _device_type = get_best_device().type
+            _use_mps = (_device_type == 'mps')
+            _use_cuda = (_device_type == 'cuda')
             _cache_interval = 50 if _use_mps else 200
         except Exception:
             _torch_module = None
@@ -1596,8 +1698,6 @@ class PhotoProcessor:
                  # RAW+JPG 配对照片或纯 JPG：直接将 JPG 路径写入 temp_jpeg_path
                  path_update_data['temp_jpeg_path'] = os.path.relpath(yolo_item['filepath'], self.dir_path)
                  
-            if path_update_data and self.report_db:
-                 self.report_db.update_photo(original_prefix, path_update_data)
             raw_ext = yolo_item['raw_ext']
             raw_path = yolo_item['raw_path']
             can_read_focus_raw = yolo_item['can_read_focus_raw']
@@ -1677,17 +1777,27 @@ class PhotoProcessor:
                 if focus_point_for_selection is not None:
                     refine_start = time.time()
                     try:
-                        refined_result = run_yolo_detection(filepath, focus_point_for_selection)
+                        refined_result = run_yolo_detection(
+                            filepath,
+                            focus_point_for_selection,
+                            yolo_item.get('decoded_image'),
+                        )
                         if refined_result is not None:
                             detected, _, confidence, sharpness, _, bird_bbox, img_dims, bird_mask, bird_count = refined_result
                     except Exception:
                         pass
                     add_photo_stage('yolo_refine', (time.time() - refine_start) * 1000)
             
-            # V4.1: 早期退出 - 无鸟或置信度低，跳过所有后续检测
-            # V4.2: 使用用户设置的 ai_confidence 阈值（百分比转小数）
+            # V4.1/V4.2: 无鸟或低置信度先标记为拒绝；是否早期退出由详情元数据设置决定。
+            # V4.1/V4.2: Mark no-bird/low-confidence photos as rejected first;
+            # detail-metadata settings decide whether the processor can exit early.
             confidence_threshold = self.settings.ai_confidence / 100.0
-            if not detected or (detected and confidence < confidence_threshold):
+            rejected_by_detection = not detected or (detected and confidence < confidence_threshold)
+            needs_expensive_rejected_detail = (
+                detail_metadata_for_rejected
+                and detected
+            )
+            if rejected_by_detection and not needs_expensive_rejected_detail:
                 photo_time_ms = (time.time() - photo_start_time) * 1000 + yolo_ms
                 
                 if not detected:
@@ -1706,6 +1816,25 @@ class PhotoProcessor:
                 
                 # 记录评分（用于文件移动）- V4.0.4: 使用 original_prefix 确保匹配 NEF
                 self.file_ratings[original_prefix] = rating_value
+
+                if path_update_data and self.report_db:
+                    self.report_db.update_photo(original_prefix, path_update_data)
+
+                if detail_metadata_for_rejected and self.report_db:
+                    rejected_detail = {
+                        'filename': original_prefix,
+                        'has_bird': 1 if detected else 0,
+                        'confidence': confidence,
+                        'rating': rating_value,
+                        'caption': f"{rating_value}星 | {reason}",
+                    }
+                    rejected_detail.update(
+                        read_detail_exif_safe(yolo_item, prefetched_exif)
+                    )
+                    rejected_detail.update(
+                        calculate_rejected_quality_detail(filepath)
+                    )
+                    self.report_db.insert_photo(rejected_detail)
                 
                 # 写入简化 EXIF
                 if original_prefix in raw_dict:
@@ -1728,11 +1857,10 @@ class PhotoProcessor:
 
                 # 即使置信度不足，只要检测到鸟就生成 crop_debug 供浏览预览
                 # (yolo_debug_path 已由 ai_model.py 写入 DB，crop_debug 同步生成保持一致)
-                if detected and bird_bbox is not None and img_dims is not None:
+                should_build_debug = bool(self.callbacks.crop_preview or self.settings.save_crop)
+                if detected and should_build_debug and bird_bbox is not None and img_dims is not None:
                     try:
-                        import cv2 as _cv2_early
-                        # _orig = _cv2_early.imread(filepath)
-                        _orig = _cv2_early.imdecode(np.fromfile(filepath, dtype=np.uint8), _cv2_early.IMREAD_COLOR)
+                        _orig = yolo_item.get('decoded_image')
                         if _orig is not None:
                             _h, _w = _orig.shape[:2]
                             _sw, _sh = img_dims
@@ -1744,7 +1872,13 @@ class PhotoProcessor:
                             _oh = int(min(_bh * _sy, _h - _oy))
                             _crop = _orig[_oy:_oy + _oh, _ox:_ox + _ow]
                             if _crop.size > 0:
-                                self._save_debug_crop(filename, _crop)
+                                debug_img = self._save_debug_crop(
+                                    filename,
+                                    _crop,
+                                    write_file=self.settings.save_crop,
+                                )
+                                if debug_img is not None and self.callbacks.crop_preview:
+                                    self.callbacks.crop_preview(debug_img, None)
                     except Exception:
                         pass
 
@@ -1781,8 +1915,9 @@ class PhotoProcessor:
             if use_keypoints and detected and bird_bbox is not None and img_dims is not None:
                 try:
                     import cv2
-                    # orig_img = cv2.imread(filepath)  # 只读取一次!
-                    orig_img = cv2.imdecode(np.fromfile(filepath, dtype=np.uint8), cv2.IMREAD_COLOR)
+                    orig_img = yolo_item.get('decoded_image')
+                    if orig_img is None:
+                        orig_img = read_image_bgr(filepath)
                     if orig_img is not None:
                         h_orig, w_orig = orig_img.shape[:2]
                         # 获取YOLO处理时的图像尺寸
@@ -2023,8 +2158,19 @@ class PhotoProcessor:
             if focus_data_available:
                 focus_x, focus_y = focus_result.x, focus_result.y
             
-            # 对焦点坐标获取：只对潜在 1 星及以上样本补读，减少低价值样本 IO
-            if preliminary_result.rating >= 1 and detected and bird_bbox is not None and img_dims is not None:
+            # 对焦点坐标获取：默认只对潜在 1 星及以上样本补读；详情元数据开启时也服务低置信度样本。
+            # Focus-point lookup: by default only for potential 1-star+ photos;
+            # when detail metadata is enabled, also serve low-confidence samples.
+            should_read_focus_for_detail = (
+                detail_metadata_for_rejected
+                and rejected_by_detection
+            )
+            if (
+                (preliminary_result.rating >= 1 or should_read_focus_for_detail)
+                and detected
+                and bird_bbox is not None
+                and img_dims is not None
+            ):
                 # 只在未预读到结果时再尝试一次
                 if not focus_data_available and can_read_focus_raw:
                     pre_focus_start = time.time()
@@ -2037,8 +2183,10 @@ class PhotoProcessor:
                         pass  # 对焦检测失败不影响处理
                     add_photo_stage('focus_prefetch', (time.time() - pre_focus_start) * 1000)
             
-            # V4.0: 对焦权重计算（仅对 1 星以上照片，节省时间）
-            if preliminary_result.rating >= 1:
+            # V4.0: 对焦权重计算（通常仅 1 星以上；详情元数据可扩展到低置信度样本）
+            # V4.0: Focus weighting, normally for 1-star+ photos; detail metadata
+            # can extend it to low-confidence samples.
+            if preliminary_result.rating >= 1 or should_read_focus_for_detail:
                 if focus_data_available and focus_result is not None:
                     # V3.9.4 修复：使用原图尺寸而非 resize 后的 img_dims
                     # 如果 w_orig/h_orig 为 None，使用 img_dims 作为后备
@@ -2145,7 +2293,8 @@ class PhotoProcessor:
                     focus_status_en = "WORST"
             
             # V3.9: 生成调试可视化图（仅对有鸟的照片）
-            if detected and bird_crop_bgr is not None:
+            should_build_debug = bool(self.callbacks.crop_preview or self.settings.save_crop)
+            if detected and should_build_debug and bird_crop_bgr is not None:
                 # 计算裁剪区域内的坐标
                 head_center_crop = None
                 if head_center_orig is not None:
@@ -2188,7 +2337,8 @@ class PhotoProcessor:
                         head_center_crop,
                         head_radius_val,
                         focus_point_crop,
-                        focus_status_en  # 使用英文标签
+                        focus_status_en,  # 使用英文标签
+                        write_file=self.settings.save_crop,
                     )
                     # V4.2: 发送裁剪预览到 UI（同时传对焦状态供 dock 显示）
                     if debug_img is not None and self.callbacks.crop_preview:
@@ -2211,11 +2361,25 @@ class PhotoProcessor:
             target_extension = None
             
             # V4.0: 标签、对焦状态、详细评分说明（RAW 与纯 JPEG 共用，纯 JPEG 也写入 EXIF 题注/星级）
+            # V4.3.0: 色标文字跟随界面语言写入 xmp:Label。
+            # Lightroom 色标按「当前色标集的本地化名称」精确匹配文字：英文版默认集
+            # 是 Red/Green，中文版是 红色/绿色，跨语言文字对不上会显示为白框。
+            # 故按 i18n 语言写对应颜色名（飞鸟=绿色/Green，头部精焦=红色/Red），
+            # 假设用户慧眼与 Lightroom 语言一致（覆盖绝大多数场景）。
+            # 兜底：若语言包缺 key（t() 原样返回 key），退回英文，绝不把 key 串写进 LR。
+            # V4.3.0: Localize the xmp:Label text by UI language. Lightroom matches the
+            # label string against the active label set's localized names (Red/Green vs
+            # 红色/绿色); a cross-language mismatch renders as a white frame. Fall back
+            # to English if the language pack lacks the key.
             label = None
             if is_flying:
-                label = 'Green'
-            elif focus_sharpness_weight > 1.0:  # 头部对焦 (1.1)
-                label = 'Red'
+                label = self.i18n.t("xmp_labels.flight")
+                if label == "xmp_labels.flight":
+                    label = 'Green'
+            elif focus_sharpness_weight > 1.0:  # 头部对焦 (1.1) / head in focus
+                label = self.i18n.t("xmp_labels.focus")
+                if label == "xmp_labels.focus":
+                    label = 'Red'
             
             caption_lines = []
             caption_lines.append(self.i18n.t("logs.caption_final", rating=rating_value, reason=reason))
@@ -2360,6 +2524,7 @@ class PhotoProcessor:
                     adj_topiq_csv,  # V4.1: 调整后美学
                     prefetched_exif,  # V2: EXIF 元数据
                     caption,  # V4.1: 评分说明
+                    path_update_data,  # 合并路径字段，减少一次 DB update
                 )
                 add_photo_stage('csv_update', (time.time() - csv_update_start) * 1000)
                 
@@ -2388,7 +2553,12 @@ class PhotoProcessor:
                         self.star2_reasons[file_prefix] = 'nima'  # 保留原字段名兼容
                     else:
                         self.star2_reasons[file_prefix] = 'both'
-            
+            else:
+                # 目标文件不存在时仍写入路径字段，确保 DB 记录不丢失
+                # Write path fields even when the target file is missing to keep DB record intact
+                if path_update_data and self.report_db:
+                    self.report_db.update_photo(original_prefix, path_update_data)
+
             self._perf_record_photo(photo_time_ms, photo_stage_ms, early_exit=False)
             mark_resume_completed(original_prefix)
         
@@ -2613,7 +2783,8 @@ class PhotoProcessor:
         head_center_crop: tuple = None,
         head_radius: int = None,
         focus_point_crop: tuple = None,
-        focus_status: str = None
+        focus_status: str = None,
+        write_file: bool = True,
     ):
         """
         V3.9: 保存调试可视化图片到 .superpicky/debug_crops/ 目录
@@ -2624,11 +2795,6 @@ class PhotoProcessor:
         - 🔴 红色十字: 对焦点位置
         """
         import cv2
-        
-        # 创建调试目录（Windows 下自动隐藏）
-        debug_dir = os.path.join(self.dir_path, ".superpicky", "cache", "crop_debug")
-        ensure_hidden_directory(os.path.join(self.dir_path, ".superpicky"))
-        os.makedirs(debug_dir, exist_ok=True)
         
         # 复制原图
         debug_img = bird_crop_bgr.copy()
@@ -2666,21 +2832,27 @@ class PhotoProcessor:
             cv2.putText(debug_img, focus_status, (10, 30), 
                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
         
-        # 保存调试图
-        # V4.0.5: filename 可能包含子目录前缀（如 .superpicky/cache/_Z9W1029.jpg），需取 basename
-        file_prefix = os.path.splitext(os.path.basename(filename))[0]
-        debug_path = os.path.join(debug_dir, f"{file_prefix}.jpg")
-        cv2.imwrite(debug_path, debug_img, [cv2.IMWRITE_JPEG_QUALITY, 85])
-        
-        # NOTE: debug_crop_path 由 ai_model.py 的 insert_photo() 统一写入数据库
-        # V4.2: 现在 debug_crop_path 专门指代 crop_debug 图片，此处需要回写数据库
-        if hasattr(self, 'report_db') and self.report_db:
-             try:
-                 rel_path = os.path.relpath(debug_path, self.dir_path)
-                 # 更新数据库中的 debug_crop_path 字段
-                 self.report_db.update_photo(file_prefix, {"debug_crop_path": rel_path})
-             except Exception:
-                 pass
+        if write_file:
+            # 创建调试目录（Windows 下自动隐藏）
+            debug_dir = os.path.join(self.dir_path, ".superpicky", "cache", "crop_debug")
+            ensure_hidden_directory(os.path.join(self.dir_path, ".superpicky"))
+            os.makedirs(debug_dir, exist_ok=True)
+
+            # 保存调试图
+            # V4.0.5: filename 可能包含子目录前缀（如 .superpicky/cache/_Z9W1029.jpg），需取 basename
+            file_prefix = os.path.splitext(os.path.basename(filename))[0]
+            debug_path = os.path.join(debug_dir, f"{file_prefix}.jpg")
+            cv2.imwrite(debug_path, debug_img, [cv2.IMWRITE_JPEG_QUALITY, 85])
+
+            # NOTE: debug_crop_path 由 ai_model.py 的 insert_photo() 统一写入数据库
+            # V4.2: 现在 debug_crop_path 专门指代 crop_debug 图片，此处需要回写数据库
+            if hasattr(self, 'report_db') and self.report_db:
+                try:
+                    rel_path = os.path.relpath(debug_path, self.dir_path)
+                    # 更新数据库中的 debug_crop_path 字段
+                    self.report_db.update_photo(file_prefix, {"debug_crop_path": rel_path})
+                except Exception:
+                    pass
         
         # V4.2: 返回标注后的图像，用于 UI 实时预览
         return debug_img
@@ -2731,6 +2903,7 @@ class PhotoProcessor:
             adj_topiq: float = None,  # V4.1: 调整后美学
             exif_data: dict = None,  # V2: EXIF 元数据
             caption: str = None,  # V4.1: 评分说明
+            extra_data: Optional[Dict] = None,
     ):
         """更新报告数据库中的关键点数据和评分（SQLite 版本）"""
         if self.report_db is None:
@@ -2755,6 +2928,9 @@ class PhotoProcessor:
         # V2: 合并 EXIF 元数据（先合并，再覆盖 caption，避免 exif_data 里的空值覆盖评分说明）
         if exif_data:
             data.update(exif_data)
+
+        if extra_data:
+            data.update(extra_data)
 
         # caption 最后写入，确保不被 exif_data 里的空 Caption-Abstract 覆盖
         if caption is not None:
@@ -2809,8 +2985,18 @@ class PhotoProcessor:
                 self._log(self.i18n.t("logs.picked_exif_success"))
             else:
                 self._log(self.i18n.t("logs.picked_exif_failed", failed=picked_stats['failed']), "warning")
-            
+
             self.stats['picked'] = len(picked_files) - picked_stats.get('failed', 0)
+
+            # 同步写入 report.db 的 picked 列(供结果浏览器筛选与皇冠角标读取)
+            # Persist picked flag into report.db so the browser can filter/draw the crown.
+            if getattr(self, "report_db", None):
+                for _fp in picked_files:
+                    _prefix = os.path.splitext(os.path.basename(_fp))[0]
+                    try:
+                        self.report_db.update_photo(_prefix, {"picked": 1})
+                    except Exception:
+                        pass
         else:
             self._log(self.i18n.t("logs.picked_no_intersection"))
             self.stats['picked'] = 0

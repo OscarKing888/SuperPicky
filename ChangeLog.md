@@ -35,6 +35,29 @@ build, this is the recommended version to settle on.
 - In-app update checking is now turned off across all builds — to upgrade, download the new version from the official download page. This replaces the previous in-app auto-update and sidesteps stale-patch issues after upgrades.
 - Windows installers now wipe old program files before installing; a new Uninstaller tool is provided for switching between Lite and Full builds.
 
+**Reset & Organization**
+- New **Advanced Reset**: when a folder has no manifest (older or cross-version
+  directories, or the new species-first layout), Reset offers to recognize
+  SuperPicky's species / rating / burst folders and move every photo back to the
+  selected directory — move-only, never overwriting same-named files, and your
+  own folders are left untouched.
+- Reset is now strictly non-destructive: same-name conflicts are skipped (never
+  overwritten) and folders are only removed once empty.
+- Burst (連拍) grouping now works correctly under the new species-first layout.
+- Video species names and SRT subtitles now follow the interface language
+  (an English UI shows English names); video organization is reversible via Reset.
+
+**Polish**
+- Browse now opens at the currently selected directory (falls back to Pictures).
+- macOS installer (.pkg in .dmg) is signed and notarized through a more reliable
+  CI signing path.
+
+**Intel Mac Is Back on the Latest (4.3.0)**
+- Intel Macs now default to CPU (FP32). The legacy MPS path on old AMD dGPUs was
+  actually slower — running FP16 poorly and falling back to CPU for YOLO anyway.
+  Forcing CPU restores smooth performance beyond the 4.1.0 baseline, so Intel
+  users can move up from 4.2.1.
+
 ---
 
 ## Highlights since 4.1.0 (the 4.2.x line)
@@ -56,8 +79,17 @@ build, this is the recommended version to settle on.
 
 ## Distribution Notes
 - **Apple Silicon Mac**: single full installer (`.dmg`) — see Release assets
-- **Intel Mac**: please stay on **v4.2.1**, the last Intel-supported release (PyTorch no longer ships for Intel Macs)
-- **Windows**: the **Lite** installer covers all configurations; the **CUDA/GPU** build is distributed separately (large file) — ask if you need it
+- **Intel Mac**: a dedicated **v4.3.0** full installer (`.dmg`) is now available.
+  It runs on CPU (FP32); we removed the legacy MPS/AMD-dGPU path that was actually
+  slower, restoring smooth performance beyond the 4.1.0 baseline. Intel users no
+  longer need to stay on 4.2.1.
+- **Windows** — we recommend the **Full** builds (bundled AI runtime, works out of
+  the box, no first-run download):
+  - **CPU Full** — runs on any PC.
+  - **GPU (CUDA) Full** — for NVIDIA GPUs; distributed via Google Drive / Baidu
+    Netdisk due to its large size.
+  - The **Lite** installer (~190 MB) still covers all configurations, downloading
+    the AI runtime on first launch — fine when your network is reliable.
 
 ---
 
@@ -91,6 +123,24 @@ build, this is the recommended version to settle on.
 - 所有版本均已关闭应用内更新检测 —— 升级请前往官网下载页获取新版本。这取代了原先的应用内自动更新，并规避了升级后旧补丁覆盖新代码的问题。
 - Windows 安装包升级时会先清空旧程序文件；并新增卸载工具，用于在 Lite 与 Full 之间切换。
 
+**重置与整理**
+- 全新**高级重置**：当文件夹没有 manifest（较旧或跨版本目录，或新的鸟种优先布局）
+  时，重置会尝试识别 SuperPicky 的鸟种 / 评级 / 连拍文件夹，并把每张照片移回所选
+  目录 —— 仅移动、绝不覆盖同名文件，你自己的文件夹保持不动。
+- 重置现严格非破坏性：同名冲突一律跳过（绝不覆盖），文件夹仅在清空后才删除。
+- 连拍（連拍）分组在新的鸟种优先布局下也能正确工作。
+- 视频鸟种名称与 SRT 字幕现跟随界面语言（英文界面显示英文名）；视频整理可通过
+  重置可逆复原。
+
+**细节打磨**
+- 浏览现在会定位到当前所选目录（无则回退到「图片」文件夹）。
+- macOS 安装器（.dmg 内的 .pkg）通过更可靠的 CI 签名链路完成签名与公证。
+
+**Intel Mac 重回最新版（4.3.0）**
+- Intel Mac 现默认走 CPU（FP32）运行。此前在老款 AMD 独显上误用 MPS 反而更慢
+  （FP16 表现差、YOLO 还得回退 CPU 重算），改为强制 CPU 后性能恢复并超过 4.1.0
+  水平，Intel 用户可从 4.2.1 升级上来。
+
 ---
 
 ## 自 4.1.0 以来的重点更新（4.2.x 系列）
@@ -112,5 +162,12 @@ build, this is the recommended version to settle on.
 
 ## 分发说明
 - **Apple Silicon Mac**：单一完整安装包（`.dmg`），见 Release 资产
-- **Intel Mac**：请继续使用 **v4.2.1**（最后一个支持 Intel 的版本，PyTorch 已不再为 Intel Mac 发布更新）
-- **Windows**：**Lite** 安装包覆盖所有配置；**CUDA/GPU** 版本因体积较大单独分发，需要可联系获取
+- **Intel Mac**：现已提供 **v4.3.0** 完整安装包（`.dmg`）。该版本走 CPU（FP32）
+  运行，我们移除了反而更慢的老款 MPS/AMD 独显路径，性能恢复并超过 4.1.0 水平。
+  Intel 用户无需再停留在 4.2.1。
+- **Windows**：推荐下载**完整版（Full）**（内置 AI 运行时，开箱即用，无需首启下载）：
+  - **CPU 完整版** —— 适用于所有电脑。
+  - **GPU（CUDA）完整版** —— 面向 NVIDIA 显卡；因体积较大，通过 Google Drive /
+    百度网盘分发。
+  - **Lite** 安装包（约 190 MB）仍覆盖所有配置，首次启动时在线下载 AI 运行时，
+    网络良好时适用。

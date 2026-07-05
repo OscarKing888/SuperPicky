@@ -10,12 +10,13 @@ from typing import Optional
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QScrollArea, QFrame, QFormLayout,
-    QSizePolicy
+    QSizePolicy, QToolButton
 )
 from PySide6.QtCore import Qt, Signal, QSize, QThread, Slot, QTimer
 from PySide6.QtGui import QPixmap, QFont, QGuiApplication, QImage
 
 from ui.styles import COLORS, FONTS
+from ui.icon_utils import load_tinted_icon, stars_pixmap, tinted_png_path, ICON_IDLE, ICON_ACTIVE
 from core.rarity_tier import gbif_score_to_tier, tier_name, tier_icon, tier_color
 
 
@@ -53,6 +54,16 @@ _FOCUS_COLORS = {
     "GOOD":  COLORS['focus_good'],    # 琥珀 — 合焦
     "BAD":   COLORS['focus_bad'],     # 近白灰 — 失焦
     "WORST": COLORS['focus_worst'],   # 灰 — 脱焦
+}
+
+# 对焦状态 → i18n 标签 key（中文：精焦/合焦/失焦/脱焦）与图标 svg
+_FOCUS_STATE_KEY = {
+    "BEST": "focus_state_best", "GOOD": "focus_state_good",
+    "BAD": "focus_state_bad", "WORST": "focus_state_worst",
+}
+_FOCUS_ICON = {
+    "BEST": "scan-eye.svg", "GOOD": "fullscreen.svg",
+    "BAD": "scan.svg", "WORST": "scan.svg",
 }
 
 # IUCN 红色名录等级 → (中文全名, 英文全名, 官方色)
@@ -112,6 +123,24 @@ def _display_filename(photo: dict) -> str:
     if path:
         return os.path.basename(path)
     return photo.get("filename") or ""
+
+
+def _is_no_bird_photo(photo: dict) -> bool:
+    """
+    判断当前记录是否为无鸟照片。
+
+    兼容 SQLite 清洗后的整数值，以及旧数据中可能存在的字符串 yes/no。
+
+    Return whether the current record represents a no-bird photo.
+
+    This accepts integer values cleaned by SQLite and older string yes/no data.
+    """
+    has_bird = photo.get("has_bird")
+    if isinstance(has_bird, str):
+        return has_bird.strip().lower() in {"no", "0", "false"}
+    if has_bird is not None:
+        return not bool(has_bird)
+    return photo.get("rating") == -1
 
 
 def _format_file_size(num_bytes: int) -> str:
@@ -214,6 +243,12 @@ class DetailPanel(QWidget):
     prev_requested = Signal()
     next_requested = Signal()
     rating_change_requested = Signal(object, int)
+    # 用户点击铅笔图标请求修改鸟种，携带当前 photo dict
+    # Emitted when user clicks the pencil icon to edit bird species; carries current photo dict.
+    species_edit_requested = Signal(object)
+    # 用户点击"裁剪建议"按钮，携带当前 photo dict，由上层处理弹窗
+    # Emitted when user clicks "Crop Advice"; carries current photo dict; parent handles dialog.
+    crop_advice_requested = Signal(object)
 
     def __init__(self, i18n, parent=None):
         super().__init__(parent)
@@ -269,10 +304,14 @@ class DetailPanel(QWidget):
         nb_layout.setContentsMargins(8, 4, 8, 4)
         nb_layout.setSpacing(6)
 
-        prev_btn = QPushButton(f"◀  {self.i18n.t('browser.prev')}")
-        next_btn = QPushButton(f"{self.i18n.t('browser.next')}  ▶")
+        prev_btn = QPushButton(f"  {self.i18n.t('browser.prev')}")
+        prev_btn.setIcon(load_tinted_icon("arrow-left.svg", ICON_IDLE, 16))
+        next_btn = QPushButton(f"{self.i18n.t('browser.next')}  ")
+        next_btn.setIcon(load_tinted_icon("arrow-right.svg", ICON_IDLE, 16))
+        next_btn.setLayoutDirection(Qt.RightToLeft)  # 图标置于文字右侧 / icon on the right
         for btn in (prev_btn, next_btn):
             btn.setFixedHeight(30)
+            btn.setIconSize(QSize(16, 16))
             btn.setStyleSheet(self._nav_btn_style())
         prev_btn.clicked.connect(self.prev_requested)
         next_btn.clicked.connect(self.next_requested)
@@ -306,7 +345,9 @@ class DetailPanel(QWidget):
         rating_row.addWidget(self._rating_label)
         rating_row.addStretch()
 
-        dec_btn = QPushButton("▼")
+        dec_btn = QPushButton()
+        dec_btn.setIcon(load_tinted_icon("star-minus.svg", ICON_IDLE, 16))
+        dec_btn.setIconSize(QSize(16, 16))
         dec_btn.setFixedSize(28, 28)
         dec_btn.setToolTip(self.i18n.t("labels.rating_dec_tooltip"))
         dec_btn.setStyleSheet(f"""
@@ -327,7 +368,9 @@ class DetailPanel(QWidget):
         dec_btn.clicked.connect(self._on_rating_dec)
         rating_row.addWidget(dec_btn)
 
-        inc_btn = QPushButton("▲")
+        inc_btn = QPushButton()
+        inc_btn.setIcon(load_tinted_icon("star-plus.svg", ICON_ACTIVE, 16))
+        inc_btn.setIconSize(QSize(16, 16))
         inc_btn.setFixedSize(28, 28)
         inc_btn.setToolTip(self.i18n.t("labels.rating_inc_tooltip"))
         inc_btn.setStyleSheet(f"""
@@ -400,10 +443,12 @@ class DetailPanel(QWidget):
         self._val_caption.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 11px; font-family: {FONTS['mono']}; background: transparent;")
         self._val_caption.setWordWrap(True)
 
+        # 鸟种、文件名不在此显示(已移至大图顶条:鸟种居中 / 文件名右侧),避免重复。
+        # Species & filename are shown in the big-image top strip instead (centered species
+        # / right-aligned filename), so they are intentionally omitted here.
         rows = [
             # V4.2.7: 鸟类信息 3 行连续（鸟种 → 全球罕见度 → IUCN）
             # V4.2.7: Three bird-related rows kept adjacent for natural reading.
-            ("browser.meta_species",    self._val_species),
             ("browser.meta_gbif_rarity", self._val_gbif_rarity),
             ("browser.meta_iucn",       self._val_iucn),
             ("browser.meta_focus",      self._val_focus),
@@ -417,7 +462,6 @@ class DetailPanel(QWidget):
             ("browser.meta_focal",      self._val_focal),
             ("browser.meta_confidence", self._val_confidence),
             ("browser.meta_filesize",   self._val_filesize),
-            ("browser.meta_filename",   self._val_filename),
             ("browser.meta_datetime",   self._val_datetime),
         ]
         for key, val_widget in rows:
@@ -524,9 +568,10 @@ class DetailPanel(QWidget):
         self._update_caption_toggle_label()
 
     def _update_caption_toggle_label(self):
-        arrow = "▼" if self._caption_expanded else "▶"
-        label = self.i18n.t("browser.meta_caption")
-        self._caption_toggle_btn.setText(f"{arrow} {label}")
+        svg = "arrow-down.svg" if self._caption_expanded else "arrow-right.svg"
+        self._caption_toggle_btn.setIcon(load_tinted_icon(svg, ICON_IDLE, 14))
+        self._caption_toggle_btn.setIconSize(QSize(14, 14))
+        self._caption_toggle_btn.setText(f"  {self.i18n.t('browser.meta_caption')}")
 
     def _on_rating_dec(self):
         """▼ 按钮：评分 -1（最低 -1）。"""
@@ -566,7 +611,12 @@ class DetailPanel(QWidget):
         _rating_text = {5: "★★★★★", 4: "★★★★", 3: "★★★", 2: "★★", 1: "★", 0: "0", -1: "—"}
         rating = p.get("rating", 0)
 
-        focus = p.get("focus_status") or "—"
+        focus = p.get("focus_status")
+        if focus in _FOCUS_STATE_KEY:
+            focus = self.i18n.t(f"browser.{_FOCUS_STATE_KEY[focus]}")  # 英文枚举→中文标签
+        elif not focus and _is_no_bird_photo(p):
+            focus = self.i18n.t("browser.focus_no_bird")
+        focus = focus or "—"
         sharp = p.get("adj_sharpness")
         topiq = p.get("adj_topiq")
         fl = p.get("focal_length")
@@ -599,7 +649,7 @@ class DetailPanel(QWidget):
             f"{t('browser.meta_focus')}: {focus}",
             f"{t('browser.meta_sharpness')}: {f'{sharp:.1f}' if sharp is not None else '—'}",
             f"{t('browser.meta_aesthetic')}: {f'{topiq:.2f}' if topiq is not None else '—'}",
-            f"{t('browser.meta_confidence')}: {f'{conf*100:.1f}%' if conf else '—'}",
+            f"{t('browser.meta_confidence')}: {f'{conf*100:.1f}%' if conf is not None else '—'}",
             f"{t('browser.meta_rating')}: {_rating_text.get(rating, '—')}",
         ]
         text = "\n".join(lines)
@@ -774,18 +824,16 @@ class DetailPanel(QWidget):
         is_zh = not lang.startswith('en')
         _unknown = "—"
 
-        # 评分（支持 -1 ~ 5）
+        # 评分:精选→皇冠(取代星级);1~5 星→SVG 金星;0/-1→文字
         rating = p.get("rating", 0)
-        _rating_text = {
-            5: "★★★★★",
-            4: "★★★★",
-            3: "★★★",
-            2: "★★",
-            1: "★",
-            0: "0",
-            -1: "—",
-        }
-        self._rating_label.setText(_rating_text.get(rating, _unknown))
+        if p.get("picked"):
+            self._rating_label.setPixmap(
+                load_tinted_icon("crown.svg", COLORS['star_gold'], 22).pixmap(QSize(22, 22))
+            )
+        elif isinstance(rating, int) and rating >= 1:
+            self._rating_label.setPixmap(stars_pixmap(rating, COLORS['star_gold'], size=18))
+        else:
+            self._rating_label.setText("0" if rating == 0 else _unknown)
 
         # GBIF 全球罕见度 → 5-tier 圆形充填图标 + tier 名 + 小字分数
         # GBIF rarity → 5-tier circle glyph + tier label + small score
@@ -806,16 +854,26 @@ class DetailPanel(QWidget):
                 f"color: {COLORS['text_primary']}; font-size: 12px; background: transparent;"
             )
 
-        # 对焦
-        focus = p.get("focus_status") or _unknown
-        self._val_focus.setText(focus)
-        color = _FOCUS_COLORS.get(focus, COLORS['text_primary'])
-        self._val_focus.setStyleSheet(f"color: {color}; font-size: 12px; background: transparent;")
+        # 对焦：中文标签 + 对应图标(svg 染对应颜色)，强化识别记忆
+        focus_raw = p.get("focus_status")
+        if focus_raw in _FOCUS_STATE_KEY:
+            color = _FOCUS_COLORS.get(focus_raw, COLORS['text_primary'])
+            label = self.i18n.t(f"browser.{_FOCUS_STATE_KEY[focus_raw]}")
+            png = tinted_png_path(_FOCUS_ICON[focus_raw], color, size=14)
+            self._val_focus.setText(f'<img src="{png}" width="14" height="14"> {label}')
+            self._val_focus.setStyleSheet(f"color: {color}; font-size: 12px; background: transparent;")
+        else:
+            if not focus_raw and _is_no_bird_photo(p):
+                txt = self.i18n.t("browser.focus_no_bird")
+            else:
+                txt = _unknown
+            self._val_focus.setText(txt)
+            self._val_focus.setStyleSheet(f"color: {COLORS['text_primary']}; font-size: 12px; background: transparent;")
 
         # 锐度（颜色跟随对焦状态）
         sharp = p.get("adj_sharpness")
         self._val_sharpness.setText(f"{sharp:.1f}" if sharp is not None else _unknown)
-        sharp_color = _FOCUS_COLORS.get(focus, COLORS['text_primary'])
+        sharp_color = _FOCUS_COLORS.get(focus_raw, COLORS['text_primary'])
         self._val_sharpness.setStyleSheet(
             f"color: {sharp_color}; font-size: 13px; font-weight: 600; background: transparent;"
         )
@@ -836,7 +894,8 @@ class DetailPanel(QWidget):
         else:
             self._val_flying.setText(_unknown)
 
-        # 鸟种（跟随界面语言）
+        # 鸟种（跟随界面语言）+ 显示铅笔编辑按钮
+        # Bird species (follows UI language) + show pencil edit button.
         if self.i18n.current_lang.startswith('en'):
             species = p.get("bird_species_en") or p.get("bird_species_cn") or _unknown
         else:
@@ -881,7 +940,7 @@ class DetailPanel(QWidget):
 
         # AI置信度
         conf = p.get("confidence")
-        self._val_confidence.setText(f"{conf*100:.1f}%" if conf else _unknown)
+        self._val_confidence.setText(f"{conf*100:.1f}%" if conf is not None else _unknown)
 
         file_path = p.get("current_path") or p.get("original_path") or ""
         if file_path and os.path.exists(file_path):
