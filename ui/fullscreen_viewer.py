@@ -13,9 +13,10 @@ from typing import Optional
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QSizePolicy, QFrame
 )
-from PySide6.QtCore import Qt, Signal, QThread, QTimer, Slot, QEvent, QSize
-from PySide6.QtGui import QPixmap, QImage, QPainter, QPen, QColor, QBrush
+from PySide6.QtCore import Qt, Signal, QThread, QTimer, Slot, QEvent, QSize, QObject
+from PySide6.QtGui import QPixmap, QImage, QPainter, QPen, QColor, QBrush, QImageReader
 
+from tools.file_utils import sibling_jpeg
 from ui.styles import COLORS, FONTS
 from ui.icon_utils import (
     load_tinted_icon, stars_pixmap, ICON_IDLE, ICON_ACTIVE, ICON_DISABLED, ICON_DANGER,
@@ -31,8 +32,53 @@ _FOCUS_COLORS = {
 }
 
 
+# 高清缓存/预加载的封顶解码边长。相机内嵌预览无尺寸上限(45/61MP 机身单张
+# 解码后 180~240MB,21 槽缓存实测可占 2.4~5GB RSS),而 fit 模式显示 4K 屏
+# 最长也只需 ~3800 物理像素。封顶后缓存内存与机身像素数脱钩;100% 缩放的
+# 全分辨率由「停留 250ms 后按需补全解」提供(仅当前张,不入缓存)。
+# Cap for cache/preload decodes. Embedded RAW previews are full-res
+# (180-240MB decoded on 45/61MP bodies; the 21-slot cache measured
+# 2.4GB+ RSS), while fit-mode display needs ~3800px at most on a 4K
+# screen. Full resolution for 100% zoom is loaded on demand after a
+# 250ms dwell, for the current photo only, and never cached.
+_HD_CACHE_MAX_EDGE = 3200
+
+# 停留多久后为当前张补全分辨率解码(按住方向键连读时不触发,松手才解)
+# Dwell before the full-res top-up decode (skipped during rapid nav).
+_FULLRES_DWELL_MS = 250
+
+
+def _decode_capped(path: str, max_edge: int) -> QImage:
+    """
+    解码图片,长边超过 max_edge 时用 QImageReader.setScaledSize 在解码期
+    降采样(JPEG 走 libjpeg DCT 缩放,更快且不分配全尺寸缓冲)。
+
+    Decode an image, downscaling at decode time when its long edge
+    exceeds max_edge (libjpeg DCT scaling: faster, and the full-size
+    buffer is never allocated).
+
+    参数 / Parameters:
+        path (str): 图片路径 / image path.
+        max_edge (int): 允许的最大长边像素 / max long-edge pixels.
+
+    返回 / Returns:
+        QImage: 解码结果,失败时为 isNull 的空图。
+    """
+    reader = QImageReader(path)
+    reader.setAutoTransform(True)   # 与 QImage(path) 一致的 EXIF 旋转行为
+    src = reader.size()
+    if src.isValid() and max(src.width(), src.height()) > max_edge:
+        scale = max_edge / max(src.width(), src.height())
+        reader.setScaledSize(QSize(
+            max(1, round(src.width() * scale)),
+            max(1, round(src.height() * scale)),
+        ))
+    img = reader.read()
+    return img if img is not None else QImage()
+
+
 # ============================================================
-#  高清图 LRU 缓存（模块级，21 slots，键为绝对路径）
+#  高清图 LRU 缓存（模块级，21 slots，键为绝对路径，存封顶分辨率）
 # ============================================================
 
 
@@ -71,54 +117,113 @@ _hd_cache = _HdCache(21)
 # ============================================================
 
 
-class _PreloadWorker(QThread):
+class _PreloadThread(QThread):
+    """预加载池工作线程:循环向池领取路径,解码后入 _hd_cache。"""
+
+    def __init__(self, pool: '_PreloadWorker', parent=None):
+        super().__init__(parent)
+        self._pool = pool
+
+    def run(self):
+        while True:
+            path = self._pool._next_path()
+            if path is None:
+                return              # 池已取消 / pool cancelled
+            # QImage 可在工作线程安全使用；QPixmap 须在主线程转换。
+            # 封顶解码:缓存内存与机身像素数脱钩(全分辨率按需另行补解)。
+            img = _decode_capped(path, _HD_CACHE_MAX_EDGE)
+            ok = not img.isNull()
+            if ok:
+                # 解码完成一律入缓存(旧实现在 restart 后丢弃在途解码结果,
+                # 每次导航白白浪费约一整张 14MP 的解码)
+                # Always cache a finished decode — the old implementation
+                # discarded in-flight results on restart.
+                _hd_cache.put(path, img)
+            self._pool._task_done(path, ok)
+
+
+class _PreloadWorker(QObject):
     """
-    按优先级顺序预加载高清图片到 _hd_cache。
-    调用 restart(paths) 可安全地重置任务列表并重新开始。
+    常驻并行预加载池,按优先级把高清图解码进 _hd_cache。
+
+    旧实现是单线程 QThread:填满 ±10 窗口需串行解码 ~2s,且每次导航
+    restart 都取消重启、丢弃在途结果,按住方向键连读时完全跟不上。
+    新实现:
+    - 固定 2~4 条常驻线程,restart(paths) 只替换任务列表并唤醒,不杀线程
+    - 解码失败的路径记入本轮跳过集,防止坏文件被反复重试
+    - cancel()+wait() 供退出时确定性收线(任务/应用退出清理约定)
+
+    Resident parallel preload pool. restart() swaps the priority list and
+    wakes the threads instead of tearing them down; finished decodes are
+    always cached; failed paths are skipped for the current round.
     """
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._paths: list = []
-        self._cancelled: bool = False
-        self._pending_restart: bool = False
         self._lock = _threading.Lock()
-        self.finished.connect(self._check_restart)
+        self._cond = _threading.Condition(self._lock)
+        self._paths: list = []
+        self._inflight: set = set()
+        self._failed: set = set()
+        self._cancelled: bool = False
+        self._started: bool = False
+        num = min(4, max(2, (os.cpu_count() or 4) // 2))
+        self._threads = [_PreloadThread(self, self) for _ in range(num)]
 
     def restart(self, paths: list):
-        """设置新的预加载路径列表，非阻塞地（重）启动。"""
-        with self._lock:
-            self._paths = list(paths)
-        if self.isRunning():
-            # 通知当前 run() 尽快退出，run() 结束后由 _check_restart 接力启动
+        """替换预加载任务列表(优先级序)并唤醒线程;首次调用时启动线程。"""
+        with self._cond:
+            self._paths = [p for p in paths if p]
+            self._failed.clear()    # 与旧语义一致:每轮允许对失败路径重试一次
+            self._cond.notify_all()
+        if not self._started:
+            self._started = True
+            for t in self._threads:
+                t.start()
+
+    def _next_path(self) -> Optional[str]:
+        """线程取下一个待解码路径;无任务时阻塞等待,池取消时返回 None。"""
+        with self._cond:
+            while not self._cancelled:
+                for p in self._paths:
+                    if p in self._inflight or p in self._failed:
+                        continue
+                    # 用 get() 而非纯探测:有意把 ±10 窗口内条目 bump 到
+                    # LRU 队尾,保护预测工作集不被新写入挤出(封顶解码提速
+                    # 写入后,21 槽缓存曾因此把"+1 张"在消费前淘汰掉,
+                    # 连读命中 25/25 掉到 18/25)。
+                    # get() on purpose: bumping window entries protects the
+                    # predicted working set from eviction churn — with the
+                    # faster capped decodes, a non-bumping check let the
+                    # "+1" entry get evicted before consumption.
+                    if _hd_cache.get(p) is not None:
+                        continue
+                    if not os.path.exists(p):
+                        self._failed.add(p)
+                        continue
+                    self._inflight.add(p)
+                    return p
+                self._cond.wait()
+            return None
+
+    def _task_done(self, path: str, ok: bool):
+        """线程完成一个解码后回报;失败路径本轮不再重试。"""
+        with self._cond:
+            self._inflight.discard(path)
+            if not ok:
+                self._failed.add(path)
+
+    def cancel(self):
+        with self._cond:
             self._cancelled = True
-            self._pending_restart = True
-        else:
-            self._cancelled = False
-            self._pending_restart = False
-            self.start()
+            self._cond.notify_all()
 
-    def _check_restart(self):
-        """run() 结束后检查是否有新的预加载任务等待启动（主线程执行）。"""
-        if self._pending_restart:
-            self._pending_restart = False
-            self._cancelled = False
-            self.start()
+    def isRunning(self) -> bool:
+        return any(t.isRunning() for t in self._threads)
 
-    def run(self):
-        with self._lock:
-            paths = list(self._paths)
-        for path in paths:
-            if self._cancelled:
-                break
-            if not path or not os.path.exists(path):
-                continue
-            if _hd_cache.get(path) is not None:
-                continue        # 已在缓存，跳过
-            # QImage 可在工作线程安全使用；QPixmap 须在主线程转换
-            img = QImage(path)
-            if not img.isNull() and not self._cancelled:
-                _hd_cache.put(path, img)
+    def wait(self, msecs: int = 1000):
+        for t in self._threads:
+            t.wait(msecs)
 
 
 # ============================================================
@@ -126,12 +231,21 @@ class _PreloadWorker(QThread):
 # ============================================================
 
 class _ImageLoader(QThread):
-    """后台线程加载 QImage，避免主线程 QPixmap 线程安全问题。"""
+    """
+    后台线程加载 QImage，避免主线程 QPixmap 线程安全问题。
+    max_edge 传入时按封顶分辨率解码(喂 _hd_cache 用);None 为全分辨率
+    (停留后补全解、供 100% 缩放用)。
+
+    Background QImage loader. With max_edge it decodes capped (feeding
+    _hd_cache); with None it decodes full resolution (the dwell top-up
+    for 100% zoom).
+    """
     ready = Signal(object)   # QImage
 
-    def __init__(self, path: str, parent=None):
+    def __init__(self, path: str, parent=None, max_edge: Optional[int] = None):
         super().__init__(parent)
         self._path = path
+        self._max_edge = max_edge
         self._cancelled = False
 
     def cancel(self):
@@ -141,7 +255,10 @@ class _ImageLoader(QThread):
         if self._cancelled:
             return
         if self._path and os.path.exists(self._path):
-            img = QImage(self._path)
+            if self._max_edge:
+                img = _decode_capped(self._path, self._max_edge)
+            else:
+                img = QImage(self._path)
             if not self._cancelled:
                 self.ready.emit(img)
         else:
@@ -709,11 +826,19 @@ class FullscreenViewer(QWidget):
     close_requested = Signal()
     prev_requested = Signal()
     next_requested = Signal()
-    burst_sequence_requested = Signal(dict)
-    delete_requested = Signal(dict)   # 功能1：携带当前 photo dict
-    context_menu_requested = Signal(dict, object)   # (photo, QPoint全局坐标)
-    species_edit_requested = Signal(dict)   # 左栏「编辑鸟种」→ 父窗口复用既有处理
-    crop_advice_requested = Signal(dict)    # 左栏「裁剪建议」→ 父窗口复用既有处理
+    # 携带 photo 的信号一律用 Signal(object)：Signal(dict) 会被 PySide6 做
+    # QVariantMap 往返转换，父窗口拿到的是副本——改鸟种移动文件后写回的新
+    # current_path 落在副本里，全屏自己持有的 photo 仍指向已不存在的旧路径，
+    # 再次操作同一张就会静默失败(2026-09-05 现网缺陷根因)。
+    # Photo-carrying signals must use Signal(object); Signal(dict) copies via
+    # QVariantMap, so the new path written back after a move never reaches the
+    # viewer's own photo and the next edit silently aborts on a stale path.
+    burst_sequence_requested = Signal(object)
+    delete_requested = Signal(object)   # 功能1：携带当前 photo dict
+    context_menu_requested = Signal(object, object)   # (photo, QPoint全局坐标)
+    species_edit_requested = Signal(object)   # 左栏「编辑鸟种」→ 父窗口复用既有处理
+    crop_advice_requested = Signal(object)    # 左栏「裁剪建议」→ 父窗口复用既有处理
+    auto_retouch_requested = Signal(object)   # 左栏「自动修图」→ 打开工作区直接进自动修图
 
     def __init__(self, i18n, parent=None):
         super().__init__(parent)
@@ -722,6 +847,17 @@ class FullscreenViewer(QWidget):
         self._preload_worker = _PreloadWorker(self)   # 预加载工作线程
         self._photos: list = []                        # 当前完整照片列表
         self._current_photo: dict = {}                 # 当前显示的 photo dict
+
+        # 停留补全解:缓存/预加载是封顶分辨率,在一张图上停留 250ms 后
+        # 后台补一次全分辨率解码(仅当前张,不入缓存),供 100% 缩放检视。
+        # Dwell top-up: cache/preload are capped; after dwelling 250ms on
+        # a photo, decode it once at full resolution (current photo only,
+        # never cached) for 100% zoom inspection.
+        self._fullres_loader: Optional[_ImageLoader] = None
+        self._fullres_timer = QTimer(self)
+        self._fullres_timer.setSingleShot(True)
+        self._fullres_timer.setInterval(_FULLRES_DWELL_MS)
+        self._fullres_timer.timeout.connect(self._start_fullres_load)
 
         # 功能2：锁定缩放状态（同时锁定平移位置）
         self._zoom_locked: bool = False
@@ -929,16 +1065,21 @@ class FullscreenViewer(QWidget):
         self._edit_species_btn = self._tool_btn("square-pen.svg", self.i18n.t("fullscreen.tb_species"),
                                                 self._on_edit_species_clicked)
         v.addWidget(self._edit_species_btn)
-        self._crop_advice_btn = self._tool_btn("AI-Srop.svg", self.i18n.t("browser.crop_advice_btn"),
-                                               self._on_crop_advice_clicked)
-        v.addWidget(self._crop_advice_btn)
-        # 后续功能:暂灰禁用
-        self._manual_crop_btn = self._tool_btn("crop.svg", self.i18n.t("crop_advisor.manual_mode"),
-                                               None, enabled=False)
-        v.addWidget(self._manual_crop_btn)
-        self._auto_retouch_btn = self._tool_btn("image-plus.svg", self.i18n.t("fullscreen.tb_auto"),
-                                                None, enabled=False)
-        v.addWidget(self._auto_retouch_btn)
+        # ExtremeSimple: 「裁剪建议」按钮已从工具栏剥离（_on_crop_advice_clicked/
+        # crop_advice_requested 信号本身保留在下方；这是打开 Crop Studio 的唯一
+        # 入口，摘掉后 ui/crop_studio.py 与 core/crop_advisor.py 全部变为不可达但
+        # 原封不动。未来要恢复只需把这两行按钮创建代码加回来）。
+        # ExtremeSimple: the "crop advice" button is stripped from the toolbar
+        # (_on_crop_advice_clicked / crop_advice_requested stay below). This was
+        # the sole entry point into Crop Studio, so ui/crop_studio.py and
+        # core/crop_advisor.py are now unreachable but untouched. Re-add these
+        # two lines to bring it back.
+        # ExtremeSimple: 「自动修图」按钮已从工具栏剥离（_on_auto_retouch_clicked/
+        # auto_retouch_requested 信号本身保留在下方，未来要恢复只需把这两行按钮
+        # 创建代码加回来）。
+        # ExtremeSimple: the "auto retouch" button is stripped from the toolbar
+        # (_on_auto_retouch_clicked / auto_retouch_requested stay below; re-add
+        # these two lines to bring the button back).
 
         v.addStretch()
 
@@ -1059,6 +1200,11 @@ class FullscreenViewer(QWidget):
         if self._current_photo:
             self.crop_advice_requested.emit(self._current_photo)
 
+    def _on_auto_retouch_clicked(self):
+        """「自动修图」→ 打开工作区并直接进自动修图(降噪+调色)对比。"""
+        if self._current_photo:
+            self.auto_retouch_requested.emit(self._current_photo)
+
     def _toggle_crop_view(self):
         """全图 ⇄ 特写(debug 裁切图)切换。特写图不存在时此按钮已禁用。"""
         self._use_crop_view = not self._use_crop_view
@@ -1094,15 +1240,80 @@ class FullscreenViewer(QWidget):
         self._photos = photos
 
     def cleanup(self):
-        if self._loader:
-            self._loader.cancel()
-            if self._loader.isRunning():
-                self._loader.wait(1000)
-            self._loader = None
+        self._fullres_timer.stop()
+        for attr in ("_loader", "_fullres_loader"):
+            loader = getattr(self, attr, None)
+            if loader:
+                try:
+                    loader.cancel()
+                    if loader.isRunning():
+                        loader.wait(1000)
+                except RuntimeError:
+                    # loader 已 deleteLater 销毁 / already destroyed via deleteLater
+                    pass
+                setattr(self, attr, None)
         if self._preload_worker:
-            self._preload_worker._cancelled = True
+            self._preload_worker.cancel()
             if self._preload_worker.isRunning():
                 self._preload_worker.wait(1000)
+
+    def update_rating_display(self, photo: dict) -> None:
+        """
+        仅刷新顶条星级/皇冠显示,不重载图片(外部键盘改星后调用)。
+
+        Refresh only the top-strip rating/crown without reloading the image
+        (called by the host window after a keyboard rating change).
+
+        参数 / Parameters:
+            photo (dict): 照片记录,读取 rating/picked / photo record.
+        """
+        rating = photo.get("rating", 0)
+        if photo.get("picked"):
+            self._rating_label.setPixmap(
+                load_tinted_icon("crown.svg", COLORS['star_gold'], 18).pixmap(QSize(18, 18))
+            )
+        elif isinstance(rating, int) and rating >= 1:
+            self._rating_label.setPixmap(stars_pixmap(rating, COLORS['star_gold'], size=16))
+        else:
+            self._rating_label.setText("")
+
+    def _species_display_name(self, photo: dict) -> str:
+        """
+        按当前界面语言取该照片要显示的鸟名（英文环境优先英文名，反之亦然）。
+
+        Pick the species name to display for the active UI language.
+
+        参数 / Args:
+            photo (dict): 照片记录 / photo record.
+
+        返回 / Returns:
+            str: 鸟名，未识别时为空串 / species name, "" when unidentified.
+        """
+        if getattr(self.i18n, "current_lang", "zh_CN").startswith("en"):
+            return photo.get("bird_species_en") or photo.get("bird_species_cn") or ""
+        return photo.get("bird_species_cn") or photo.get("bird_species_en") or ""
+
+    def refresh_species_label(self, photo: dict) -> None:
+        """
+        仅刷新鸟名标签，不重新解码大图。
+
+        供浏览器在「改鸟种」确认后调用：全屏视图有自己的 _species_label，
+        原先只在 show_photo 里赋值，于是在全屏里改完鸟种界面纹丝不动，
+        用户以为没生效(2026-09-05 现网缺陷)。走 show_photo 虽然也能刷新，
+        但会连带重解码大图，纯属浪费。
+
+        Refresh only the species label (no image re-decode) after a species
+        edit; the fullscreen view owns this label and previously never
+        updated it outside show_photo.
+
+        参数 / Args:
+            photo (dict): 被改鸟种的照片；不是当前显示的那张时忽略。
+                          Ignored unless it is the photo on screen.
+        """
+        current = self._current_photo or {}
+        if not photo or current.get("filename") != photo.get("filename"):
+            return
+        self._species_label.setText(self._species_display_name(photo))
 
     def show_photo(self, photo: dict):
         """
@@ -1142,29 +1353,16 @@ class FullscreenViewer(QWidget):
         self._filename_label.setText(filename)
 
         # 鸟种名(居中,跟随语言)
-        _is_en = getattr(self.i18n, "current_lang", "zh_CN").startswith("en")
-        if _is_en:
-            _species = photo.get("bird_species_en") or photo.get("bird_species_cn") or ""
-        else:
-            _species = photo.get("bird_species_cn") or photo.get("bird_species_en") or ""
-        self._species_label.setText(_species)
+        self._species_label.setText(self._species_display_name(photo))
 
         self._update_burst_info(photo)
 
-        rating = photo.get("rating", 0)
-        if photo.get("picked"):
-            self._rating_label.setPixmap(
-                load_tinted_icon("crown.svg", COLORS['star_gold'], 18).pixmap(QSize(18, 18))
-            )
-        elif isinstance(rating, int) and rating >= 1:
-            self._rating_label.setPixmap(stars_pixmap(rating, COLORS['star_gold'], size=16))
-        else:
-            self._rating_label.setText("")
+        self.update_rating_display(photo)
 
         # 1. 立即显示缩略图缓存
         try:
-            from ui.thumbnail_grid import _thumb_cache, _overlay_key
-            cached = _thumb_cache.get(_overlay_key(photo))
+            from ui.thumbnail_grid import _thumb_cache, _photo_key
+            cached = _thumb_cache.get(_photo_key(photo))
             if cached and not cached.isNull():
                 self._img_label.set_pixmap(cached)
                 # 功能2：缩略图加载后直接还原锁定的缩放和位置
@@ -1184,16 +1382,27 @@ class FullscreenViewer(QWidget):
             photo.get("focus_status")
         )
 
-        # 3. 取消上一个加载任务，断开信号防止旧图覆盖新显示
+        # 3. 取消上一个加载任务，断开信号防止旧图覆盖新显示。
+        #    不在主线程 wait(旧 wait(100) 让快速切图每次白等最多 100ms;
+        #    cancel 标志保证解码完成后不再 emit,断开信号双保险)。
+        #    Never block the GUI thread waiting for the old loader.
         if self._loader:
-            self._loader.cancel()
-            if self._loader.isRunning():
-                self._loader.wait(100)
             try:
+                self._loader.cancel()
                 self._loader.ready.disconnect()
-            except RuntimeError:
+            except (RuntimeError, TypeError):
                 pass
             self._loader = None
+        # 同步取消上一张的全分辨率补解与停留计时
+        # Also cancel the previous photo's full-res top-up and dwell timer.
+        self._fullres_timer.stop()
+        if self._fullres_loader:
+            try:
+                self._fullres_loader.cancel()
+                self._fullres_loader.ready.disconnect()
+            except (RuntimeError, TypeError):
+                pass
+            self._fullres_loader = None
 
         # 4. 优先检查高清缓存（存的是 QImage，需在主线程转为 QPixmap）
         hd_path = self._resolve_hd_path(photo)
@@ -1210,13 +1419,19 @@ class FullscreenViewer(QWidget):
                         self._locked_oy
                     )
             else:
-                # 5. 后台加载，完成后存入高清缓存
-                self._loader = _ImageLoader(hd_path, self)
+                # 5. 后台加载(封顶分辨率,与缓存一致)，完成后存入高清缓存
+                #    (loader 用后自行销毁,避免 QThread 对象随导航累积)
+                self._loader = _ImageLoader(hd_path, self,
+                                            max_edge=_HD_CACHE_MAX_EDGE)
                 _path_capture = hd_path
                 self._loader.ready.connect(
                     lambda px, p=_path_capture: self._on_image_ready(px, p)
                 )
+                self._loader.finished.connect(self._loader.deleteLater)
                 self._loader.start()
+            # 停留 250ms 后为当前张补全分辨率(连读时被下一次 show_photo 打断)
+            # Full-res top-up after dwell; rapid navigation keeps resetting it.
+            self._fullres_timer.start()
 
         # 6. 触发 ±10 预加载
         self._trigger_preload(photo)
@@ -1277,13 +1492,22 @@ class FullscreenViewer(QWidget):
     # ------------------------------------------------------------------
 
     def _resolve_hd_path(self, photo: dict) -> Optional[str]:
-        """按优先级解析高清图路径：temp_jpeg_path → 原始 JPEG。
+        """按优先级解析高清图路径：temp_jpeg_path → 同目录同名 JPG 边车 → 原始 JPEG。
         debug_crop_path / yolo_debug_path 均不使用。
+
+        注意:temp_jpeg_path 会因多轮整理/连拍重组而失同步(指向旧位置),此时必须
+        据可靠的 current_path 推导同目录同名 JPG,否则全屏找不到高清图会停在低清缩略图。
+        temp_jpeg_path can drift out of sync after organizing; fall back to the JPG
+        sibling derived from the reliable current_path so full-screen loads full-res.
         """
         tjp = photo.get("temp_jpeg_path")
         if tjp and os.path.exists(tjp):
             return tjp
-        # 回退到原始 JPEG
+        # 兜底:据 current_path/original_path 推导同目录同名 JPG 边车
+        sib = sibling_jpeg(photo.get("current_path")) or sibling_jpeg(photo.get("original_path"))
+        if sib:
+            return sib
+        # 最后回退到本身即为 JPG 的原文件
         op = photo.get("original_path") or photo.get("current_path")
         if op and os.path.exists(op):
             ext = os.path.splitext(op)[1].lower()
@@ -1308,6 +1532,58 @@ class FullscreenViewer(QWidget):
                     self._locked_ox,
                     self._locked_oy
                 )
+
+    def _start_fullres_load(self):
+        """
+        停留计时到期:为当前照片启动全分辨率补解(不入缓存)。
+        源图长边不超过封顶值时缓存里已是全分辨率,直接跳过。
+
+        Dwell expired: start the full-res top-up for the current photo
+        (never cached). Skipped when the source is within the cap —
+        the cached image is already full resolution.
+        """
+        if not self._current_photo:
+            return
+        path = self._resolve_hd_path(self._current_photo)
+        if not path:
+            return
+        src = QImageReader(path).size()     # 仅读头部 / header only
+        if src.isValid() and max(src.width(), src.height()) <= _HD_CACHE_MAX_EDGE:
+            return
+        self._fullres_loader = _ImageLoader(path, self)   # max_edge=None → 全分辨率
+        _path_capture = path
+        self._fullres_loader.ready.connect(
+            lambda img, p=_path_capture: self._on_fullres_ready(img, p)
+        )
+        self._fullres_loader.finished.connect(self._fullres_loader.deleteLater)
+        self._fullres_loader.start()
+
+    @Slot(object)
+    def _on_fullres_ready(self, img: QImage, path: str):
+        """
+        全分辨率补解完成:仍是当前照片时替换显示,并保持视图变换不跳
+        (封顶图→全图分辨率不同,等比换算 display_scale;锁定缩放沿用锁定值)。
+
+        Full-res top-up done: swap it in if the photo is still current,
+        preserving the on-screen transform (scale is re-based because the
+        capped and full images differ in pixel size).
+        """
+        if img.isNull() or not self._current_photo:
+            return
+        if path != self._resolve_hd_path(self._current_photo):
+            return                          # 用户已切走 / user moved on
+        lbl = self._img_label
+        old_px = lbl._pixmap
+        was_manual = (not lbl._fit_mode) and old_px is not None and not old_px.isNull()
+        old_w = old_px.width() if was_manual else 0
+        old_scale, old_ox, old_oy = lbl._display_scale, lbl._draw_ox, lbl._draw_oy
+        px = QPixmap.fromImage(img)
+        lbl.set_pixmap(px)                  # 重置为 fit / resets to fit
+        if self._zoom_locked:
+            lbl.restore_zoom(self._locked_scale, self._locked_ox, self._locked_oy)
+        elif was_manual and px.width() > 0:
+            # 等比换算:保持屏幕上看到的内容与位置完全不变
+            lbl.restore_zoom(old_scale * old_w / px.width(), old_ox, old_oy)
 
     def _trigger_preload(self, current_photo: dict):
         """
@@ -1348,10 +1624,18 @@ class FullscreenViewer(QWidget):
     def keyPressEvent(self, event):
         from PySide6.QtCore import Qt as _Qt
         key = event.key()
-        if key in (_Qt.Key_Left, _Qt.Key_Up):
+        if key == _Qt.Key_Left:
             self.prev_requested.emit()
-        elif key in (_Qt.Key_Right, _Qt.Key_Down):
+        elif key == _Qt.Key_Right:
             self.next_requested.emit()
+        elif key in (_Qt.Key_Up, _Qt.Key_Down,
+                     _Qt.Key_0, _Qt.Key_1, _Qt.Key_2, _Qt.Key_3):
+            # 键盘打星交给宿主窗口处理(Paul P0-3):忽略事件让其冒泡到
+            # ResultsBrowserWindow.keyPressEvent 的打星分支。
+            # Keyboard rating is handled by the host window — ignore the
+            # event so it bubbles up to the host's rating branch.
+            event.ignore()
+            super().keyPressEvent(event)
         elif key == _Qt.Key_F:
             self.toggle_focus()
         elif key == _Qt.Key_Z:

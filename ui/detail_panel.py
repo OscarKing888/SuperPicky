@@ -5,6 +5,10 @@ DetailPanel: 大图预览 + 元数据展示 + 上一张/下一张导航
 """
 
 import os
+
+from tools.file_utils import sibling_jpeg
+from tools.species_display import species_display_text
+from tools.pinyin_names import pinyin_for_ui
 from typing import Optional
 
 from PySide6.QtWidgets import (
@@ -13,20 +17,28 @@ from PySide6.QtWidgets import (
     QSizePolicy, QToolButton
 )
 from PySide6.QtCore import Qt, Signal, QSize, QThread, Slot, QTimer
-from PySide6.QtGui import QPixmap, QFont, QGuiApplication, QImage
+from PySide6.QtGui import QPixmap, QFont, QGuiApplication, QImage, QImageReader
 
 from ui.styles import COLORS, FONTS
-from ui.icon_utils import load_tinted_icon, stars_pixmap, tinted_png_path, ICON_IDLE, ICON_ACTIVE
+from ui.icon_utils import load_tinted_icon, stars_pixmap, tinted_png_path, glyph_png_path, ICON_IDLE, ICON_ACTIVE
 from core.rarity_tier import gbif_score_to_tier, tier_name, tier_icon, tier_color
+from core.custom_rarity import lookup_index as lookup_custom_rarity
 
 
 # ============================================================
 #  后台异步图片加载器
 # ============================================================
 
+# 详情面板预览的最大解码边长。面板固定 300 宽 / 200 高,解码全尺寸
+# temp JPEG(实测 4608×3072)纯属浪费;1024 已远超显示所需并留缩放余量。
+# Max decode edge for the detail preview. The panel is fixed at 300×200,
+# so decoding the full temp JPEG (4608×3072 in practice) is wasted work.
+_DETAIL_MAX_EDGE = 1024
+
+
 class _ImageLoader(QThread):
-    """后台线程加载 QPixmap，避免主线程阻塞。"""
-    ready = Signal(object)   # QPixmap
+    """后台线程加载 QImage(解码期降采样到 _DETAIL_MAX_EDGE),避免主线程阻塞。"""
+    ready = Signal(object)   # QImage
 
     def __init__(self, path: str, parent=None):
         super().__init__(parent)
@@ -40,7 +52,21 @@ class _ImageLoader(QThread):
         if self._cancelled:
             return
         if self._path and os.path.exists(self._path):
-            img = QImage(self._path)
+            # QImageReader.setScaledSize: JPEG 走 libjpeg DCT 降采样解码,
+            # 14MP 预览图不再全尺寸解码(详情面板只有 300×200 显示区)。
+            # Decode-time downscaling via libjpeg DCT scaling.
+            reader = QImageReader(self._path)
+            reader.setAutoTransform(True)
+            src = reader.size()
+            if src.isValid() and max(src.width(), src.height()) > _DETAIL_MAX_EDGE:
+                scale = _DETAIL_MAX_EDGE / max(src.width(), src.height())
+                reader.setScaledSize(QSize(
+                    max(1, round(src.width() * scale)),
+                    max(1, round(src.height() * scale)),
+                ))
+            img = reader.read()
+            if img is None:
+                img = QImage()
             if not self._cancelled:
                 self.ready.emit(img)
         else:
@@ -411,6 +437,9 @@ class DetailPanel(QWidget):
         # V4.2.7: GBIF 全球罕见度（0-100 分制，AWS Open Data 2026-05 snapshot 派生）
         # V4.2.7: GBIF-derived global rarity (0-100, from AWS Open Data snapshot)
         self._val_gbif_rarity = _make_value_label()
+        # iRateBird 鸟种颜值标签（0-100 分制，独立于逐张 TOPIQ 美学分）
+        # iRateBird species-beauty label (0-100, distinct from the per-photo TOPIQ aesthetic score)
+        self._val_species_beauty = _make_value_label()
         self._val_focus = _make_value_label()
         self._val_sharpness = _make_value_label()
         self._val_aesthetic = _make_value_label()
@@ -424,6 +453,15 @@ class DetailPanel(QWidget):
         self._val_species.setCursor(Qt.PointingHandCursor)
         self._val_species.clicked.connect(self._on_species_clicked)
         self._species_revert_text: Optional[str] = None
+        # 中文鸟名的汉语拼音，紧跟鸟名之后、铅笔按钮之前。
+        # 独立成一个 label 而不是并进 _val_species：那个 label 点击即复制鸟名
+        # （_on_species_clicked 取的就是它的 text()），混入拼音会让用户复制到
+        # 「家燕 jiā yàn」。英文界面下本标签恒为空串。
+        # A separate label: _val_species is click-to-copy, so the pinyin must
+        # not live inside its text. Always empty on an English UI.
+        self._val_species_pinyin = QLabel("")
+        self._val_species_pinyin.setStyleSheet(
+            f"color: {COLORS['text_muted']}; font-size: 11px; background: transparent;")
         # V4.2.7: IUCN 红色名录等级，紧贴鸟种之下显示
         # V4.2.7: IUCN Red List category, pinned directly under Species
         self._val_iucn = _make_value_label()
@@ -443,13 +481,45 @@ class DetailPanel(QWidget):
         self._val_caption.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 11px; font-family: {FONTS['mono']}; background: transparent;")
         self._val_caption.setWordWrap(True)
 
-        # 鸟种、文件名不在此显示(已移至大图顶条:鸟种居中 / 文件名右侧),避免重复。
-        # Species & filename are shown in the big-image top strip instead (centered species
-        # / right-aligned filename), so they are intentionally omitted here.
+        # 文件名仍只在大图顶条显示;鸟种行按用户反馈(Paul P0-2)加回详情面板,
+        # 置于全球罕见度上方,点击可复制鸟名(复用 _val_species 既有行为)。
+        # The filename stays in the big-image top strip only; the species row
+        # returns to the panel (above GBIF rarity) per user feedback, keeping
+        # the existing click-to-copy behavior of _val_species.
+        # issue #106: 鸟名右侧加铅笔按钮 → 发射 species_edit_requested,
+        # 由浏览器窗口打开鸟种编辑弹窗(改名/补录 + 移动目录)。
+        # issue #106: a pencil button next to the species emits
+        # species_edit_requested; the browser opens the edit dialog.
+        self._species_edit_btn = QToolButton()
+        self._species_edit_btn.setIcon(
+            load_tinted_icon("square-pen.svg", COLORS['text_muted'], size=13))
+        self._species_edit_btn.setIconSize(QSize(13, 13))
+        self._species_edit_btn.setFixedSize(18, 18)
+        self._species_edit_btn.setCursor(Qt.PointingHandCursor)
+        self._species_edit_btn.setFocusPolicy(Qt.NoFocus)
+        self._species_edit_btn.setToolTip(self.i18n.t("fullscreen.tb_species"))
+        self._species_edit_btn.setStyleSheet(f"""
+            QToolButton {{ border: none; background: transparent; }}
+            QToolButton:hover {{ background: {COLORS['accent_dim']}; border-radius: 4px; }}
+        """)
+        self._species_edit_btn.clicked.connect(self._on_species_edit_clicked)
+
+        species_row = QWidget()
+        species_row_lay = QHBoxLayout(species_row)
+        species_row_lay.setContentsMargins(0, 0, 0, 0)
+        species_row_lay.setSpacing(4)
+        species_row_lay.addWidget(self._val_species)
+        species_row_lay.addWidget(self._val_species_pinyin)
+        species_row_lay.addWidget(self._species_edit_btn)
+        species_row_lay.addStretch(1)
+
         rows = [
-            # V4.2.7: 鸟类信息 3 行连续（鸟种 → 全球罕见度 → IUCN）
-            # V4.2.7: Three bird-related rows kept adjacent for natural reading.
+            # 鸟类信息 4 行连续（鸟种 → 全球罕见度 → 鸟种颜值 → IUCN）
+            # Four bird-related rows kept adjacent for natural reading
+            # (species -> global rarity -> species beauty -> IUCN).
+            ("browser.meta_species",    species_row),
             ("browser.meta_gbif_rarity", self._val_gbif_rarity),
+            ("browser.meta_species_beauty", self._val_species_beauty),
             ("browser.meta_iucn",       self._val_iucn),
             ("browser.meta_focus",      self._val_focus),
             ("browser.meta_sharpness",  self._val_sharpness),
@@ -464,6 +534,8 @@ class DetailPanel(QWidget):
             ("browser.meta_filesize",   self._val_filesize),
             ("browser.meta_datetime",   self._val_datetime),
         ]
+        # 供测试断言行序 / kept for tests asserting row order
+        self._meta_rows = rows
         for key, val_widget in rows:
             form.addRow(_lbl(key), val_widget)
 
@@ -537,6 +609,24 @@ class DetailPanel(QWidget):
         self._refresh_image()
         self._refresh_metadata()
 
+    def set_current_photo(self, photo: dict):
+        """
+        仅同步当前照片与元数据,不触发大图解码。
+        供全屏导航期间调用:面板被 QStackedWidget 盖住不可见,解码大图纯属
+        浪费 IO/CPU;退出全屏时 _switch_view 会用同步好的照片刷新一次图片。
+
+        Sync the current photo and metadata WITHOUT loading the image.
+        Used during fullscreen navigation where the panel is hidden behind
+        the stacked widget — decoding for it wastes IO/CPU. On fullscreen
+        exit, _switch_view refreshes the image once from the synced photo.
+
+        参数 / Parameters:
+            photo (dict): 照片记录 / photo record.
+        """
+        self._current_photo = photo
+        self._copy_exif_btn.setEnabled(True)
+        self._refresh_metadata()
+
     def clear(self):
         """清空面板。"""
         self._current_photo = None
@@ -544,6 +634,7 @@ class DetailPanel(QWidget):
         self._img_label.set_pixmap(QPixmap())
         for val in (
             self._val_gbif_rarity,
+            self._val_species_beauty,
             self._val_focus, self._val_sharpness,
             self._val_aesthetic, self._val_flying, self._val_species,
             self._val_iucn,
@@ -623,10 +714,15 @@ class DetailPanel(QWidget):
         iso = p.get("iso")
         conf = p.get("confidence")
 
-        if is_zh:
-            species = p.get("bird_species_cn") or p.get("bird_species_en") or "—"
-        else:
-            species = p.get("bird_species_en") or p.get("bird_species_cn") or "—"
+        # 确认鸟种优先；无确认鸟种时显示待确定候选「鸟名（待确定 N%）」
+        # Confirmed species first; otherwise the unconfirmed candidate
+        species = species_display_text(
+            p,
+            is_en=not is_zh,
+            format_unconfirmed=lambda name, conf: self.i18n.t(
+                "birdid.species_unconfirmed", name=name, confidence=conf
+            ),
+        ) or "—"
 
         gbif_r = p.get("gbif_rarity_100")
         iucn_raw = p.get("iucn_category")
@@ -677,6 +773,17 @@ class DetailPanel(QWidget):
         self._val_species.setText(self.i18n.t("browser.species_copied"))
         self._val_species.setToolTip(self.i18n.t("browser.species_copied"))
         QTimer.singleShot(1500, self._restore_species_text)
+
+    def _on_species_edit_clicked(self):
+        """
+        点击鸟名旁铅笔 → 发射 species_edit_requested(issue #106)。
+        浏览器窗口接线到既有 _on_species_edit_requested 打开编辑弹窗。
+
+        Pencil next to the species emits species_edit_requested (issue
+        #106); the browser window opens the existing edit dialog.
+        """
+        if self._current_photo:
+            self.species_edit_requested.emit(dict(self._current_photo))
 
     def _restore_species_text(self):
         """1.5s 后把鸟种行文本恢复（仅当用户没切换照片）。"""
@@ -734,62 +841,87 @@ class DetailPanel(QWidget):
         self._refresh_image()
 
     def _refresh_image(self):
-        # 取消上一个未完成的加载
-        if self._loader and self._loader.isRunning():
+        # 取消上一个未完成的加载:断开信号防旧图晚到覆盖新图,不在主线程 wait
+        # (旧 wait(100) 让快速切图时每次白等最多 100ms;cancel 标志已保证
+        # 解码完成后不再 emit,断开信号双保险)。
+        # Cancel the previous load: disconnect so a late result can't
+        # overwrite the new photo; never block the GUI thread waiting.
+        if self._loader:
             self._loader.cancel()
-            self._loader.wait(100)
+            try:
+                self._loader.ready.disconnect(self._on_image_ready)
+            except (RuntimeError, TypeError):
+                pass
             self._loader = None
 
         if not self._current_photo:
             self._img_label.set_pixmap(QPixmap())
             return
 
-        # 立即显示 grid 缓存缩略图（零延迟反馈）
+        # 立即显示 grid 缓存缩略图(零延迟反馈)。缓存键是 _photo_key 身份键
+        # (干净图,不含角标),打星等状态变化后依然命中。
+        # Show the grid's cached thumbnail instantly. The cache is keyed by
+        # identity (_photo_key) and stores clean images, so it still hits
+        # right after a rating change.
         try:
-            from ui.thumbnail_grid import _thumb_cache
-            fn = self._current_photo.get("filename", "")
-            cached = _thumb_cache.get(fn)
+            from ui.thumbnail_grid import _thumb_cache, _photo_key
+            cached = _thumb_cache.get(_photo_key(self._current_photo))
             if cached and not cached.isNull():
-                self._img_label.set_pixmap(cached)
+                self._img_label.set_pixmap(QPixmap.fromImage(cached))
         except Exception:
             pass
 
         # 解析目标路径
         path = self._resolve_image_path()
 
-        # 后台异步加载全图
+        # 后台异步加载大图(完成后自行销毁,避免 QThread 对象随导航累积)
+        # Async load; the loader deletes itself when done so QThread
+        # objects no longer accumulate with every navigation.
         if path:
             self._loader = _ImageLoader(path, self)
             self._loader.ready.connect(self._on_image_ready)
+            self._loader.finished.connect(self._loader.deleteLater)
             self._loader.start()
         else:
             self._img_label.set_pixmap(QPixmap())
 
     def cleanup(self):
         if self._loader:
-            self._loader.cancel()
-            if self._loader.isRunning():
-                self._loader.wait(1000)
+            try:
+                self._loader.cancel()
+                if self._loader.isRunning():
+                    self._loader.wait(1000)
+            except RuntimeError:
+                # loader 已 deleteLater 销毁 / already destroyed via deleteLater
+                pass
             self._loader = None
 
     def _resolve_image_path(self) -> Optional[str]:
         """根据当前视图模式解析目标图片路径。"""
         p = self._current_photo
         if self._use_crop_view:
-            # 裁切图：YOLO 裁切区域，退而用干净大图
+            # 裁切诊断视图：显示带对焦十字/头圈/mask 的裁切图,缺失时退而用干净大图。
+            # Crop-diagnostic view: the annotated crop; fall back to the clean image.
             path = p.get("debug_crop_path")
             if not path or not os.path.exists(path):
                 path = p.get("temp_jpeg_path")
         else:
-            # 全图：干净 temp JPEG（无检测框叠加）
+            # 全图：只显示干净原图(temp JPEG → 原始 JPEG),绝不回退到带标注的
+            # debug_crop_path,与 grid / 全屏 HD 链路保持一致。
+            # Full-image view: clean image only (temp JPEG → original JPEG); never
+            # fall back to the annotated debug_crop_path.
             path = p.get("temp_jpeg_path")
-            if not path or not os.path.exists(path):
-                path = p.get("debug_crop_path")
 
         if not path or not os.path.exists(path):
-            op = p.get("original_path") or p.get("current_path")
-            if op and os.path.exists(op) and os.path.splitext(op)[1].lower() in ('.jpg', '.jpeg'):
-                path = op
+            # temp_jpeg 失同步时,从可靠的 current_path 推导同目录同名 JPG 边车;
+            # 再退到本身即为 JPG 的原文件。
+            # Fall back to the JPG sibling derived from the reliable current path,
+            # then to the original file if it is itself a JPG.
+            path = sibling_jpeg(p.get("current_path")) or sibling_jpeg(p.get("original_path"))
+            if not path:
+                op = p.get("original_path") or p.get("current_path")
+                if op and os.path.exists(op) and os.path.splitext(op)[1].lower() in ('.jpg', '.jpeg'):
+                    path = op
 
         return path if path and os.path.exists(path) else None
 
@@ -841,16 +973,51 @@ class DetailPanel(QWidget):
         if gbif_r is not None:
             tidx = gbif_score_to_tier(gbif_r)
             is_zh = not self.i18n.current_lang.startswith('en')
-            icon = tier_icon(tidx)
             name = tier_name(tidx, is_zh=is_zh)
             color = tier_color(tidx) or COLORS['text_primary']
-            self._val_gbif_rarity.setText(f"{icon} {name}  ({gbif_r:.1f})")
+            # 罕见度图标用归一化 glyph(富文本内联),统一 ○◔◑◕● 大小;染 tier 颜色
+            icon_png = glyph_png_path(tier_icon(tidx), color, 14)
+            # 用户若装了自定义罕见指数（可选外部数据），并排显示作参照。
+            # 数据缺席是常态，此时保持原样只显示 GBIF；排序与评星一律仍按
+            # GBIF，此处纯展示。
+            # Show the optional custom index alongside when present; display
+            # only — ranking and stars still use GBIF.
+            dn_idx = lookup_custom_rarity(
+                p.get("bird_species_cn"), p.get("bird_species_en")
+            )
+            # 自定义指数保留两位小数：这类 0-10 的评分取值往往高度集中
+            # （实测一份万余种的数据，截成一位会把 572 个不同取值压成 87 档），
+            # 少一位就丢掉大部分区分度。GBIF 是 0-100 尺度，一位足够。
+            # Keep two decimals: 0-10 scores tend to cluster, and one decimal
+            # would collapse most of the distinguishing detail.
+            score_text = (
+                f"{gbif_r:.1f} - {dn_idx:.2f}" if dn_idx is not None
+                else f"{gbif_r:.1f}"
+            )
+            self._val_gbif_rarity.setText(
+                f'<img src="{icon_png}" width="14" height="14" style="vertical-align:middle;">'
+                f'  {name}  ({score_text})'
+            )
             self._val_gbif_rarity.setStyleSheet(
                 f"color: {color}; font-size: 13px; font-weight: 600; background: transparent;"
             )
         else:
             self._val_gbif_rarity.setText(_unknown)
             self._val_gbif_rarity.setStyleSheet(
+                f"color: {COLORS['text_primary']}; font-size: 12px; background: transparent;"
+            )
+
+        # iRateBird 鸟种颜值（0–100，无数据显示占位）
+        # iRateBird species beauty (0–100, placeholder when missing)
+        beauty = p.get("aesthetic_index")
+        if beauty is not None:
+            self._val_species_beauty.setText(f"{beauty:.0f}")
+            self._val_species_beauty.setStyleSheet(
+                f"color: {COLORS['text_primary']}; font-size: 13px; font-weight: 600; background: transparent;"
+            )
+        else:
+            self._val_species_beauty.setText(_unknown)
+            self._val_species_beauty.setStyleSheet(
                 f"color: {COLORS['text_primary']}; font-size: 12px; background: transparent;"
             )
 
@@ -902,6 +1069,16 @@ class DetailPanel(QWidget):
             species = p.get("bird_species_cn") or p.get("bird_species_en") or _unknown
         self._val_species.setText(species)
         self._val_species.setToolTip(species)
+
+        # 拼音跟着鸟种一起刷新，且**必须无条件 setText**：这个标签是复用的，
+        # 只在查到时赋值的话，切到一张查不到拼音的照片时会留着上一只鸟的拼音，
+        # 挂在一个完全不相干的鸟名旁边。
+        # Always setText: the label is reused across photos, so a miss must
+        # clear it rather than leave the previous bird's reading behind.
+        self._val_species_pinyin.setText(
+            pinyin_for_ui(p.get("bird_species_cn"),
+                          is_zh=not self.i18n.current_lang.startswith('en'))
+        )
 
         # IUCN 红色名录（中英全名 + 缩写，按官方色着色）
         # IUCN Red List (full name + abbreviation, official color)

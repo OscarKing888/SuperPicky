@@ -19,7 +19,7 @@ from typing import Dict, List, Optional, Set
 
 import torch
 from PIL import Image
-from torchvision import models, transforms
+from torchvision import models
 from config import (
     get_best_device,
     get_install_scoped_resource_path,
@@ -108,21 +108,17 @@ def _get_resource_path(relative_path: str) -> Path:
 DEVICE = get_best_device()
 
 
-CENTER_CROP_TRANSFORM = transforms.Compose(
-    [
-        transforms.Resize(256),
-        transforms.CenterCrop(224),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-    ]
-)
-
-BASELINE_TRANSFORM = transforms.Compose(
-    [
-        transforms.Resize((224, 224)),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-    ]
+# V4.5: transform 与温度从 birdid/osea_preprocess.py 单一事实源导入，与
+# bird_identifier.py 主流程共享同一份定义（此前两处逐字复制靠注释人工同步，
+# 漂移曾导致 CLI --model osea 与 GUI 默认路径识别结果不一致）。
+# V4.5: Transforms and temperature are imported from the SSOT module
+# birdid/osea_preprocess.py, shared with the bird_identifier.py pipeline
+# (previously copy-pasted in both files and kept in sync only by a comment —
+# drift once made `--model osea` diverge from the GUI's default path).
+from birdid.osea_preprocess import (
+    OSEA_TEMPERATURE,
+    OSEA_TRANSFORM,
+    OSEA_TRANSFORM_DIRECT,
 )
 
 
@@ -133,8 +129,19 @@ class OSEAClassifier:
     Attributes:
         model: ResNet34 模型
         bird_info: 物种信息列表 [[cn_name, en_name, scientific_name], ...]，从 bird_reference.sqlite 加载
-        transform: 图像预处理 transform
         num_classes: 物种数量 (10964)
+
+    V4.4: 预处理 transform 不再在构造时固定，而是按每次调用是否传入
+    is_yolo_cropped 动态选择（与 bird_identifier.predict_bird 对齐）——同一个
+    分类器实例既可能收到整图，也可能收到已经过 YOLO 裁剪的紧凑方形图，两种
+    输入需要不同的 resize/crop 策略，不能在实例化时一次性写死。
+
+    V4.4: The preprocessing transform is no longer fixed at construction time;
+    it is now chosen per call via `is_yolo_cropped` (mirroring
+    bird_identifier.predict_bird). The same classifier instance may receive
+    either a full uncropped frame or an already YOLO-cropped tight square, and
+    those need different resize/crop strategies, so it cannot be baked in once
+    at __init__ time.
     """
 
     DEFAULT_MODEL_PATH = "models/model20240824.pth"
@@ -143,7 +150,6 @@ class OSEAClassifier:
     def __init__(
         self,
         model_path: Optional[str] = None,
-        use_center_crop: bool = True,
         device: Optional[torch.device] = None,
     ):
         """
@@ -151,14 +157,9 @@ class OSEAClassifier:
 
         Args:
             model_path: 模型文件路径 (默认: models/model20240824.pth)
-            use_center_crop: 是否使用中心裁剪预处理 (推荐: True)
             device: 计算设备 (默认: 自动检测)
         """
         self.device = device or DEVICE
-        self.use_center_crop = use_center_crop
-        self.transform = (
-            CENTER_CROP_TRANSFORM if use_center_crop else BASELINE_TRANSFORM
-        )
 
         self.model_path = model_path or str(_get_resource_path(self.DEFAULT_MODEL_PATH))
         self.model = self._load_model()
@@ -221,8 +222,9 @@ class OSEAClassifier:
         self,
         image: Image.Image,
         top_k: int = 5,
-        temperature: float = 1.0,
+        temperature: float = OSEA_TEMPERATURE,
         ebird_species_set: Optional[Set[str]] = None,
+        is_yolo_cropped: bool = False,
     ) -> List[Dict]:
         """
         预测鸟类物种
@@ -230,8 +232,13 @@ class OSEAClassifier:
         Args:
             image: PIL Image 对象 (RGB)
             top_k: 返回前 K 个结果
-            temperature: softmax 温度参数 (1.0 为标准, <1 更尖锐, >1 更平滑)
+            temperature: softmax 温度参数，默认 0.9 与 bird_identifier.predict_bird
+                保持一致 (<1 更尖锐, >1 更平滑)
             ebird_species_set: eBird 物种代码集合 (用于过滤)
+            is_yolo_cropped: image 是否已经过 YOLO 裁剪成紧凑方形图。True 时用
+                直接 resize (对齐 OSEA_TRANSFORM_DIRECT)，False 时用
+                Resize+CenterCrop (对齐 OSEA_TRANSFORM)，与主选片流程的
+                predict_bird() 语义一致，避免同一张图在两条路径上被裁两次。
 
         Returns:
             识别结果列表 [{cn_name, en_name, scientific_name, confidence, class_id}, ...]
@@ -239,7 +246,8 @@ class OSEAClassifier:
         if image.mode != "RGB":
             image = image.convert("RGB")
 
-        input_tensor = self.transform(image).unsqueeze(0).to(self.device)
+        transform = OSEA_TRANSFORM_DIRECT if is_yolo_cropped else OSEA_TRANSFORM
+        input_tensor = transform(image).unsqueeze(0).to(self.device)
 
         self.model.eval()
         with torch.no_grad():
@@ -285,22 +293,27 @@ class OSEAClassifier:
         self,
         image: Image.Image,
         top_k: int = 5,
-        temperature: float = 1.0,
+        temperature: float = OSEA_TEMPERATURE,
         ebird_species_set: Optional[Set[str]] = None,
+        is_yolo_cropped: bool = False,
     ) -> List[Dict]:
         """
         使用 TTA (Test-Time Augmentation) 预测
 
         TTA 策略: 原图 + 水平翻转取平均
         推理时间翻倍，但可能提高准确率
+
+        is_yolo_cropped 语义与 predict() 相同：见该方法的参数说明。
+        `is_yolo_cropped` has the same meaning as in predict(); see its docstring.
         """
         if image.mode != "RGB":
             image = image.convert("RGB")
 
-        input1 = self.transform(image).unsqueeze(0).to(self.device)
+        transform = OSEA_TRANSFORM_DIRECT if is_yolo_cropped else OSEA_TRANSFORM
+        input1 = transform(image).unsqueeze(0).to(self.device)
 
         flipped = image.transpose(Image.FLIP_LEFT_RIGHT)
-        input2 = self.transform(flipped).unsqueeze(0).to(self.device)
+        input2 = transform(flipped).unsqueeze(0).to(self.device)
 
         self.model.eval()
         with torch.no_grad():

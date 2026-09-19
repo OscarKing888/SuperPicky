@@ -15,6 +15,7 @@ from PySide6.QtGui import QKeyEvent
 
 from ui.styles import COLORS, FONTS
 from ui.fullscreen_viewer import _FullscreenImageLabel, _ImageLoader
+from tools.file_utils import sibling_jpeg
 
 
 class ComparisonViewer(QWidget):
@@ -184,7 +185,9 @@ class ComparisonViewer(QWidget):
             btn = QPushButton("★" * i)
             btn.setFixedHeight(36)
             btn.setFixedWidth(36 + i * 14)  # 50 / 64 / 78 / 92 / 106 px
-            btn.setToolTip(f"给左图评 {i} 星  [键盘: {i}]")
+            btn.setToolTip(
+                self.i18n.t("browser.compare_rate_left", stars=i, shortcut=i)
+            )
             btn.setStyleSheet(self._star_btn_style(active=False))
             _i = i
             btn.clicked.connect(lambda _=None, stars=_i: self._rate_left(stars))
@@ -200,7 +203,11 @@ class ComparisonViewer(QWidget):
             btn = QPushButton("★" * i)
             btn.setFixedHeight(36)
             btn.setFixedWidth(36 + i * 14)  # 50 / 64 / 78 / 92 / 106 px
-            btn.setToolTip(f"给右图评 {i} 星  [键盘: {_keys_b[i-1]}]")
+            btn.setToolTip(
+                self.i18n.t(
+                    "browser.compare_rate_right", stars=i, shortcut=_keys_b[i - 1]
+                )
+            )
             btn.setStyleSheet(self._star_btn_style(active=False))
             _i = i
             btn.clicked.connect(lambda _=None, stars=_i: self._rate_right(stars))
@@ -319,13 +326,25 @@ class ComparisonViewer(QWidget):
         setattr(self, loader_attr, loader)
 
     def _resolve_path(self, photo: dict) -> Optional[str]:
-        """按优先级解析高清图路径。"""
-        for key in ("temp_jpeg_path", "yolo_debug_path", "debug_crop_path", "original_path", "current_path"):
+        """
+        按优先级解析对比用的「干净原图」路径:temp_jpeg → 原始 JPEG。
+        刻意不含带标注的 debug 图(yolo_debug_path/debug_crop_path),与 grid、
+        详情·全图、全屏 HD 链路保持一致——对比看的是原图,不是检测框调试图。
+        Resolve the clean image path for comparison (temp_jpeg → original JPEG);
+        annotated debug artifacts are excluded, matching the other view paths.
+        """
+        tjp = photo.get("temp_jpeg_path")
+        if tjp and os.path.exists(tjp):
+            return tjp
+        # temp_jpeg 失同步时,从可靠 current_path 推导同目录同名 JPG 边车。
+        # Fall back to the JPG sibling derived from the reliable current path.
+        sib = sibling_jpeg(photo.get("current_path")) or sibling_jpeg(photo.get("original_path"))
+        if sib:
+            return sib
+        for key in ("original_path", "current_path"):
             p = photo.get(key)
-            if p and os.path.exists(p):
-                ext = os.path.splitext(p)[1].lower()
-                if key in ("temp_jpeg_path", "yolo_debug_path", "debug_crop_path") or ext in ('.jpg', '.jpeg'):
-                    return p
+            if p and os.path.exists(p) and os.path.splitext(p)[1].lower() in ('.jpg', '.jpeg'):
+                return p
         return None
 
     def _rate_left(self, stars: int):

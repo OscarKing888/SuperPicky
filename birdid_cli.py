@@ -46,7 +46,7 @@ def identify_single_birdid2024(args, image_path: str) -> dict:
         image_path,
         use_yolo=args.yolo,
         use_gps=args.gps,
-        use_ebird=args.ebird,
+        use_geo_filter=args.ebird,
         country_code=args.country,
         region_code=args.region,
         top_k=args.top
@@ -79,6 +79,15 @@ def identify_single_osea(args, image_path: str) -> dict:
         focus_point = _read_focus_point_for_path(image_path)
 
         # YOLO 裁剪 (可选)
+        # V4.4: 记录是否真的裁剪成功，传给分类器选择对应的 transform
+        # （已裁剪用直接 resize，未裁剪用 Resize+CenterCrop），否则已经是紧凑
+        # 方形图的输入会被 CenterCrop 二次裁切，与 GUI 默认路径的结果不一致。
+        # V4.4: Track whether the YOLO crop actually succeeded so we can tell
+        # the classifier which transform to use (direct resize for an
+        # already-cropped image vs. Resize+CenterCrop otherwise); without this
+        # an already-tight square crop gets center-cropped a second time and
+        # diverges from the GUI's default recognition path.
+        is_yolo_cropped = False
         if args.yolo and YOLO_AVAILABLE:
             width, height = image.size
             if max(width, height) > 640:
@@ -89,6 +98,7 @@ def identify_single_osea(args, image_path: str) -> dict:
                     )
                     if cropped:
                         image = cropped
+                        is_yolo_cropped = True
                         result['yolo_info'] = info
                     else:
                         # 严格模式：YOLO 未检测到鸟类，直接短路返回
@@ -103,9 +113,13 @@ def identify_single_osea(args, image_path: str) -> dict:
         # 预测
         use_tta = getattr(args, 'tta', False)
         if use_tta:
-            predictions = classifier.predict_with_tta(image, top_k=args.top)
+            predictions = classifier.predict_with_tta(
+                image, top_k=args.top, is_yolo_cropped=is_yolo_cropped
+            )
         else:
-            predictions = classifier.predict(image, top_k=args.top)
+            predictions = classifier.predict(
+                image, top_k=args.top, is_yolo_cropped=is_yolo_cropped
+            )
 
         result['success'] = True
         result['results'] = predictions
@@ -137,15 +151,9 @@ def display_result(result: dict, verbose: bool = True):
             gps = result['gps_info']
             print(t("cli.gps_info", info=gps['info']))
 
-        if result.get('ebird_info'):
-            ebird = result['ebird_info']
-            if ebird.get('enabled'):
-                print(t("cli.ebird_info", region=ebird.get('region_code', 'N/A'), count=ebird.get('species_count', 0)))
-            # 回退提示（优先国家级，其次全局）
-            if ebird.get('country_fallback'):
-                print(f"⚠️  {t('server.country_fallback_warning', country=ebird.get('country_code', '?'))}")
-            elif ebird.get('gps_fallback'):
-                print(f"⚠️  {t('server.gps_fallback_warning', count=ebird.get('species_count', 0))}")
+        if result.get('geo_info'):
+            from birdid.geo_filter import describe_tier
+            print(describe_tier(result['geo_info']))
     
     results = result.get('results', [])
     if not results:
@@ -411,7 +419,7 @@ def cmd_organize(args):
                 image_path,
                 use_yolo=True,
                 use_gps=True,
-                use_ebird=args.ebird,
+                use_geo_filter=args.ebird,
                 country_code=args.country,
                 region_code=args.region,
                 top_k=1

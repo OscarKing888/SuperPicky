@@ -11,7 +11,6 @@ and compatibility with offline resource paths.
 __version__ = "1.0.0"
 
 import torch
-import torchvision.transforms as transforms
 import numpy as np
 from PIL import Image, ImageEnhance, ImageFilter
 from PIL.ExifTags import TAGS, GPSTAGS
@@ -21,6 +20,7 @@ import os
 import sys
 from typing import Any, Optional, List, Dict, Tuple, Set, cast
 from tools.i18n import t as _t
+from birdid.geo_filter import TIER_NONE, get_geo_filter
 from config import (
     get_best_device,
     get_lazy_registry,
@@ -44,45 +44,55 @@ except ImportError:
     imageio = cast(Any, None)
     RAW_SUPPORT = False
 
-# V4.2.7: reverse_geocoder lazy 单例 — 首次用时加载 ~70MB cKDTree 数据，
-# 之后所有线程共享同一个只读索引。
-# V4.2.7: reverse_geocoder lazy singleton — first use loads ~70MB cKDTree,
-# subsequent calls share the read-only index across threads.
 import threading
 
-_RG_LOCK = threading.Lock()
-_RG_INSTANCE: Any = None  # 标记是否已初始化（None 表示未尝试）
-_RG_AVAILABLE = True
+# 分类器推理锁：批处理 BirdID executor 与补救扫描确认可能跨线程并发调用
+# forward，MPS/CUDA 下并发安全性有限，统一串行化。
+# Classifier inference lock: the batch BirdID executor and the rescue-scan
+# confirmation may call forward concurrently from different threads; MPS/CUDA
+# concurrency safety is limited, so all forwards are serialized here.
+_CLASSIFIER_INFER_LOCK = threading.Lock()
 
 
-def _resolve_country_code_from_gps(lat: float, lon: float) -> Optional[str]:
+def _locate_gps(lat: float, lon: float) -> Tuple[Optional[str], Optional[str]]:
     """
-    用 reverse_geocoder 把 GPS 坐标反查成 ISO 3166-1 alpha-2 国家代码。
+    GPS → eBird 国家与省州代码 / GPS to eBird country and subnational codes.
 
-    Convert a GPS coordinate to ISO 3166-1 alpha-2 country code via
-    reverse_geocoder (offline, cKDTree-backed). Returns None when the
-    library is unavailable or the lookup fails.
+    旧实现依赖 reverse_geocoder，但它从未进入打包版，打包版里判国一直静默失效
+    （spec §2.4）。现改用 ebird_regions.db 自带的边界离线定位。
+
+    The old implementation relied on reverse_geocoder, which never shipped in
+    packaged builds, so country lookup silently failed there (spec section 2.4).
+    This uses the boundaries bundled in ebird_regions.db instead.
+
+    参数 / Parameters:
+        lat (float): 纬度 / Latitude.
+        lon (float): 经度 / Longitude.
+
+    返回 / Returns:
+        tuple: (国家代码或 None, 省州代码或 None)；定位器不可用或出错时均为 None /
+            (country or None, subnational or None); both None when unavailable.
     """
-    global _RG_INSTANCE, _RG_AVAILABLE
-    if not _RG_AVAILABLE:
-        return None
     try:
-        if _RG_INSTANCE is None:
-            with _RG_LOCK:
-                if _RG_INSTANCE is None:
-                    import reverse_geocoder as rg
-                    _RG_INSTANCE = rg
-        result = _RG_INSTANCE.search([(lat, lon)], mode=1, verbose=False)
-        if result and result[0].get("cc"):
-            return str(result[0]["cc"]).upper()
-    except Exception:
-        _RG_AVAILABLE = False  # 永久禁用，避免反复 import 失败
-    return None
+        from birdid.region_locator import get_region_locator
+
+        locator = get_region_locator()
+        if locator is None:
+            return None, None
+        located = locator.locate(lat, lon)
+        return located.country, located.subnational
+    except Exception:  # noqa: BLE001
+        return None, None
 
 try:
     from ultralytics import YOLO
 
     YOLO_AVAILABLE = True
+    # ultralytics 导入时会全局 cv2.setNumThreads(0)，立即恢复线程池
+    # ultralytics globally disables the cv2 thread pool at import; restore it
+    from config import ensure_cv2_thread_pool
+
+    ensure_cv2_thread_pool()
 except ImportError:
     YOLO = cast(Any, None)
     YOLO_AVAILABLE = False
@@ -271,8 +281,19 @@ def get_database_manager():
 
             if os.path.exists(DATABASE_PATH):
                 return BirdDatabaseManager(DATABASE_PATH)
+            print(f"[BirdID] 数据库文件不存在，罕见度/IUCN/AviList 命名将不可用: {DATABASE_PATH}")
         except Exception as e:
-            pass
+            # V4.4: 这里以前完全静默——调用方后续都用 `if db_manager:` 跳过相关功能，
+            # 用户只会看到"罕见度/IUCN/AviList 名称全部消失"，却无从判断是数据库损坏、
+            # 权限问题还是别的原因。这个 registry 是进程级单例缓存，只会失败一次就
+            # 定型，所以这条日志只会打印一次，不会刷屏。
+            # V4.4: This used to fail completely silently — callers all guard with
+            # `if db_manager:` and skip the related features, so the user only sees
+            # "rarity/IUCN/AviList names all vanished" with no way to tell whether
+            # it's a corrupt DB, a permissions issue, or something else. The result
+            # is cached for the process lifetime by the lazy registry, so this log
+            # line fires at most once, not on every call.
+            print(f"[BirdID] 数据库管理器初始化失败 / database manager init failed: {e}")
         return False
 
     result = registry.get_or_create("birdid.database_manager", _factory)
@@ -291,23 +312,6 @@ def get_yolo_detector():
             else None
         ),
     )
-
-
-def get_species_filter():
-    registry = get_lazy_registry()
-
-    def _factory():
-        try:
-            from birdid.avonet_filter import AvonetFilter
-
-            filt = AvonetFilter()
-            if filt.is_available():
-                return filt
-        except Exception as e:
-            pass
-        return None
-
-    return registry.get_or_create("birdid.avonet_filter", _factory)
 
 
 class YOLOBirdDetector:
@@ -377,7 +381,14 @@ class YOLOBirdDetector:
             # 默认 640 会把高像素原图直接降采样到 640，杂背景里的远距小鸟被抹掉而漏检。
             # imgsz=1024 matches the picking pipeline; the default 640 downsamples a
             # high-res frame too aggressively and drops small distant birds.
-            results = self.model(img_array, conf=confidence_threshold, imgsz=1024)
+            # V4.4: 显式指定推理设备，与项目统一的 get_best_device() 策略对齐
+            # （Intel Mac 强制 CPU 等规则），避免这里悄悄走 ultralytics 自己的
+            # 默认设备选择、与主选片流程的设备行为不一致。
+            # V4.4: Explicitly pin the inference device to the project-wide
+            # get_best_device() policy (e.g. Intel Mac forced to CPU) instead of
+            # silently falling back to ultralytics' own default device selection,
+            # which could diverge from the main picking pipeline.
+            results = self.model(img_array, conf=confidence_threshold, imgsz=1024, device=CLASSIFIER_DEVICE.type)
 
             detections = []
             for result in results:
@@ -575,33 +586,28 @@ def _load_raw_via_exiftool(image_path: str) -> Image.Image:
     """
     使用 ExifTool 从 RAW 文件提取可解码预览图。
     Extract a decodable preview image from a RAW file via ExifTool.
+
+    复用 tools.exiftool_manager 的常驻进程，而非自行拼路径 + 裸 subprocess：
+    旧实现硬编码 mac-only 路径且从未在 Windows 上传 creationflags=
+    CREATE_NO_WINDOW，导致 Windows 用户处理时弹出一闪而过的控制台窗口。
+
+    Reuse tools.exiftool_manager's persistent process instead of rolling our
+    own path lookup + bare subprocess: the old code hardcoded macOS-only paths
+    and never passed creationflags=CREATE_NO_WINDOW on Windows, flashing a
+    console window during processing.
     """
-    import subprocess
     from io import BytesIO
+    from tools.exiftool_manager import get_exiftool_manager
 
-    possible_paths = []
-    if getattr(sys, "frozen", False):
-        meipass = get_runtime_meipass()
-        if meipass is not None:
-            possible_paths.append(os.path.join(meipass, "exiftools_mac", "exiftool"))
-    possible_paths += [
-        os.path.join(PROJECT_ROOT, "exiftools_mac", "exiftool"),
-        "/opt/homebrew/bin/exiftool",
-        "/usr/local/bin/exiftool",
-        "exiftool",
-    ]
-    exiftool = next((p for p in possible_paths if os.path.isfile(p)), "exiftool")
-
+    manager = get_exiftool_manager()
     for tag in ["-JpgFromRaw", "-PreviewImage", "-ThumbnailImage"]:
         try:
-            result = subprocess.run(
-                [exiftool, "-b", tag, image_path], capture_output=True, timeout=15
-            )
-            if result.returncode == 0 and result.stdout and len(result.stdout) > 1000:
+            data = manager.extract_binary(image_path, tag)
+            if data and len(data) > 1000:
                 # V4.3.0: JpgFromRaw/Preview 自带 Orientation，按方向旋转再转 RGB
-                img = _auto_orient(Image.open(BytesIO(result.stdout))).convert("RGB")
+                img = _auto_orient(Image.open(BytesIO(data))).convert("RGB")
                 return img
-        except Exception as e:
+        except Exception:
             continue
 
     raise Exception(
@@ -633,112 +639,109 @@ def _load_heif(image_path: str) -> Image.Image:
         raise Exception(f"HEIF 解码失败 ({os.path.basename(image_path)}): {e}")
 
 
+def _gps_coords_present(lat: Optional[float], lon: Optional[float]) -> bool:
+    """
+    判断 GPS 坐标是否存在（两者均非 None）。
+
+    0.0 是合法坐标——赤道（lat=0.0）与本初子午线（lon=0.0）——所以这里
+    必须用 `is not None` 而非真值判断；identify_bird 曾因 `if lat and lon:`
+    把这类照片当作无 GPS，导致拍摄国家解析与按国家归一化 rarity 静默失效。
+
+    参数:
+    lat (Optional[float]): 纬度，无 GPS 时为 None
+    lon (Optional[float]): 经度，无 GPS 时为 None
+
+    返回:
+    bool: 两者均非 None 时为 True
+
+    Check whether GPS coordinates are present (both non-None).
+
+    0.0 is a legal coordinate — the equator (lat=0.0) and the prime meridian
+    (lon=0.0) — so this must use `is not None`, never truthiness;
+    identify_bird once used `if lat and lon:` and silently dropped such
+    photos' country resolution and country-aware rarity normalization.
+
+    Parameters:
+    lat (Optional[float]): Latitude, None when GPS is absent
+    lon (Optional[float]): Longitude, None when GPS is absent
+
+    Return:
+    bool: True when both are non-None
+    """
+    return lat is not None and lon is not None
+
+
 def extract_gps_from_exif(
     image_path: str,
 ) -> Tuple[Optional[float], Optional[float], str]:
-    import subprocess
-    import json as json_module
+    """
+    从照片提取 GPS 坐标：优先走 ExifTool，取不到再退回 PIL EXIF。
 
+    复用 tools.exiftool_manager 的常驻进程，而非自行拼路径 + 裸 subprocess：
+    旧实现硬编码 mac-only 路径且从未在 Windows 上传 creationflags=
+    CREATE_NO_WINDOW；这个函数在 identify_bird() 里每张照片都会调用一次，
+    导致 Windows 用户开启识鸟处理文件夹时每张照片都弹一次一闪而过的控制台
+    窗口（关闭识鸟就不会走到这条路径，现象完全对应）。
+
+    Extract GPS coordinates from a photo: try ExifTool first, then fall back
+    to PIL EXIF.
+
+    Reuse tools.exiftool_manager's persistent process instead of rolling our
+    own path lookup + bare subprocess: the old code hardcoded macOS-only paths
+    and never passed creationflags=CREATE_NO_WINDOW on Windows. This function
+    runs once per photo inside identify_bird(), so Windows users saw a console
+    window flash for every photo while Bird ID was on (and never otherwise —
+    matching the exact symptom reported).
+    """
     try:
-        exiftool_paths = [
-            "/usr/local/bin/exiftool",
-            "/opt/homebrew/bin/exiftool",
-            "exiftool",
-        ]
+        from tools.exiftool_manager import get_exiftool_manager
 
-        exiftool_path = None
-        for path in exiftool_paths:
-            try:
-                result = subprocess.run(
-                    [path, "-ver"], capture_output=True, text=False, timeout=5
-                )
-                if result.returncode == 0:
-                    stdout_bytes = result.stdout
-                    decoded_output = None
-                    for encoding in ["utf-8", "gbk", "gb2312", "latin-1"]:
-                        try:
-                            decoded_output = stdout_bytes.decode(encoding)
-                            break
-                        except UnicodeDecodeError:
-                            continue
+        gps_data = get_exiftool_manager().read_metadata(
+            image_path,
+            extra_args=[
+                "-GPSLatitude",
+                "-GPSLongitude",
+                "-GPSLatitudeRef",
+                "-GPSLongitudeRef",
+            ],
+        )
 
-                    if decoded_output is None:
-                        decoded_output = stdout_bytes.decode("latin-1")
+        if gps_data:
+            lat_str = gps_data.get("GPSLatitude", "")
+            lon_str = gps_data.get("GPSLongitude", "")
+            lat_ref = gps_data.get("GPSLatitudeRef", "N")
+            lon_ref = gps_data.get("GPSLongitudeRef", "E")
 
-                    if decoded_output.strip():
-                        exiftool_path = path
-                        break
-            except:
-                continue
+            if lat_str and lon_str:
 
-        if exiftool_path:
-            result = subprocess.run(
-                [
-                    exiftool_path,
-                    "-j",
-                    "-GPSLatitude",
-                    "-GPSLongitude",
-                    "-GPSLatitudeRef",
-                    "-GPSLongitudeRef",
-                    image_path,
-                ],
-                capture_output=True,
-                text=False,
-                timeout=10,
-            )
+                def parse_dms(dms_str):
+                    import re
 
-            if result.returncode == 0 and result.stdout:
-                stdout_bytes = result.stdout
-                decoded_output = None
-                for encoding in ["utf-8", "gbk", "gb2312", "latin-1"]:
+                    match = re.search(
+                        r'(\d+)\s*deg\s*(\d+)\'\s*([\d.]+)"?', str(dms_str)
+                    )
+                    if match:
+                        d, m, s = (
+                            float(match.group(1)),
+                            float(match.group(2)),
+                            float(match.group(3)),
+                        )
+                        return d + m / 60 + s / 3600
                     try:
-                        decoded_output = stdout_bytes.decode(encoding)
-                        break
-                    except UnicodeDecodeError:
-                        continue
+                        return float(dms_str)
+                    except:
+                        return None
 
-                if decoded_output is None:
-                    decoded_output = stdout_bytes.decode("latin-1")
+                lat = parse_dms(lat_str)
+                lon = parse_dms(lon_str)
 
-                data = json_module.loads(decoded_output)
-                if data and len(data) > 0:
-                    gps_data = data[0]
-
-                    lat_str = gps_data.get("GPSLatitude", "")
-                    lon_str = gps_data.get("GPSLongitude", "")
-                    lat_ref = gps_data.get("GPSLatitudeRef", "N")
-                    lon_ref = gps_data.get("GPSLongitudeRef", "E")
-
-                    if lat_str and lon_str:
-
-                        def parse_dms(dms_str):
-                            import re
-
-                            match = re.search(
-                                r'(\d+)\s*deg\s*(\d+)\'\s*([\d.]+)"?', str(dms_str)
-                            )
-                            if match:
-                                d, m, s = (
-                                    float(match.group(1)),
-                                    float(match.group(2)),
-                                    float(match.group(3)),
-                                )
-                                return d + m / 60 + s / 3600
-                            try:
-                                return float(dms_str)
-                            except:
-                                return None
-
-                        lat = parse_dms(lat_str)
-                        lon = parse_dms(lon_str)
-
-                        if lat is not None and lon is not None:
-                            if lat_ref and lat_ref.upper().startswith("S"):
-                                lat = -lat
-                            if lon_ref and lon_ref.upper().startswith("W"):
-                                lon = -lon
-                            return lat, lon, f"GPS: {lat:.6f}, {lon:.6f}"
-    except Exception as e:
+                if lat is not None and lon is not None:
+                    if lat_ref and lat_ref.upper().startswith("S"):
+                        lat = -lat
+                    if lon_ref and lon_ref.upper().startswith("W"):
+                        lon = -lon
+                    return lat, lon, f"GPS: {lat:.6f}, {lon:.6f}"
+    except Exception:
         pass
 
     try:
@@ -816,23 +819,15 @@ def apply_enhancement(image: Image.Image, method: str = "unsharp_mask") -> Image
     return image
 
 
-OSEA_TRANSFORM = transforms.Compose(
-    [
-        transforms.Resize(256),
-        transforms.CenterCrop(224),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-    ]
-)
-
-OSEA_TRANSFORM_DIRECT = transforms.Compose(
-    [
-        transforms.Resize(
-            (224, 224), interpolation=transforms.InterpolationMode.LANCZOS
-        ),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-    ]
+# V4.5: transform 与温度收敛到 birdid/osea_preprocess.py 单一事实源，
+# 与 osea_classifier.py 共享同一份定义，杜绝双份复制漂移。
+# V4.5: Transforms and temperature now come from the shared SSOT module
+# birdid/osea_preprocess.py, shared with osea_classifier.py — no more
+# duplicated definitions drifting apart.
+from birdid.osea_preprocess import (
+    OSEA_TEMPERATURE,
+    OSEA_TRANSFORM,
+    OSEA_TRANSFORM_DIRECT,
 )
 
 
@@ -851,16 +846,17 @@ def predict_bird(
         image = image.convert("RGB")
     transform = OSEA_TRANSFORM_DIRECT if is_yolo_cropped else OSEA_TRANSFORM
     transformed_tensor = cast(torch.Tensor, transform(image))
-    input_tensor = transformed_tensor.unsqueeze(0).to(CLASSIFIER_DEVICE)
+    input_tensor = transformed_tensor.unsqueeze(0)
 
-    with torch.no_grad():
-        output = model(input_tensor)[0]
+    with _CLASSIFIER_INFER_LOCK:
+        input_tensor = input_tensor.to(CLASSIFIER_DEVICE)
+        with torch.no_grad():
+            output = model(input_tensor)[0]
 
     num_classes = min(10964, output.shape[0])
     output = output[:num_classes]
 
-    TEMPERATURE = 0.9
-    best_probs = torch.nn.functional.softmax(output / TEMPERATURE, dim=0)
+    best_probs = torch.nn.functional.softmax(output / OSEA_TEMPERATURE, dim=0)
 
     k = min(100 if species_class_ids else top_k, len(best_probs))
     top_probs, top_indices = torch.topk(best_probs, k)
@@ -928,6 +924,11 @@ def predict_bird(
             if db_manager
             else None
         )
+        # iRateBird 鸟种美学(颜值)分（0–100，与照片无关的物种级指标）
+        # iRateBird species aesthetic score (0–100, species-level, photo-agnostic)
+        aesthetic_index = (
+            db_manager.get_aesthetic_by_class_id(class_id) if db_manager else None
+        )
 
         results.append(
             {
@@ -937,6 +938,7 @@ def predict_bird(
                 "scientific_name": scientific_name,
                 "iucn_category": iucn_category,
                 "gbif_rarity_100": gbif_rarity_100,
+                "aesthetic_index": aesthetic_index,
                 "confidence": confidence,
                 "ebird_code": ebird_code,
                 "region_match": region_match,
@@ -996,11 +998,75 @@ def _read_focus_point_for_path(
     return None
 
 
+def _identify_with_tiers(
+    image,
+    top_k: int,
+    gps_country: Optional[str],
+    gps_subnational: Optional[str],
+    manual_country: Optional[str],
+    manual_subnational: Optional[str],
+    is_yolo_cropped: bool,
+    name_format: Optional[str],
+    photo_country_code: Optional[str],
+) -> Tuple[List[Dict], str, Optional[int], Optional[str]]:
+    """
+    遍历区域候选层，命中即停 / Walk the region candidate tiers, stopping at the first hit.
+
+    注意 predict_bird 只有在 top-100 中无一落入候选集时才返回空，因此放宽只在候选集
+    完全不含相近种时发生；效果取决于候选集是否准确，而不是放宽机制。
+
+    predict_bird returns nothing only when none of its top 100 falls in the
+    candidate set, so widening happens only when the set lacks any similar
+    species; accuracy depends on the set, not on the widening.
+
+    参数 / Parameters:
+        image: 待识别图像 / Image to identify.
+        top_k (int): 返回结果数 / Number of results.
+        gps_country (Optional[str]): GPS 定位国家 / Country from GPS.
+        gps_subnational (Optional[str]): GPS 定位省州 / Subnational from GPS.
+        manual_country (Optional[str]): 手选国家 / Manually selected country.
+        manual_subnational (Optional[str]): 手选省州 / Manually selected subnational.
+        is_yolo_cropped (bool): 是否已由 YOLO 裁剪 / Whether YOLO already cropped.
+        name_format (Optional[str]): 鸟名格式 / Bird name format.
+        photo_country_code (Optional[str]): 拍摄国家，供罕见度使用 / Shooting country for rarity.
+
+    返回 / Returns:
+        tuple: (结果列表, 层标签, 该层候选数或 None, 该层区域代码或 None) /
+            (results, tier label, candidate count or None, region code or None).
+    """
+    geo = get_geo_filter()
+    if geo is None:
+        results = predict_bird(
+            image,
+            top_k=top_k,
+            species_class_ids=None,
+            is_yolo_cropped=is_yolo_cropped,
+            name_format=name_format,
+            photo_country_code=photo_country_code,
+        )
+        return results, TIER_NONE, None, None
+
+    for candidates, tier, region in geo.iter_candidates(
+        gps_country, gps_subnational, manual_country, manual_subnational
+    ):
+        results = predict_bird(
+            image,
+            top_k=top_k,
+            species_class_ids=candidates,
+            is_yolo_cropped=is_yolo_cropped,
+            name_format=name_format,
+            photo_country_code=photo_country_code,
+        )
+        if results:
+            return results, tier, (len(candidates) if candidates else None), region
+    return [], TIER_NONE, None, None
+
+
 def identify_bird(
     image_path: str,
     use_yolo: bool = True,
     use_gps: bool = True,
-    use_ebird: bool = True,
+    use_geo_filter: bool = True,
     country_code: Optional[str] = None,
     region_code: Optional[str] = None,
     top_k: int = 5,
@@ -1014,7 +1080,7 @@ def identify_bird(
         "results": [],
         "yolo_info": None,
         "gps_info": None,
-        "ebird_info": None,
+        "geo_info": None,
         "error": None,
     }
 
@@ -1052,115 +1118,70 @@ def identify_bird(
                         result["yolo_info"] = {"bird_count": 0}
                         return result
 
-        species_class_ids = None
         lat = lon = None
-        species_filter = None
         photo_country_code: Optional[str] = None
+        gps_subnational: Optional[str] = None
 
-        # V4.2.7: 提前提取 GPS（无论是否启用 ebird 过滤），用于反查拍摄国家
-        # → 为 GBIF 按国家归一化 rarity 提供输入
-        # V4.2.7: Extract GPS upfront (regardless of ebird filter) so we can
-        # reverse-geocode the shooting country for country-aware GBIF rarity.
+        # 提取 GPS 并离线定位到 eBird 国家/省州；定位结果同时供罕见度与地理过滤使用
+        # Extract GPS and locate the eBird country/subnational offline; the result
+        # feeds both rarity and the geo filter.
         if use_gps:
             try:
                 lat, lon, _gps_msg = extract_gps_from_exif(image_path)
-                if lat and lon:
+                # 0.0 是合法坐标（赤道/本初子午线），必须用 is not None 语义判断
+                # 0.0 is a legal coordinate — presence must use is-not-None semantics.
+                if _gps_coords_present(lat, lon):
                     result["gps_info"] = {
                         "latitude": lat,
                         "longitude": lon,
                         "info": _gps_msg,
                     }
-                    photo_country_code = _resolve_country_code_from_gps(lat, lon)
+                    photo_country_code, gps_subnational = _locate_gps(lat, lon)
                     if photo_country_code:
                         result["gps_info"]["country_code"] = photo_country_code
+                    if gps_subnational:
+                        result["gps_info"]["subnational_code"] = gps_subnational
             except Exception:
                 pass
 
-        if use_ebird:
-            try:
-                species_filter = get_species_filter()
-                if species_filter:
-                    if use_gps and lat is not None and lon is not None:
-                        species_class_ids = species_filter.get_species_by_gps(lat, lon)
-
-                    if species_class_ids is None and (region_code or country_code):
-                        effective_region = region_code or country_code
-                        try:
-                            ebird_ids, actual_region = (
-                                species_filter.get_species_by_region_ebird(
-                                    effective_region
-                                )
-                            )
-                            if ebird_ids:
-                                species_class_ids = ebird_ids
-                        except Exception as _e:
-                            pass
-                        if not species_class_ids:
-                            species_class_ids = species_filter.get_species_by_region(
-                                effective_region
-                            )
-
-                    if species_class_ids:
-                        result["ebird_info"] = {
-                            "enabled": True,
-                            "species_count": len(species_class_ids),
-                            "data_source": "avonet.db (offline)",
-                            "region_code": (
-                                region_code or country_code
-                                if not result.get("gps_info")
-                                else None
-                            ),
-                        }
-
-            except Exception as e:
-                pass
-
-        results = predict_bird(
-            image,
-            top_k=top_k,
-            species_class_ids=species_class_ids,
-            is_yolo_cropped=is_yolo_cropped,
-            name_format=name_format,
-            photo_country_code=photo_country_code,
-        )
-
-        if not results and species_class_ids:
-            country_cls_ids = None
-            country_cc = None
-            if lat is not None and lon is not None and species_filter is not None:
-                try:
-                    country_cls_ids, country_cc = (
-                        species_filter.get_species_by_country_ebird(lat, lon)
-                    )
-                except Exception as _e:
-                    pass
-
-            if country_cls_ids:
-                results = predict_bird(
-                    image,
-                    top_k=top_k,
-                    species_class_ids=country_cls_ids,
-                    is_yolo_cropped=is_yolo_cropped,
-                    name_format=name_format,
-                    photo_country_code=photo_country_code,
-                )
-                if results:
-                    if not result.get("ebird_info"):
-                        result["ebird_info"] = {}
-                    result["ebird_info"]["country_fallback"] = True
-                    result["ebird_info"]["country_code"] = country_cc
-
-            if not results:
-                results = predict_bird(
-                    image,
-                    top_k=top_k,
-                    species_class_ids=None,
-                    is_yolo_cropped=is_yolo_cropped,
-                    name_format=name_format,
-                    photo_country_code=photo_country_code,
-                )
-                if results and result.get("ebird_info"):
-                    result["ebird_info"]["gps_fallback"] = True
+        # 地理过滤：有可定位的 GPS 时按拍摄地的省州/国家，否则按手选；GPS 与手选分开传入，
+        # 不再把省州代码当国家代码混用（spec §2.5 的根因）。
+        # Geo filter: use the photo's located subnational/country when available,
+        # otherwise the manual selection. They are passed separately instead of
+        # conflating a subnational code with a country code (root cause, spec 2.5).
+        if use_geo_filter:
+            results, tier, count, used_region = _identify_with_tiers(
+                image,
+                top_k=top_k,
+                gps_country=photo_country_code,
+                gps_subnational=gps_subnational,
+                manual_country=country_code,
+                manual_subnational=region_code,
+                is_yolo_cropped=is_yolo_cropped,
+                name_format=name_format,
+                photo_country_code=photo_country_code,
+            )
+            result["geo_info"] = {
+                "enabled": tier != TIER_NONE,
+                "tier": tier,
+                "species_count": count,
+                "region_code": used_region,
+            }
+        else:
+            results = predict_bird(
+                image,
+                top_k=top_k,
+                species_class_ids=None,
+                is_yolo_cropped=is_yolo_cropped,
+                name_format=name_format,
+                photo_country_code=photo_country_code,
+            )
+            result["geo_info"] = {
+                "enabled": False,
+                "tier": TIER_NONE,
+                "species_count": None,
+                "region_code": None,
+            }
 
         result["success"] = True
         result["results"] = results

@@ -26,7 +26,10 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Signal, QTimer
 
 from ui.styles import COLORS, FONTS
+from ui.combo_popup import style_combo_popup
+from ui.icon_utils import tinted_png_path, glyph_pixmap
 from tools.i18n import get_i18n
+from tools.pinyin_names import pinyin_for_ui
 from config import get_birdname_settings_path, get_install_scoped_resource_path
 
 # 罕见度分级 / IUCN 展示复用既有组件（与识别详情面板保持一致的视觉与配色）
@@ -34,6 +37,12 @@ from config import get_birdname_settings_path, get_install_scoped_resource_path
 # matches the recognition detail panel visually.
 from core.rarity_tier import gbif_score_to_tier, tier_name, tier_icon, tier_color
 from ui.detail_panel import _format_iucn
+
+# 可选的自定义罕见指数（用户自备的 0-10 数据源）。文件缺席是常态，
+# lookup_index 此时返回 None，本面板显示与未装时逐字一致。
+# Optional user-supplied 0-10 rarity index; absent for most users, in which
+# case lookup_index returns None and the panel renders exactly as before.
+from core.custom_rarity import lookup_index as lookup_custom_rarity
 
 
 def get_birdname_db_path() -> str:
@@ -128,11 +137,23 @@ class BirdResultCard(QFrame):
     selected = Signal(dict)
 
     def __init__(
-        self, bird_data: Dict, tier_index: Optional[int] = None, parent=None
+        self, bird_data: Dict, tier_index: Optional[int] = None, parent=None,
+        badge: Optional[str] = None
     ):
+        """
+        参数 / Args:
+            bird_data:  该行鸟名记录
+            tier_index: 罕见度分级（无数据传 None，则不显示右侧字形）
+            parent:     父控件
+            badge:      右侧的一小段说明文字（如「本次」「30 张」）。默认无。
+        """
         super().__init__(parent)
         self.bird_data = bird_data
+        self._badge = (badge or "").strip()
         self._is_selected = False
+        #: 中文鸟名的汉语拼音标签；英文界面或查不到读音时保持 None。
+        #: The pinyin label; stays None on an English UI or a lookup miss.
+        self.pinyin_label = None
 
         self.setFixedHeight(self.CARD_HEIGHT)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
@@ -147,41 +168,89 @@ class BirdResultCard(QFrame):
         text_col.setContentsMargins(0, 0, 0, 0)
         text_col.setSpacing(2)
 
-        cn_name = bird_data.get("chinese_name", "")
-        if cn_name:
-            cn_color = COLORS["text_primary"]
-            self.cn_label = ClickableLabel(cn_name, cn_color)
-            self.cn_label.setStyleSheet(
-                f"color: {cn_color}; font-size: 13px; font-weight: 500; "
+        # 名称两行随界面语言(issue #106 追加反馈):英文界面「英文名 + 拉丁名
+        # (斜体)」;中文界面保持「中文名 + 英文名」。两行都保留点击复制行为。
+        # Name lines follow the UI language (issue #106 follow-up): the
+        # English UI shows the English name first with the Latin name in
+        # italics below; the Chinese UI keeps Chinese-first + English below.
+        # Both lines keep the click-to-copy behavior.
+        is_en_ui = get_i18n().current_lang.startswith("en")
+        if is_en_ui:
+            primary = (bird_data.get("english_name") or
+                       bird_data.get("chinese_name") or "")
+            secondary = (bird_data.get("latin_name") or "").strip()
+            secondary_italic = True
+        else:
+            primary = bird_data.get("chinese_name", "")
+            secondary = bird_data.get("english_name", "")
+            secondary_italic = False
+
+        if primary:
+            primary_color = COLORS["text_primary"]
+            self.primary_label = ClickableLabel(primary, primary_color)
+            self.primary_label.setStyleSheet(
+                f"color: {primary_color}; font-size: 13px; font-weight: 500; "
                 f"background: transparent;"
             )
-            self.cn_label.clicked.connect(lambda: self._copy_text(cn_name))
-            text_col.addWidget(self.cn_label)
+            self.primary_label.clicked.connect(lambda: self._copy_text(primary))
 
-        en_name = bird_data.get("english_name", "")
-        if en_name:
-            en_color = COLORS["text_secondary"]
-            self.en_label = ClickableLabel(en_name, en_color)
-            self.en_label.setStyleSheet(
-                f"color: {en_color}; font-size: 11px; background: transparent;"
+            # 拼音挂在主名右边而不是并进 primary_label：那个 label 点击即复制
+            # 鸟名，混入拼音后用户复制到的是「家燕 jiā yàn」，贴到别处不能用。
+            # 也因此不加高卡片（仍是固定两行 52px），搜索结果一屏的可见条数不变。
+            # The pinyin sits beside the name rather than inside it: that label
+            # is click-to-copy, and the card height stays fixed at two rows.
+            pinyin = pinyin_for_ui(bird_data.get("chinese_name"),
+                                   is_zh=not is_en_ui)
+            if pinyin:
+                self.pinyin_label = QLabel(pinyin)
+                self.pinyin_label.setStyleSheet(
+                    f"color: {COLORS['text_muted']}; font-size: 11px; "
+                    f"background: transparent;"
+                )
+
+            primary_row = QHBoxLayout()
+            primary_row.setContentsMargins(0, 0, 0, 0)
+            primary_row.setSpacing(6)
+            primary_row.addWidget(self.primary_label)
+            if self.pinyin_label is not None:
+                primary_row.addWidget(self.pinyin_label)
+            primary_row.addStretch(1)
+            text_col.addLayout(primary_row)
+
+        if secondary:
+            secondary_color = COLORS["text_secondary"]
+            italic_css = "font-style: italic; " if secondary_italic else ""
+            self.secondary_label = ClickableLabel(secondary, secondary_color)
+            self.secondary_label.setStyleSheet(
+                f"color: {secondary_color}; font-size: 11px; {italic_css}"
+                f"background: transparent;"
             )
-            self.en_label.clicked.connect(lambda: self._copy_text(en_name))
-            text_col.addWidget(self.en_label)
+            self.secondary_label.clicked.connect(lambda: self._copy_text(secondary))
+            text_col.addWidget(self.secondary_label)
 
         root.addLayout(text_col, 1)
+
+        # 右侧小标签（「本次」「30 张」这类），紧挨罕见度字形之前
+        # A short right-side badge, e.g. "this shoot" or a photo count.
+        if self._badge:
+            self.badge_label = QLabel(self._badge)
+            self.badge_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            self.badge_label.setStyleSheet(
+                f"color: {COLORS['text_secondary']}; font-size: 11px; "
+                f"background: transparent;")
+            root.addWidget(self.badge_label, 0)
 
         # 右侧罕见度图标（仅在拿到分级时显示），颜色随分级 gray→green→…→red
         # Rarity glyph on the right, shown only when a tier is available.
         if tier_index is not None:
             color = tier_color(tier_index) or COLORS["text_secondary"]
-            self.rarity_label = QLabel(tier_icon(tier_index))
+            # 罕见度字形渲染成统一尺寸 pixmap,规避 ○◔◑◕● 各字形大小不一(列表并排时尤其明显)
+            self.rarity_label = QLabel()
+            self.rarity_label.setPixmap(glyph_pixmap(tier_icon(tier_index), color, 16))
             self.rarity_label.setAlignment(Qt.AlignCenter)
             self.rarity_label.setFixedWidth(22)
             self.rarity_label.setToolTip(tier_name(tier_index))
-            self.rarity_label.setStyleSheet(
-                f"color: {color}; font-size: 16px; background: transparent; "
-                f"border: none;"
-            )
+            self.rarity_label.setStyleSheet("background: transparent; border: none;")
             root.addWidget(self.rarity_label, 0, Qt.AlignVCenter)
 
     def _apply_style(self, selected: bool):
@@ -199,6 +268,10 @@ class BirdResultCard(QFrame):
                 border-color: {COLORS['accent']};
             }}
         """)
+
+    def badge_text(self) -> str:
+        """右侧小标签的文字；没有标签时为空串。"""
+        return self._badge
 
     def set_selected(self, selected: bool):
         """设置选中态并刷新样式（由上层在选中变化时调用）。"""
@@ -262,7 +335,12 @@ class BirdNameSearchWidget(QWidget):
         title_row = QHBoxLayout()
         title_row.setSpacing(6)
 
-        title_label = QLabel(self.i18n.t("birdname_search.title"))
+        # 标题前的放大镜复用 file-search-corner.svg(染主文字色)富文本内联,替代 🔍 emoji
+        _search_icon = (
+            f'<img src="{tinted_png_path("file-search-corner.svg", COLORS["text_primary"], 14)}" '
+            f'width="14" height="14" style="vertical-align:middle;">'
+        )
+        title_label = QLabel(f'{_search_icon}&nbsp;{self.i18n.t("birdname_search.title")}')
         title_label.setFixedHeight(28)
         title_label.setStyleSheet(f"""
             color: {COLORS['text_primary']};
@@ -296,12 +374,12 @@ class BirdNameSearchWidget(QWidget):
             QComboBox::drop-down {{ border: none; width: 18px; }}
             QComboBox QAbstractItemView {{
                 background-color: {COLORS['bg_elevated']};
-                border: 1px solid {COLORS['border']};
-                border-radius: 4px;
+                border: none;
+                border-radius: 8px;
                 selection-background-color: {COLORS['accent_dim']};
                 selection-color: {COLORS['text_primary']};
                 outline: none;
-                padding: 2px;
+                padding: 4px;
             }}
             QComboBox QAbstractItemView::item {{
                 padding: 4px 8px;
@@ -309,6 +387,9 @@ class BirdNameSearchWidget(QWidget):
                 min-height: 24px;
             }}
         """)
+        # 弹出列表容器需逐个接线，祖先样式表够不到顶层 popup（见 ui/combo_popup.py）。
+        # Per-instance styling: ancestor sheets cannot reach a top-level popup.
+        style_combo_popup(self.version_combo)
         self.version_combo.currentIndexChanged.connect(self._on_version_changed)
         title_row.addWidget(self.version_combo)
 
@@ -734,10 +815,17 @@ class BirdNameSearchWidget(QWidget):
         en = bird_data.get("english_name") or ""
         latin = (bird_data.get("latin_name") or "").strip()
 
-        # 标题：「中文名  学名」，无中文名时退回英文名
+        # 标题：「中文名　拼音　学名」，无中文名时退回英文名。
+        # 拼音只在简体中文界面出现（用户 2026-09-19 要求），夹在中文名与学名
+        # 之间——它注解的是中文名，离得越近越好读。
+        # Title: name, pinyin (Simplified-Chinese UI only), then the Latin name.
         title = cn or en or latin or "—"
+        muted = COLORS['text_muted']
+        pinyin = pinyin_for_ui(cn, is_zh=not get_i18n().current_lang.startswith("en"))
+        if pinyin:
+            title = f"{title}　<span style='color:{muted};'>{pinyin}</span>"
         if latin:
-            title = f"{title}　<span style='color:{COLORS['text_muted']};'>{latin}</span>"
+            title = f"{title}　<span style='color:{muted};'>{latin}</span>"
         self.detail_header.setText(title)
 
         info = None
@@ -752,8 +840,19 @@ class BirdNameSearchWidget(QWidget):
         if score is not None:
             tier = gbif_score_to_tier(score)
             color = tier_color(tier) or COLORS["text_primary"]
+            # 用户若装了自定义罕见指数，并排显示作参照，与选片详情页同一口径
+            # （见 ui/detail_panel.py 罕见度行）。纯展示，不参与任何排序。
+            # 保留两位小数：这类 0-10 的评分取值高度集中，截成一位会把大部分
+            # 区分度抹掉（实测万余种数据 572 个取值压成 87 档）。
+            # Mirror the photo detail panel: show the optional custom index
+            # alongside, two decimals, display-only.
+            dn_idx = lookup_custom_rarity(cn, en)
+            score_text = (
+                f"{score:.1f} - {dn_idx:.2f}" if dn_idx is not None
+                else f"{score:.1f}"
+            )
             self.detail_rarity_label.setText(
-                f"{tier_icon(tier)} {tier_name(tier)} ({score:.1f})"
+                f"{tier_icon(tier)} {tier_name(tier)} ({score_text})"
             )
             self.detail_rarity_label.setStyleSheet(
                 f"color: {color}; font-size: 12px; font-weight: 600; "

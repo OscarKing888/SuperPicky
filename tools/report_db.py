@@ -21,7 +21,7 @@ from .file_utils import ensure_hidden_directory
 
 
 # Schema 版本，用于未来升级
-SCHEMA_VERSION = "8"
+SCHEMA_VERSION = "10"
 
 # 所有列定义（有序），用于 CREATE TABLE 和数据验证
 PHOTO_COLUMNS = [
@@ -87,8 +87,12 @@ PHOTO_COLUMNS = [
     ("burst_id",         "INTEGER", None),
     ("burst_position",   "INTEGER", None),
 
-    # V6: 懂鸟罕见指数 (0-10，越大越罕见)
-    # V6: BirdID rarity index (0-10, higher = rarer)
+    # V6 遗留：外部罕见指数 (0-10)。当前流程不再写入，罕见度一律用下面的
+    # gbif_rarity_100；可选的自定义指数走 core/custom_rarity.py 独立数据源，
+    # 不入本表。保留列名以兼容旧库。
+    # V6 legacy: external rarity index (0-10), no longer written. Rarity now
+    # uses gbif_rarity_100; the optional custom index lives in its own data
+    # source. Kept for backward compatibility with older databases.
     ("rarity_index",     "REAL", None),
 
     # V7: IUCN 红色名录保护级别 (LC/NT/VU/EN/CR/CR(PE)/CR(PEW)/EW/EX/DD/NE)
@@ -98,6 +102,18 @@ PHOTO_COLUMNS = [
     # V8: GBIF 全球罕见度 (0-100 分制，越大越罕见，CC0+CC-BY 4.0 子集派生)
     # V8: GBIF-derived global rarity score (0-100, higher = rarer)
     ("gbif_rarity_100",  "REAL", None),
+
+    # V9: iRateBird 鸟种美学(颜值)指数 (0-100，越大越好看，CC-BY 4.0 派生)
+    # V9: iRateBird species aesthetic score (0-100, higher = prettier)
+    ("aesthetic_index",  "REAL", None),
+
+    # V10: 待确定候选鸟种（识鸟置信度低于阈值时的第一名），仅用于浏览器显示与 EXIF 标题提示，
+    # 不参与分目录、报告鸟种名录与 eBird 导出
+    # V10: unconfirmed candidate species (top result below the Bird ID threshold),
+    # display/EXIF-title hint only; never used for folders, reports or eBird export
+    ("alt_species_cn",   "TEXT", None),
+    ("alt_species_en",   "TEXT", None),
+    ("alt_confidence",   "REAL", None),
 
     ("created_at",    "TEXT", None),
     ("updated_at",    "TEXT", None),
@@ -145,6 +161,14 @@ class ReportDB:
 
         # 启用 WAL 模式和外键
         self._conn.execute("PRAGMA journal_mode=WAL")
+        # WAL 搭配 NORMAL:每次 commit 不再单独 fsync(默认 FULL 每 commit 一次),
+        # 仅 checkpoint 时同步。主处理循环每张照片 2-6 次 commit,在 SD 卡/ExFAT/
+        # HDD 上每次 fsync 10-30ms;NORMAL 断电最多丢最后一批事务,库不会损坏。
+        # WAL + NORMAL: commits no longer fsync individually (default FULL
+        # syncs every commit); only checkpoints do. The main loop commits 2-6
+        # times per photo, and on SD/ExFAT/HDD each fsync costs 10-30ms.
+        # NORMAL may lose the last batch on power loss but never corrupts.
+        self._conn.execute("PRAGMA synchronous=NORMAL")
         self._conn.execute("PRAGMA foreign_keys=ON")
 
         # 初始化 Schema
@@ -190,6 +214,27 @@ class ReportDB:
                     )
                 """)
 
+                # 纠错样本表（correction submission）：随项目持久化。
+                # 记录一次「改鸟种」事件的原预测(wrong_*)与改正结果(corrected_*)。
+                # Corrections table for the correction-submission feature.
+                self._conn.execute("""
+                    CREATE TABLE IF NOT EXISTS corrections (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        filename TEXT NOT NULL,
+                        wrong_cn TEXT,
+                        wrong_en TEXT,
+                        corrected_model_class_id INTEGER,
+                        corrected_cn TEXT,
+                        corrected_en TEXT,
+                        birdid_confidence REAL,
+                        created_at TEXT
+                    )
+                """)
+                self._conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_corrections_filename "
+                    "ON corrections(filename)"
+                )
+
                 # 初始化元数据
                 self._conn.execute(
                     "INSERT OR IGNORE INTO meta (key, value) VALUES (?, ?)",
@@ -202,7 +247,87 @@ class ReportDB:
 
         # Schema 升级在独立事务中执行，避免嵌套 commit 冲突
         self._upgrade_schema_if_needed()
-    
+        # 逐版本迁移之后再按 PHOTO_COLUMNS 兜底补列（见该方法说明）
+        self._reconcile_photo_columns()
+
+    def _reconcile_photo_columns(self):
+        """
+        以 PHOTO_COLUMNS 为准补齐 photos 表缺失的列。
+
+        为什么需要这一步：建表走的是 ``CREATE TABLE IF NOT EXISTS``，对已存在
+        的旧表不做任何改动；而逐版本迁移只补各自版本显式列出的列。一旦有人往
+        PHOTO_COLUMNS 加了列却忘记同步写 ALTER(picked 列正是如此)，旧目录的
+        report.db 就永远拿不到该列，读取时抛
+        ``sqlite3.OperationalError: no such column``。本方法作为最终兜底，
+        使「PHOTO_COLUMNS 是唯一事实源」这一约定对新旧库都成立。
+
+        Reconcile the photos table against PHOTO_COLUMNS. Table creation uses
+        CREATE TABLE IF NOT EXISTS (a no-op on existing tables) and the
+        versioned migrations only add the columns each version enumerates, so a
+        column added to PHOTO_COLUMNS without a matching ALTER (exactly what
+        happened to `picked`) never reaches legacy databases and later raises
+        "no such column". This final pass makes PHOTO_COLUMNS the single source
+        of truth for both new and legacy databases.
+
+        返回 / Returns:
+            list[str]: 本次补齐的列名，便于日志与测试断言。
+        """
+
+        added = []
+        with self._lock:
+            existing = {
+                row[1] for row in self._conn.execute("PRAGMA table_info(photos)")
+            }
+            missing = [c for c in PHOTO_COLUMNS if c[0] not in existing]
+            if not missing:
+                return added
+
+            with self._conn:
+                for name, type_def, default in missing:
+                    upper = type_def.upper()
+                    # SQLite 的 ALTER TABLE ADD COLUMN 不支持 UNIQUE/PRIMARY KEY，
+                    # 也不允许在无默认值时添加 NOT NULL 列。这类列只可能出现在
+                    # 建表定义里(如 filename)，正常不会缺失；真缺失时只能重建表，
+                    # 这里明确告警而不是抛异常，避免整个目录打不开。
+                    # SQLite cannot ADD COLUMN with UNIQUE/PRIMARY KEY, nor a
+                    # NOT NULL column without a default. Such columns exist only
+                    # in the initial definition and should never be missing;
+                    # warn instead of raising so the directory still opens.
+                    if "UNIQUE" in upper or "PRIMARY KEY" in upper or (
+                        "NOT NULL" in upper and default is None
+                    ):
+                        print(
+                            f"⚠️ report.db 缺少列 {name}，但其约束({type_def})"
+                            f"无法通过 ALTER 添加，需重建数据库"
+                        )
+                        continue
+
+                    statement = f"ALTER TABLE photos ADD COLUMN {name} {type_def}"
+                    if default is not None:
+                        statement += f" DEFAULT {self._sql_literal(default)}"
+                    self._conn.execute(statement)
+                    added.append(name)
+
+        if added:
+            print(f"✅ report.db 补齐缺失列: {', '.join(added)}")
+        return added
+
+    @staticmethod
+    def _sql_literal(value):
+        """
+        把默认值渲染成 DDL 字面量。/ Render a default value as a DDL literal.
+
+        DDL 不支持参数占位，只能拼接，因此字符串需转义单引号。
+        DDL cannot use placeholders, so strings are quoted and escaped here.
+        """
+
+        if isinstance(value, bool):
+            return "1" if value else "0"
+        if isinstance(value, (int, float)):
+            return str(value)
+        escaped = str(value).replace("'", "''")
+        return f"'{escaped}'"
+
     def _upgrade_schema_if_needed(self):
         """检查并升级数据库 Schema（支持连续升级 v1 -> v2 -> v3 -> v4）"""
         with self._lock:
@@ -375,6 +500,48 @@ class ReportDB:
                     self._update_schema_version("8")
                 current_version = "8"
                 print("✅ Database schema upgraded to v8")
+
+            # ----------------------------------------------------------------------
+            #  Upgrade: v8 -> v9 (iRateBird species aesthetic index)
+            # ----------------------------------------------------------------------
+            if current_version == "8":
+                print("🔄 Upgrading database schema from v8 to v9...")
+                new_columns_v9 = [
+                    ("aesthetic_index", "REAL"),
+                ]
+                with self._conn:
+                    for col_name, col_type in new_columns_v9:
+                        try:
+                            self._conn.execute(
+                                f"ALTER TABLE photos ADD COLUMN {col_name} {col_type}"
+                            )
+                        except sqlite3.OperationalError:
+                            pass  # 列已存在，跳过
+                    self._update_schema_version("9")
+                current_version = "9"
+                print("✅ Database schema upgraded to v9")
+
+            # ----------------------------------------------------------------------
+            #  Upgrade: v9 -> v10 (unconfirmed candidate species)
+            # ----------------------------------------------------------------------
+            if current_version == "9":
+                print("🔄 Upgrading database schema from v9 to v10...")
+                new_columns_v10 = [
+                    ("alt_species_cn", "TEXT"),
+                    ("alt_species_en", "TEXT"),
+                    ("alt_confidence", "REAL"),
+                ]
+                with self._conn:
+                    for col_name, col_type in new_columns_v10:
+                        try:
+                            self._conn.execute(
+                                f"ALTER TABLE photos ADD COLUMN {col_name} {col_type}"
+                            )
+                        except sqlite3.OperationalError:
+                            pass  # 列已存在，跳过
+                    self._update_schema_version("10")
+                current_version = "10"
+                print("✅ Database schema upgraded to v10")
 
     def _update_schema_version(self, version):
         """更新数据库中的版本号（由调用方负责提交事务）"""
@@ -549,13 +716,18 @@ class ReportDB:
             )
             return [dict(row) for row in cursor.fetchall()]
 
-    def get_distinct_species(self, use_en: bool = False, ratings: list = None) -> List[str]:
+    def get_distinct_species(self, use_en: bool = False, ratings: list = None,
+                             foldered_only: bool = False) -> List[str]:
         """
         获取数据库中去重后的鸟种名称列表（用于结果浏览器筛选下拉框）。
 
         Args:
             use_en: True 使用英文鸟种列，False 使用中文鸟种列
             ratings: 若提供，只返回在这些星级下有照片的鸟种
+            foldered_only: 只返回「磁盘上有自己目录」的鸟种（即有 2★以上照片的），
+                与 ratings 叠加。用于结果浏览器下拉，剔除只有低星照片、
+                因而从未建目录的鸟种。
+                Only species that own a folder on disk (i.e. have a 2★+ photo).
 
         Returns:
             鸟种名称列表（已去重、去空值）
@@ -577,6 +749,13 @@ class ReportDB:
                 placeholders = ", ".join(["?"] * len(valid))
                 where_clauses.append(f"rating IN ({placeholders})")
                 params.extend(valid)
+
+        if foldered_only:
+            where_clauses.append(
+                f"{column} IN (SELECT {column} FROM photos "
+                f"WHERE {column} IS NOT NULL AND TRIM({column}) != '' AND rating >= ?)"
+            )
+            params.append(_FOLDERED_MIN_RATING)
 
         where_sql = " AND ".join(where_clauses)
         with self._lock:
@@ -648,8 +827,23 @@ class ReportDB:
 
         if isinstance(species_val, str) and species_val.strip():
             assert species_col in {"bird_species_en", "bird_species_cn"}, f"Invalid column: {species_col}"
-            where_clauses.append(f"{species_col} = ?")
-            params.append(species_val.strip())
+            if species_val.strip() == SPECIES_FILTER_OTHER:
+                # 「其他鸟类」：没有自己鸟种目录的照片——未识别的，加上只有低星
+                # 照片、因而从未建目录的鸟种（如仅有一张 0★ 的塞舌尔花蜜鸟）。
+                # 与各鸟种条目构成不重不漏的划分，保证没有照片从鸟种维度消失。
+                # "Other birds": photos with no species folder of their own —
+                # unidentified ones plus species whose photos are all below 2★.
+                # Together with the per-species entries this partitions the library.
+                where_clauses.append(
+                    f"({species_col} IS NULL OR TRIM({species_col}) = '' "
+                    f"OR {species_col} NOT IN (SELECT {species_col} FROM photos "
+                    f"WHERE {species_col} IS NOT NULL AND TRIM({species_col}) != '' "
+                    f"AND rating >= ?))"
+                )
+                params.append(_FOLDERED_MIN_RATING)
+            else:
+                where_clauses.append(f"{species_col} = ?")
+                params.append(species_val.strip())
 
         # 精选(picked):直接用选鸟时写入的持久旗标列(3★ 中美学∩锐度 top% 的交集)。
         # 旧目录(未重跑选鸟)该列全为 0,需重跑后才有结果。
@@ -662,13 +856,29 @@ class ReportDB:
 
         # Determine sort order
         sort_by = filters.get("sort_by") or "filename"
+        # 精选恒置顶：picked 是「3★ 中锐度 top% ∩ 美学 top%」的交集，比任何单项
+        # 指标都强，但按单项排序时它必然被"该项很高、另一项不够"的照片挤散
+        # （实测 12 张精选在锐度排序下落在第 2/4/8/…/44 名，罕见度排序下更散到
+        # 第 120 名），等于把精选这个结论稀释掉了。故把它提为首要排序键，组内
+        # 再按用户选择的维度排。
+        # 文件名排序不置顶：它的唯一用途是还原拍摄顺序，插队会毁掉这个语义。
+        # Picked photos sort first: `picked` is the intersection of the top-%
+        # sharpness and aesthetics ranks among 3★ shots — a stronger signal than
+        # either axis alone, yet sorting by one axis scatters them (measured:
+        # ranks 2/4/8/…/44 by sharpness, up to 120 by rarity). Filename order is
+        # left untouched since its whole purpose is chronological browsing.
+        picked_first = "COALESCE(picked, 0) DESC, "
         if sort_by == "sharpness_desc":
-            order_sql = "ORDER BY COALESCE(adj_sharpness, head_sharp, -1e99) DESC, filename ASC"
+            order_sql = f"ORDER BY {picked_first}COALESCE(adj_sharpness, head_sharp, -1e99) DESC, filename ASC"
         elif sort_by == "aesthetic_desc":
-            order_sql = "ORDER BY COALESCE(adj_topiq, nima_score, -1e99) DESC, filename ASC"
+            order_sql = f"ORDER BY {picked_first}COALESCE(adj_topiq, nima_score, -1e99) DESC, filename ASC"
         elif sort_by == "rarity_desc":
             # V4.2.7: 按 GBIF 罕见度降序（最罕见在前）— 无 GBIF 数据的排最后
-            order_sql = "ORDER BY COALESCE(gbif_rarity_100, -1e99) DESC, filename ASC"
+            order_sql = f"ORDER BY {picked_first}COALESCE(gbif_rarity_100, -1e99) DESC, filename ASC"
+        elif sort_by == "species_beauty_desc":
+            # V9: 按鸟种颜值(iRateBird)降序 — 无数据排最后
+            # V9: sort by species beauty (iRateBird) desc — missing data last
+            order_sql = f"ORDER BY {picked_first}COALESCE(aesthetic_index, -1e99) DESC, filename ASC"
         else:
             order_sql = "ORDER BY filename ASC"
 
@@ -679,6 +889,70 @@ class ReportDB:
             results = [dict(row) for row in cursor.fetchall()]
 
         return results
+
+    # ==========================================================================
+    #  纠错样本（correction submission）
+    # ==========================================================================
+
+    def insert_correction(self, data: dict) -> None:
+        """
+        插入一条纠错记录（每次「改鸟种」事件一条）。
+
+        参数 / Args:
+            data: 键含 filename, wrong_cn, wrong_en, corrected_model_class_id,
+                  corrected_cn, corrected_en, birdid_confidence。created_at 自动填。
+        """
+        cols = ("filename", "wrong_cn", "wrong_en", "corrected_model_class_id",
+                "corrected_cn", "corrected_en", "birdid_confidence", "created_at")
+        row = {k: data.get(k) for k in cols}
+        row["created_at"] = _now_iso()
+        placeholders = ", ".join(["?"] * len(cols))
+        col_str = ", ".join(cols)
+        sql = f"INSERT INTO corrections ({col_str}) VALUES ({placeholders})"
+        with self._lock:
+            self._conn.execute(sql, [row[c] for c in cols])
+            self._safe_commit()
+
+    def get_corrections(self) -> List[dict]:
+        """返回全部纠错记录，按 created_at 升序。"""
+        with self._lock:
+            cursor = self._conn.execute(
+                "SELECT * FROM corrections ORDER BY created_at, id"
+            )
+            return [dict(r) for r in cursor.fetchall()]
+
+    def get_photos_by_species(
+        self,
+        cn: Optional[str] = None,
+        en: Optional[str] = None,
+        exclude_filename: Optional[str] = None,
+    ) -> List[dict]:
+        """
+        查当前项目内同鸟种、可当正样本的照片（has_bird=1 且 rating!=-1）。
+
+        cn 优先；cn 为空时用 en。exclude_filename 排除被改正图自身。
+        """
+        col = None
+        val = None
+        if cn and cn.strip():
+            col, val = "bird_species_cn", cn.strip()
+        elif en and en.strip():
+            col, val = "bird_species_en", en.strip()
+        if col is None:
+            return []
+        assert col in {"bird_species_cn", "bird_species_en"}
+        sql = (
+            f"SELECT * FROM photos WHERE {col} = ? AND has_bird = 1 "
+            "AND rating != -1"
+        )
+        params: List[Any] = [val]
+        if exclude_filename:
+            sql += " AND filename != ?"
+            params.append(exclude_filename)
+        sql += " ORDER BY filename"
+        with self._lock:
+            cursor = self._conn.execute(sql, params)
+            return [dict(r) for r in cursor.fetchall()]
 
     def get_statistics(self) -> dict:
         """
@@ -828,51 +1102,6 @@ class ReportDB:
             self._safe_commit()
             return cursor.rowcount > 0
 
-    def update_ratings_batch(self, updates: List[dict]) -> int:
-        """
-        批量更新评分及相关数据。
-
-        用于重新评星场景（PostAdjustmentEngine）。
-
-        Args:
-            updates: 更新数据列表，每个字典必须包含 "filename" 键，
-                     以及要更新的字段（如 rating, adj_sharpness, adj_topiq）
-
-        Returns:
-            成功更新的记录数
-        """
-        if not updates:
-            return 0
-
-        now = _now_iso()
-        count = 0
-
-        with self._lock:
-            with self._conn:
-                for upd in updates:
-                    filename = upd.get("filename")
-                    if not filename:
-                        continue
-
-                    cleaned = self._clean_data(upd)
-                    cleaned["updated_at"] = now
-
-                    columns = [k for k in cleaned if k in COLUMN_NAMES and k not in ("filename", "id")]
-                    if not columns:
-                        continue
-
-                    values = [cleaned[k] for k in columns]
-                    set_clause = ", ".join(f"{c} = ?" for c in columns)
-
-                    sql = f"UPDATE photos SET {set_clause} WHERE filename = ?"
-                    values.append(filename)
-
-                    cursor = self._conn.execute(sql, values)
-                    if cursor.rowcount > 0:
-                        count += 1
-
-        return count
-
     def clear_cache_paths(self) -> int:
         """清空缓存相关路径字段（临时 JPG、调试裁切、YOLO 调试图）。"""
         with self._lock:
@@ -1020,6 +1249,20 @@ class ReportDB:
 
         return cleaned
 
+
+# 鸟种筛选哨兵值：代表「其他鸟类」——没有自己鸟种目录的照片（未识别的，
+# 以及只有低星照片、因而从未建目录的鸟种）。用不可能是鸟名的字符串，避免
+# 与真实鸟种冲突；中英文界面共用同一个值。
+# Sentinel for the "other birds" species filter: photos without a species
+# folder of their own (unidentified ones, plus species whose photos are all
+# below 2★ and therefore never foldered). Shared by both UI languages.
+SPECIES_FILTER_OTHER = "__superpicky_other_birds__"
+
+# 「有目录的鸟种」判据：存在 2★以上照片。与 core/folder_layout.py 的规则
+# （低星一律归「其他鸟类」，即使已识别出鸟种）严格对应。
+# A species is "foldered" iff it has at least one 2★+ photo, mirroring the
+# rule in core/folder_layout.py.
+_FOLDERED_MIN_RATING = 2
 
 def _now_iso() -> str:
     """返回当前 UTC 时间的 ISO 8601 字符串。"""

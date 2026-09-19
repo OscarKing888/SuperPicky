@@ -85,6 +85,46 @@ class BirdDatabaseManager:
             print(_t("logs.db_query_failed", id=class_id, e=e))
             return None
 
+    def get_class_id_by_scientific_name(
+        self, scientific_name: str, english_name: Optional[str] = None
+    ) -> Optional[int]:
+        """
+        名字 → model_class_id 反查（改鸟种打标用）。
+
+        优先按学名精确匹配（IOC 学名 = BirdCountInfo.scientific_name 最稳），
+        未命中时回退英文名精确匹配；仍无返回 None（调用方标黄跳过，不瞎猜）。
+
+        参数 / Args:
+            scientific_name: 学名（IOC latin_name）。
+            english_name: 英文名，学名未命中时的回退键。
+
+        返回 / Returns:
+            model_class_id（int）或 None。
+        """
+        def _query(col: str, value: str) -> Optional[int]:
+            if not value or not value.strip():
+                return None
+            try:
+                with sqlite3.connect(self.db_path) as conn:
+                    cur = conn.cursor()
+                    cur.execute(
+                        f"SELECT model_class_id FROM BirdCountInfo "
+                        f"WHERE {col} = ? AND model_class_id IS NOT NULL LIMIT 1",
+                        (value.strip(),),
+                    )
+                    row = cur.fetchone()
+                    return int(row[0]) if row and row[0] is not None else None
+            except Exception as e:
+                print(_t("logs.db_query_failed", id=value, e=e))
+                return None
+
+        cid = _query("scientific_name", scientific_name)
+        if cid is not None:
+            return cid
+        if english_name:
+            return _query("english_name", english_name)
+        return None
+
     def get_gbif_rarity_by_class_id(
         self, class_id: int, country_code: Optional[str] = None
     ) -> Optional[float]:
@@ -154,6 +194,39 @@ class BirdDatabaseManager:
         except Exception:
             # gbif_rarity_100 表也不存在（旧版数据库），静默降级
             return None
+
+    def get_aesthetic_by_class_id(self, class_id: int) -> Optional[float]:
+        """
+        根据模型类别ID获取鸟种美学（颜值）默认分（0–100）。
+
+        Args:
+            class_id: 鸟类类别ID（model_class_id）
+
+        Returns:
+            iRateBird 颜值分 (0–100, 越大越好看; None=未匹配或缺数据)
+
+        Fetch the iRateBird species aesthetic score (0–100). Returns None on
+        miss or when the iratebirds_aesthetic table is absent (older DB).
+        """
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                try:
+                    cursor.execute(
+                        "SELECT aesthetic_100 FROM iratebirds_aesthetic "
+                        "WHERE model_class_id = ? AND aesthetic_100 IS NOT NULL LIMIT 1",
+                        (class_id,),
+                    )
+                    row = cursor.fetchone()
+                    if row and row[0] is not None:
+                        return float(row[0])
+                except sqlite3.OperationalError:
+                    # 表不存在（旧库）→ 容错返 None
+                    # Missing table (older DB) → tolerate, return None
+                    return None
+        except sqlite3.Error:
+            return None
+        return None
 
     def get_iucn_by_class_id(self, class_id: int) -> Optional[str]:
         """

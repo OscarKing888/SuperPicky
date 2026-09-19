@@ -1,173 +1,758 @@
-# SuperPicky 4.3.0 LTS
+# SuperPicky 4.6.3 RC7
 
-**4.3.0 is a Long-Term Support (LTS) release** — the new stable baseline that
-consolidates every major improvement made since 4.1.0. If you're on an older
-build, this is the recommended version to settle on.
+**What's new since RC6:**
 
----
+1. **Correcting a species now also corrects its rarity, conservation status
+   and beauty score.** Those three belong to the species, not to the photo,
+   and were only ever written when Bird ID first identified it. So a photo you
+   retagged kept the previous species' data: the shareable report reads them
+   from each species' representative photo *and* orders the whole species list
+   by rarity, which meant a photo corrected to, say, a Barn Swallow could
+   appear at the very top of the report carrying the old species' "very rare"
+   and "endangered" badges. All three are now looked up again from the new
+   species' scientific name — offline, from the bundled reference database —
+   and cleared when there is no data, because showing the wrong badge is worse
+   than showing none. This applies to single-photo edits, multi-selection
+   edits and whole-species merges alike, and to every frame of a burst.
 
-## 🎬 New in 4.3.0
+2. **A species or star rating you changed no longer springs back to its old
+   value.** The browser keeps three internal copies of the photo list, and the
+   visible grid is rebuilt from one of them every time you expand or collapse
+   a burst group. Only two copies were being updated, so after correcting a
+   species, one click on a burst group brought the old name back on screen —
+   and paging through the full-screen view showed the old name too. Star
+   ratings had the same fault one layer deeper: the exported report counted
+   ratings from a copy that was never updated, so a photo you moved from 3
+   stars to 1 was still counted as 3 stars in the report's star breakdown.
 
-**Video Bird Analysis** *(headline feature)*
-- Analyze birds directly in video footage, not just stills
-- Automatic per-species grouping, with synchronized SRT subtitle handling
-- New dedicated "Video Processing" tab in Settings
+3. **The report's species list now matches the browser's species dropdown.**
+   The report used to list every species with a photo of a bird in it, while
+   the dropdown only lists species that have a folder on disk — that is, at
+   least one 2-star photo. On one real batch that read 22 species in the
+   report and 20 in the dropdown, with no way to tell which number was true.
+   The report now applies the same 2-star line, which is also what the eBird
+   export has always used, so all three agree. Species that do make the list
+   still count all of their photos, low-starred ones included.
 
-**Global Rarity Index** *(new GBIF-based scoring)*
-- Every identified bird now gets a 0–100 global rarity score derived from GBIF
-  occurrence data (3 billion+ records), with an IUCN-status floor
-- Shown in the detail panel as a 5-tier glyph (○ ◔ ◑ ◕ ●) — Common / Occasional /
-  Uncommon / Rare / Legendary — and written to a dedicated EXIF field
-- Batch runs print a rarity-tier distribution summary, so the standout shots are
-  easy to spot
-- Replaces the previous rarity source with an open, citable GBIF-derived system
-
-**More Reliable First Launch (rewritten download & runtime pipeline)**
-- Faster, sturdier first-run setup: parallel mirror probing, multi-strategy
-  downloads with automatic fallback and resume-on-interrupt
-- Switched the packaged Python toolchain to `uv` for much faster, more reliable
-  AI-runtime installation — a big improvement for mainland-China and slow networks
-
-**Completion Sound**
-- Optional sound when a batch finishes, so you can step away during long runs
-
-**Streamlined Updates**
-- In-app update checking is now turned off across all builds — to upgrade, download the new version from the official download page. This replaces the previous in-app auto-update and sidesteps stale-patch issues after upgrades.
-- Windows installers now wipe old program files before installing; a new Uninstaller tool is provided for switching between Lite and Full builds.
-
-**Reset & Organization**
-- New **Advanced Reset**: when a folder has no manifest (older or cross-version
-  directories, or the new species-first layout), Reset offers to recognize
-  SuperPicky's species / rating / burst folders and move every photo back to the
-  selected directory — move-only, never overwriting same-named files, and your
-  own folders are left untouched.
-- Reset is now strictly non-destructive: same-name conflicts are skipped (never
-  overwritten) and folders are only removed once empty.
-- Burst (連拍) grouping now works correctly under the new species-first layout.
-- Video species names and SRT subtitles now follow the interface language
-  (an English UI shows English names); video organization is reversible via Reset.
-
-**Polish**
-- Browse now opens at the currently selected directory (falls back to Pictures).
-- macOS installer (.pkg in .dmg) is signed and notarized through a more reliable
-  CI signing path.
-
-**Intel Mac Is Back on the Latest (4.3.0)**
-- Intel Macs now default to CPU (FP32). The legacy MPS path on old AMD dGPUs was
-  actually slower — running FP16 poorly and falling back to CPU for YOLO anyway.
-  Forcing CPU restores smooth performance beyond the 4.1.0 baseline, so Intel
-  users can move up from 4.2.1.
+4. **Chinese bird names now show their pinyin** (Simplified Chinese interface
+   only) in four places: the bird-name lookup panel, the species picker used
+   when correcting a species, the browser's detail panel, and the Bird ID
+   result cards. Readings are tone-marked and hand-checked: bird names are
+   dense with characters that have more than one reading, and the two
+   available data sources disagreed on 655 names — so those were adjudicated
+   against standard ornithological references rather than taken from either
+   source on trust.
 
 ---
 
-## Highlights since 4.1.0 (the 4.2.x line)
+# SuperPicky 4.6.3 RC7（中文）
 
-- **Smart first-run wizard** with automatic AI-runtime selection (CUDA for NVIDIA, CPU otherwise)
-- **Windows Lite installer** (~190 MB) + a separate CUDA GPU package
-- **One-click in-app updates** with background download and integrity check *(replaced in 4.3.0 — updates now go through the official website; see "Streamlined Updates" above)*
-- **Environment Repair** in Settings — re-run model prep without reinstalling
-- **ExifTool 13.55** — better RAW support for the latest cameras
-- **Smarter mirror selection** — optimized routing for China, official sources overseas
-- **IOC bird-name search** — standalone CN/EN lookup
-- **Keypoint model slimmed** ~283 MB → ~95 MB for faster loading
-- **Recursive subfolder batch processing** in both CLI and GUI; directory switching + recent history
-- **Star-rating sync** back to the original file's EXIF Rating
-- **macOS**: fixed memory pressure on long batches — thousands of photos stay steady throughout
-- Many stability fixes: Chinese-path compatibility, Windows console encoding, macOS packaging paths, ExifTool process cleanup
+**RC6 以来的变化：**
 
----
+1. **改鸟种时，罕见度、IUCN 等级和鸟种颜值会跟着一起改了。** 这三项是**鸟种**的
+   属性而不是照片的属性，此前只有识鸟第一次认出它时写过一次。于是改过鸟种的照片
+   仍带着上一个鸟种的数据：可分享报告正是从每个鸟种的代表照片上读这三项，还**按
+   罕见度给整个鸟种清单排序**——一张被改成「家燕」的照片，会顶着旧鸟种的「极罕见
+   + 濒危」标记排在报告最前面。现在会按新鸟种的学名重新查（离线，用随包的参考库），
+   查不到就清空——显示错的徽标比不显示更糟。单张改、多选批量改、整种合并三条路径
+   都一样，连拍组则整组跟着改。
 
-## Distribution Notes
-- **Apple Silicon Mac**: single full installer (`.dmg`) — see Release assets
-- **Intel Mac**: a dedicated **v4.3.0** full installer (`.dmg`) is now available.
-  It runs on CPU (FP32); we removed the legacy MPS/AMD-dGPU path that was actually
-  slower, restoring smooth performance beyond the 4.1.0 baseline. Intel users no
-  longer need to stay on 4.2.1.
-- **Windows** — we recommend the **Full** builds (bundled AI runtime, works out of
-  the box, no first-run download):
-  - **CPU Full** — runs on any PC.
-  - **GPU (CUDA) Full** — for NVIDIA GPUs; distributed via Google Drive / Baidu
-    Netdisk due to its large size.
-  - The **Lite** installer (~190 MB) still covers all configurations, downloading
-    the AI runtime on first launch — fine when your network is reliable.
+2. **改过的鸟种或星级不会再变回旧值了。** 浏览器内部有三份照片列表副本，而你每次
+   展开或收起连拍组时，界面上的网格都会从其中一份重建。此前只更新了两份，于是改完
+   鸟种后点一下连拍组，旧鸟名就回来了；全屏翻页看到的也是旧鸟名。改星级的问题更深
+   一层：导出报告时统计星级用的正是那份从未更新的副本，所以你把一张照片从 3 星改成
+   1 星后，报告的星级分布里它仍然算作 3 星。
+
+3. **报告的鸟种清单与浏览器的鸟种下拉一致了。** 报告过去列出每一个拍到鸟的鸟种，
+   而下拉只列磁盘上有目录的鸟种——也就是至少有一张 2 星照片的。实测同一批照片，
+   报告说 22 种、下拉说 20 种，而你无从判断哪个数字是真的。现在报告采用同一条 2 星
+   线，这也是 eBird 导出一直在用的口径，三处就此一致。上榜的鸟种张数照旧按它的全部
+   照片计，低星的也算在内。
+
+4. **中文鸟名会显示汉语拼音了**（仅简体中文界面），在四个地方：鸟名查询面板、改鸟种
+   时的鸟种选择弹窗、浏览器的详情面板、识鸟结果卡片。拼音带声调且经过人工核对——
+   鸟名里多音字密集，两份可用的数据源在 655 个鸟名上读音不一致，这些都按主流鸟类
+   文献逐条裁定，没有盲信其中任何一份。
 
 ---
 
-# SuperPicky 4.3.0 LTS（中文）
+# SuperPicky 4.6.3 RC6
 
-**4.3.0 是长期支持（LTS）稳定版** —— 汇总了自 4.1.0 以来的所有重要改进，作为新的稳定基线。仍在旧版本的用户，建议升级到此版本长期使用。
+**What's new since RC5:**
 
----
-
-## 🎬 4.3.0 全新功能
-
-**视频鸟类分析**（核心新功能）
-- 不再局限于静态照片，可直接分析视频中的鸟类
-- 自动按鸟种归类，并同步处理 SRT 字幕
-- 设置中新增独立的「视频处理」标签页
-
-**全球罕见度指数**（全新 GBIF 评分）
-- 每只识别出的鸟现在都有一个 0–100 的全球罕见度分数，基于 GBIF 全球观察数据（30 亿+ 记录），并以 IUCN 濒危等级兜底
-- 详情面板以 5 级图标呈现（○ ◔ ◑ ◕ ●）：常见 / 能见 / 少见 / 罕见 / 传奇，并写入独立的 EXIF 字段
-- 跑批结束输出罕见度分级分布统计，一眼挑出最难得的那张
-- 从旧的罕见度来源全面切换到开放、可引用的 GBIF 派生体系
-
-**更可靠的首次启动（下载与运行时链路重写）**
-- 首启准备更快更稳：并行镜像探测、多策略下载、自动回退与中断续传
-- 打包的 Python 工具链改用 `uv`，AI 运行时安装显著更快更稳 —— 对中国大陆与慢速网络改善明显
-
-**完成提示音**
-- 批量处理完成时可选播放提示音，长任务期间可放心离开
-
-**简化的升级方式**
-- 所有版本均已关闭应用内更新检测 —— 升级请前往官网下载页获取新版本。这取代了原先的应用内自动更新，并规避了升级后旧补丁覆盖新代码的问题。
-- Windows 安装包升级时会先清空旧程序文件；并新增卸载工具，用于在 Lite 与 Full 之间切换。
-
-**重置与整理**
-- 全新**高级重置**：当文件夹没有 manifest（较旧或跨版本目录，或新的鸟种优先布局）
-  时，重置会尝试识别 SuperPicky 的鸟种 / 评级 / 连拍文件夹，并把每张照片移回所选
-  目录 —— 仅移动、绝不覆盖同名文件，你自己的文件夹保持不动。
-- 重置现严格非破坏性：同名冲突一律跳过（绝不覆盖），文件夹仅在清空后才删除。
-- 连拍（連拍）分组在新的鸟种优先布局下也能正确工作。
-- 视频鸟种名称与 SRT 字幕现跟随界面语言（英文界面显示英文名）；视频整理可通过
-  重置可逆复原。
-
-**细节打磨**
-- 浏览现在会定位到当前所选目录（无则回退到「图片」文件夹）。
-- macOS 安装器（.dmg 内的 .pkg）通过更可靠的 CI 签名链路完成签名与公证。
-
-**Intel Mac 重回最新版（4.3.0）**
-- Intel Mac 现默认走 CPU（FP32）运行。此前在老款 AMD 独显上误用 MPS 反而更慢
-  （FP16 表现差、YOLO 还得回退 CPU 重算），改为强制 CPU 后性能恢复并超过 4.1.0
-  水平，Intel 用户可从 4.2.1 升级上来。
+1. **Bird ID's location filter is back on eBird's own regional checklists.**
+   The filter that narrows candidate species by where a photo was taken now
+   reads eBird region lists instead of the bundled grid database. For China,
+   Australia and the United States you can again pick a province/state in
+   Settings, and when a photo carries GPS the region is worked out offline
+   from the coordinates — province/state where one is known, country
+   otherwise. Overseas territories (for example the French and British ones)
+   now use their own checklist instead of the mother country's, region codes
+   are accepted in any case ("au-nsw" works like "AU-NSW"), and a
+   province/state on its own implies its country. The grid database this
+   replaces was 35 MB, so the download and the installed app are that much
+   smaller.
+2. **A burst is no longer split across two species folders.** Identifying a
+   burst frame by frame could return different species for frames of the same
+   sequence (21 of 1,372 real bursts here), which then sent one burst into two
+   species folders. The whole burst now takes the species of its most
+   confident frame, and the remaining frames with a bird in them follow it;
+   if no frame reaches the confidence threshold, nothing is changed. The
+   unification happens before star ratings are assigned, so quotas, folders
+   and the report all see one species. The log line says which frame the
+   decision came from.
+3. **"Other birds" now shows the species Bird ID was unsure about.** When
+   confidence falls below the threshold the photo still goes to "other
+   birds", but the browser previously showed nothing about what it might be.
+   Thumbnails and the detail panel now read "Species name (unconfirmed N%)"
+   for those photos, and the same line is written to the EXIF title of
+   2-star-and-up photos — as a title only, not as a keyword, so unconfirmed
+   guesses never mix into your species searches. Candidates below 30%
+   confidence are not shown at all.
+4. **Fixed: the species line vanished from photo descriptions.** The star
+   rating pass rewrote the whole description and wiped the "Species:" and
+   "Alternative species" lines it had just written (in one 683-photo batch
+   only 54 kept them). The description prefix is now written after the rating
+   pass.
 
 ---
 
-## 自 4.1.0 以来的重点更新（4.2.x 系列）
+# SuperPicky 4.6.3 RC6（中文）
 
-- **智能首启向导**，自动选择 AI 运行引擎（NVIDIA 走 CUDA，其余走 CPU）
-- **Windows Lite 安装包**（约 190 MB）+ 独立的 CUDA GPU 包
-- **一键应用内升级**：后台下载 + 完整性校验 *（4.3.0 起已改为前往官网手动更新，详见上方「简化的升级方式」）*
-- **环境修复**：设置内一键重跑模型准备，无需重装
-- **ExifTool 13.55**：更好支持最新相机的 RAW
-- **更智能的镜像选择**：大陆优化路由，海外走官方源
-- **IOC 鸟名检索**：独立的中英文鸟名查询
-- **关键点模型瘦身** 约 283 MB → 95 MB，加载更快
-- **子目录递归批处理**（CLI 与 GUI 均支持）；浏览器支持目录切换与最近目录历史
-- **星级同步**：评分修改写回原始文件的 EXIF Rating
-- **macOS**：修复长批量处理的内存压力 —— 数千张照片全程稳定
-- 大量稳定性修复：中文路径兼容、Windows 控制台编码、macOS 打包路径、ExifTool 进程清理
+**RC5 以来的变化：**
+
+1. **识鸟的地理过滤改回 eBird 自己的区域清单。** 按拍摄地点缩小候选鸟种的过滤器，
+   现在读 eBird 区域清单，不再用内置的网格库。中国、澳大利亚、美国重新可以在设置里
+   选省/州；照片带 GPS 时，离线根据坐标判断区域——能定到省州就用省州，否则用国家。
+   海外领地（如法属、英属各地）不再并入宗主国，改用自己的清单；区域代码不再区分
+   大小写（「au-nsw」与「AU-NSW」等效）；只给省州时会自动推出所属国家。被替换掉的
+   网格库有 35 MB，下载包和安装后的体积都相应变小。
+2. **同一组连拍不会再被拆进两个鸟种目录。** 逐帧识鸟可能给同一组连拍里的不同帧判出
+   不同鸟种（实测 1372 组连拍中有 21 组），结果一组连拍被分到两个鸟种目录。现在整组
+   连拍统一采用置信度最高那一帧的鸟种，组内其余有鸟的帧跟随；如果组内没有一帧达到
+   置信度阈值，则不做改动。统一发生在评星分配之前，因此配额、分目录和报告看到的
+   都是同一个鸟种，日志会写明依据的是哪一帧。
+3. **「其他鸟类」会显示识鸟没把准的那个鸟种了。** 置信度低于阈值的照片仍然归入
+   「其他鸟类」，但过去在浏览器里完全看不到它可能是什么。现在缩略图和详情面板会显示
+   「鸟名（待确定 N%）」，终评 2 星及以上的照片也把同样的文字写进 EXIF 标题——只写
+   标题不写关键字，避免没确定的猜测混进鸟种检索。置信度低于 30% 的候选不显示。
+4. **修复：照片说明里的鸟种行会消失。** 评星环节会整段重写说明文字，把刚写好的
+   「鸟种：」「备选鸟种」两行抹掉（某个 683 张的批次里只有 54 张保住）。现在说明文字
+   的前缀改到评星之后再写。
 
 ---
 
-## 分发说明
-- **Apple Silicon Mac**：单一完整安装包（`.dmg`），见 Release 资产
-- **Intel Mac**：现已提供 **v4.3.0** 完整安装包（`.dmg`）。该版本走 CPU（FP32）
-  运行，我们移除了反而更慢的老款 MPS/AMD 独显路径，性能恢复并超过 4.1.0 水平。
-  Intel 用户无需再停留在 4.2.1。
-- **Windows**：推荐下载**完整版（Full）**（内置 AI 运行时，开箱即用，无需首启下载）：
-  - **CPU 完整版** —— 适用于所有电脑。
-  - **GPU（CUDA）完整版** —— 面向 NVIDIA 显卡；因体积较大，通过 Google Drive /
-    百度网盘分发。
-  - **Lite** 安装包（约 190 MB）仍覆盖所有配置，首次启动时在线下载 AI 运行时，
-    网络良好时适用。
+# SuperPicky 4.6.3 RC5
+
+**What's new since RC4:**
+
+1. **Dropping a NEF into Bird ID no longer opens a second copy of the app.**
+   On the Mac build, dragging a Nikon NEF (or another RAW without GPS data)
+   into the Bird ID panel could launch a second SuperPicky window while the
+   original panel kept spinning forever. The cause was a bundled component
+   that, after failing to open the RAW as a regular image, tried to install a
+   missing package on the fly — and in the packaged app that "installer" was
+   SuperPicky itself. Runtime self-installation is now switched off, the
+   package information it was looking for is bundled, and the component is
+   pinned to a tested version.
+2. **The whole-species merge confirmation now tells you it spans several
+   batches.** When you browse several folders together and change every photo
+   of a species at once, the change applies to all of those batches. The
+   confirmation dialog now says how many batches are involved and lists them,
+   so a single line such as "Cattle Egret/3 stars" is no longer mistaken for
+   one folder. Browsing a single folder shows exactly the same dialog as
+   before.
+
+---
+
+# SuperPicky 4.6.3 RC5（中文）
+
+**RC4 以来的变化：**
+
+1. **把 NEF 拖进识鸟面板，不会再多开一个程序了。** 在 Mac 版里，把尼康 NEF
+   （或其他不带 GPS 的 RAW）拖进识鸟面板，可能会拉起第二个 SuperPicky 窗口，
+   原来的面板则一直转圈。原因是内置的一个组件把 RAW 当普通图片打开失败后，
+   会尝试临时安装一个缺失的包——而在打包版里，这个「安装程序」就是 SuperPicky
+   自己。现在已关闭运行时自动安装，补齐了它要查找的包信息，并把该组件锁定在
+   验证过的版本。
+2. **整种合并的确认弹窗会提示跨了几个批次。** 同时浏览多个目录时，把某个鸟种
+   的照片一次全部改掉，作用范围是所有这些批次。确认弹窗现在会写明涉及几个批次
+   并列出来，不会再把「牛背鹭/3星_优选」这样一行误当成一个文件夹。只浏览单个
+   目录时，弹窗与以前完全相同。
+
+---
+
+# SuperPicky 4.6.3 RC4
+
+**What's new since RC3:**
+
+1. **A species correction now reaches the report.** After you corrected a bird's
+   species, the exported HTML report still listed the photo under the species
+   you had just replaced — and so did the eBird export and the "birds you
+   photographed this session" list that the correction dialog opens with. The
+   browser itself was right: the species dropdown and the thumbnail caption both
+   updated immediately, which is exactly why this was easy to miss. You would
+   only find out when you opened the report. Corrections made before this build
+   are unaffected in your library — the database was always written correctly —
+   so simply exporting the report again with this build gives you the right
+   names. Bursts are handled too: correcting one frame of a burst updates every
+   frame of that burst in the report, the way it always did on disk.
+
+---
+
+# SuperPicky 4.6.3 RC4（中文）
+
+**RC3 以来的变化：**
+
+1. **改完鸟种，报告终于跟着改了。** 在选鸟结果浏览器里纠正鸟种之后，导出的
+   HTML 报告里那张照片仍然挂在你刚刚换掉的那个鸟种下面——eBird 导出、以及改鸟种
+   弹窗开场列出的「本次拍到的鸟种」也一样。而浏览器本身是对的：左侧鸟种下拉和
+   缩略图下的鸟名都立刻更新了，所以这个问题很容易被忽略，只有打开报告才会发现。
+   这次修复之前做过的纠错不影响你的照片库——数据库一直写的是对的——所以用这一版
+   重新导出一次报告，鸟名就都正确了。连拍也一并处理：改一张连拍的鸟种，报告里
+   整组都会跟着改，与磁盘上一贯的行为一致。
+
+---
+
+# SuperPicky 4.6.3 RC3
+
+**What's new since RC1:**
+
+There are no changes to the app itself in RC2 — it is the same build as RC1.
+What changed is how the NVIDIA GPU version reaches you.
+
+1. **The CUDA (NVIDIA GPU) installer is now on the GitHub release page.** Until
+   now it was the one download you could not get from GitHub: it was believed to
+   exceed GitHub's 2 GiB per-file limit, so every release it had to be copied by
+   hand to a cloud drive. It never actually exceeded the limit — the file is
+   1.97 GiB, which many tools display as "2.11 GB", and that display is what the
+   assumption was built on. It now ships in the release like every other
+   download. The cloud-drive mirrors stay as they are.
+
+2. **The CUDA installer is smaller.** A cuDNN component that only serves
+   recurrent and attention networks was being bundled, and this app runs neither
+   — every model in it is a plain convolutional network. Removing it takes
+   roughly 80 MB off the download. Nothing about detection, identification or
+   scoring changes.
+
+The CPU version for Windows and the macOS version are byte-for-byte unaffected
+by both changes.
+
+---
+
+# SuperPicky 4.6.3 RC3（中文）
+
+**RC1 以来的变化：**
+
+RC2 的程序本身与 RC1 完全相同，改的是 N 卡（CUDA）版怎么送到你手上。
+
+1. **CUDA（N 卡）安装包现在直接放在 GitHub 发布页上。** 在此之前它是唯一一个
+   在 GitHub 上下不到的版本：一直以为它超过了 GitHub 单文件 2 GiB 的上限，所以
+   每次发版都要手工搬到网盘。其实它从来没超过——文件是 1.97 GiB，只是很多工具
+   把它显示成「2.11 GB」，当初就是照着这个显示下的判断。现在它和其他下载一样
+   随发布页一起发出。网盘镜像照旧保留。
+
+2. **CUDA 安装包变小了。** 包里一直带着一个只服务循环网络与注意力网络的 cuDNN
+   组件，而这个程序里一个都没用到——所有模型都是普通的卷积网络。去掉它，下载量
+   少了大约 80 MB。识别、检测、评分的行为一点不变。
+
+这两项改动都不影响 Windows CPU 版和 macOS 版，那两个包与 RC1 逐字节相同。
+
+---
+
+# SuperPicky 4.6.3 RC1
+
+This release is about correcting the AI when it is plainly wrong, and about
+windows that stay where you can reach them.
+
+## What's new
+
+1. **Tell SuperPicky "this is not a bird".** Every so often the detector calls a
+   crocodile — or a branch, or a rock — a bird, and until now there was no way to
+   say otherwise: you could change the species, but not remove it. The species
+   dialog now has a **Not a bird** button. It clears the species, drops the photo
+   to 0 stars, moves it to the reject pile and takes it out of the report's
+   species list, all in one step. Tick several thumbnails first and the whole
+   selection goes at once. Got it wrong? Just set a species again — the photo
+   counts as a bird once more (you will want to restore its rating yourself,
+   since naming a species deliberately leaves your stars alone).
+
+2. **The species picker opens with the birds you actually photographed.** When a
+   bird is misidentified it is usually mistaken for the species next to it, and
+   that one was very likely photographed the same day. The dialog now lists this
+   shoot's species first, most-shot at the top, before you type anything; once
+   you do type, they still sort to the top of the matches.
+
+3. **The results browser opens maximized.** On a 14-inch MacBook — or at any
+   enlarged text size — the old fixed window squeezed the three-column layout.
+   It now opens maximized, keeping the title bar and toolbar (this is not
+   macOS full screen).
+
+4. **Pick several folders at once when merging.** The system folder chooser now
+   accepts a multiple selection, so building a merged set no longer means
+   opening the dialog once per folder.
+
+5. **Your own rarity index sits next to the global one.** The bird-name lookup
+   now shows the custom rarity score beside the global figure, the same way the
+   results browser does.
+
+## Fixes
+
+6. **The main window no longer opens with its buttons off-screen.** The window
+   remembered a size and position without checking whether they still fit the
+   screen, so a window saved while the Dock was hidden came back with **Start**
+   and **Reset** cut off underneath a pinned Dock — visible in the layout,
+   impossible to click. The saved placement is now clamped into the screen's
+   usable area, keeping your preferred position while guaranteeing the whole
+   window is reachable.
+
+7. **78 common species are no longer labelled "legendary".** A flaw in how
+   rarity data was matched stored a genus-level key for species whose exact
+   match failed, and a genus key finds no occurrence records — so the count came
+   back as zero and the bird was scored as impossibly rare. The Eastern Cattle
+   Egret, one of the most widespread herons in the world, was rated legendary.
+   All affected entries have been rebuilt.
+
+8. **Changing a species now updates the thumbnail.** The caption under each
+   thumbnail was written once when the grid was built and never again, so after
+   correcting a species the grid kept showing the old name until you reopened
+   the folder.
+
+9. **You can finally see it when a file move fails.** Corrections that could not
+   move a file were supposed to report the reason; the notice was scheduled in a
+   way that never actually ran, so a failed correction looked exactly like a
+   successful one. It now reaches you.
+
+---
+
+# SuperPicky 4.6.3 RC1（中文）
+
+这一版是关于两件事：AI 认错得离谱时你能纠正它，以及窗口别跑到你够不着的地方。
+
+## 这一版有什么新东西
+
+1. **可以告诉 SuperPicky「这不是鸟」。** 识别偶尔会把鳄鱼——或者一根树枝、一块
+   石头——当成鸟，而在此之前你拿它没办法：能改鸟种，却不能说「这压根不是鸟」。
+   改鸟种的弹窗里现在多了**「这不是鸟」**。点一下，鸟种清空、降为 0 星、移进
+   「其他鸟类/0星_放弃」，报告的鸟种名录里也不再有它，一步到位。先勾几张再点，
+   整批一起标掉。标错了？重新指定鸟种即可，它又算作有鸟——星级要你自己升回来，
+   因为改鸟种不擅自动你的星。
+
+2. **选鸟种时先列出你今天真拍到的那些。** 认错多半是认成了隔壁那种，而那种当天
+   通常也拍到了。弹窗打开时（还没打字）先按张数列出本次拍到的鸟种；开始搜索后，
+   它们仍然排在匹配结果的最前面。
+
+3. **选鸟结果浏览器默认最大化打开。** 在 14 寸 MacBook 上，或者你把系统字号调大
+   之后，原先固定大小的窗口会把三栏布局挤变形。现在最大化打开，标题栏和工具栏
+   都还在（不是 macOS 那种全屏）。
+
+4. **合并目录时可以一次选中好几个。** 系统的目录选取框现在支持多选，攒一份合并
+   清单不必再一个一个地开弹窗。
+
+5. **查询鸟名时并排显示你自己的罕见指数。** 鸟名查询的详情区现在把自定义罕见
+   指数摆在全球罕见度旁边，与选鸟结果里的显示方式一致。
+
+## 修复
+
+6. **主窗口不会再把按钮开到屏幕外面。** 窗口会记住上次的大小和位置，却从不检查
+   这套数值在当前屏幕上还放不放得下——于是在 Dock 自动隐藏时存下的位置，等你把
+   Dock 固定显示之后再打开，**「开始处理」**和**「重置」**就被 Dock 压在下面：
+   布局里明明有，就是点不到。现在会把记住的位置夹进屏幕可用区域，既保留你惯用的
+   位置，也保证整个窗口都够得着。
+
+7. **78 个常见鸟种不再被标成「传奇」。** 罕见度数据在匹配失败时会退而存下属一级
+   的标识，而属一级的标识查不到任何观测记录——数量返回 0，于是这个鸟种被算成了
+   稀世罕见。牛背鹭，全世界分布最广的鹭之一，就这么成了「传奇」。所有受影响的
+   条目都已重建。
+
+8. **改完鸟种，缩略图上的名字会跟着变了。** 缩略图下方那行字只在建网格时写过
+   一次，之后再没更新过，所以改完鸟种，网格里显示的还是旧鸟名，除非你重开目录。
+
+9. **文件搬不动的时候，你终于能看见了。** 改鸟种时若文件移动失败，本该告诉你
+   原因，但那条提示的触发方式实际上从来没执行过——失败看起来和成功一模一样。
+   现在它会真的弹出来。
+
+---
+
+# SuperPicky 4.6.2
+
+This release is about looking at more than one shoot at a time: pick any folders
+you like — from any drive — and see them as a single set of results.
+
+## What's new
+
+1. **Merge several folders into one set of results.** Open a folder that holds
+   more than one processed batch and SuperPicky now asks which ones you want,
+   then shows them together: one photo count, one species count, one report. The
+   list is yours to build — an **Add Folder…** button lets you keep adding
+   folders from anywhere, including other drives, so the days you want to
+   combine no longer have to sit under a common parent. Add a parent folder and
+   it offers to pull in every processed batch inside it at once. Each row shows
+   that folder's photo and species count before you commit to opening it, and
+   you can remove any row you did not mean to add. The same **Merge Folders…**
+   button sits in the browser toolbar, so you can widen or narrow the set at any
+   time without going back to the main window.
+
+2. **The report now lists every species up front.** Under the "Species (N)"
+   heading there is now a compact index of every species and how many photos you
+   took of it, in the same rarity order as the gallery below. Click a name to
+   jump straight to its block. The gallery shows at most four frames per
+   species, so the per-species totals were previously nowhere to be found.
+
+3. **The species dropdown is numbered.** The filter's species list now numbers
+   its entries, so the last number tells you how many species the batch holds
+   without counting them yourself — useful when ten merged days run to forty or
+   fifty species.
+
+## Fixes
+
+4. **Merging more than ten folders no longer silently drops data.** SQLite
+   allows at most ten databases to be attached at once, and the eleventh onward
+   failed silently: the photo and species counts covered only the first ten
+   folders, with nothing to indicate the rest were missing. Wrong numbers that
+   look right are worse than an error message. Every folder is now queried on
+   its own, with no limit.
+
+5. **Folders processed by older versions can be merged again.** Databases
+   written by different versions do not all have the same columns, and one
+   folder with four leftover columns from an abandoned feature was enough to
+   make the whole merge fail with an unreadable SQL error. Columns are now
+   matched by name: missing ones read as empty, extra ones are ignored.
+
+6. **A batch nested inside another is no longer counted twice.** If a processed
+   folder contains another processed folder of the same photos — which happens
+   when a batch is re-run into a subfolder — both used to be included, inflating
+   every total. Only the outer one is kept now. A batch inside an *unprocessed*
+   folder (a camera card folder, say) is still counted, because there it is the
+   real batch.
+
+7. **Merging folders across different drives works.** Combining a folder on an
+   external drive with one on the internal drive used to fail outright on
+   Windows. This is a common way to work — today's shoot on the portable drive,
+   last week's already copied to the internal one — so it now simply works.
+
+---
+
+# SuperPicky 4.6.2（中文）
+
+这一版是为了「一次看不止一次外拍」：你可以自由挑任意几个目录——哪怕在不同硬盘
+上——把它们当成一份结果来看。
+
+## 这一版有什么新东西
+
+1. **把几个目录的选鸟结果合成一份。** 打开一个含多个已处理批次的文件夹时，
+   SuperPicky 会先问你要哪几个，然后合起来显示：一个总张数、一个鸟种数、一份
+   报告。这份清单完全由你决定——**「添加目录…」**按钮可以一直往里加，任意位置、
+   任意硬盘都行，要合并的那几天不必挤在同一个父目录下。加进来的若是父目录，它会
+   问一句要不要把里面的批次全部加入。每一行都先写明该目录有多少张、多少种，你
+   不必打开就知道量有多大，加错了也可以单独移除。工具栏上有同样的**「合并目录…」**
+   按钮，看完一天之后想把前几天也算进来，随时可以改，不用退回主界面。
+
+2. **报告开头先列出所有鸟种。** 「本次鸟种 (N)」标题下多了一段名录：每个鸟种加
+   它的张数，顺序与下方画廊一致（按罕见度）。点鸟名直接跳到对应的图片区块。画廊
+   每种最多放 4 张，所以某种到底拍了多少张，以前在报告里根本查不到。
+
+3. **鸟种下拉带序号了。** 筛选栏的鸟种列表逐项编号，拉到底看末位序号就知道这批
+   有多少种，不必自己数——合并十天常有四五十种。
+
+## 修复
+
+4. **合并超过 10 个目录不再静默丢数据。** SQLite 一次最多只能挂 10 个数据库，
+   第 11 个起会失败，而失败被吞掉了：你看到的张数和鸟种数只含前 10 个目录，界面
+   上却没有任何提示。看起来正常的错数字比报错危险得多。现在每个目录单独查询，
+   没有数量上限。
+
+5. **老版本处理过的目录又能参与合并了。** 不同版本写的数据库列数不一样，只要有
+   一个目录残留着某个已废弃功能的四个字段，整个合并就会抛一句读不懂的 SQL 错误
+   而失败。现在按列名对齐：缺的算空，多的忽略。
+
+6. **嵌套在里面的重复批次不再被算两遍。** 一个已处理目录里若还套着另一个装着同一
+   批照片的已处理目录（把同一批重跑进子目录时会出现），原先两个都算，所有合计
+   数字都会翻倍。现在只取外层。若外层目录本身没被处理过（比如相机卡目录），
+   里层仍然照常计入——那才是真正的批次。
+
+7. **跨硬盘合并目录能用了。** 把移动盘上的一个目录和内置盘上的一个目录合在一起，
+   在 Windows 上原先会直接失败。而这恰恰是常见的用法——当天的在移动盘、上周的
+   早已拷进内置盘——现在正常工作。
+
+---
+
+# SuperPicky 4.6.1
+
+This release is about getting your sightings out of the app and into eBird, and
+about making species corrections actually stick.
+
+## What's new
+
+1. **Export your sightings to eBird.** The results browser has a new Export
+   eBird button. It turns the birds you photographed into an eBird checklist
+   file you can upload on the eBird website — one checklist per shooting day,
+   one row per species, count of 1. You type the location name once; the
+   coordinates come from your photos' GPS automatically (the median of that
+   day's fixes, so one stray reading cannot drag the location off). Only photos
+   rated 2 stars or higher with an identified species are included. Species are
+   identified by scientific name, which works regardless of what display
+   language your eBird account uses — a common name that is correct globally can
+   still be rejected by an Australian or British account, and this avoids the
+   whole problem. Upload it on eBird under Import Data → eBird Record Format
+   (Extended).
+
+2. **Show a second rarity figure of your own.** If you have your own rarity
+   dataset — a 0 to 10 score per species from any source you trust — you can
+   import it in Settings → Bird ID, and the detail panel will show it next to
+   the built-in global rarity, like "Legendary (91.5 - 7.97)". SuperPicky ships
+   no such data; it only provides the slot. Star ratings and sorting are
+   unaffected — this is for your reference only.
+
+3. **RAW extraction now reports progress and can be stopped.** Extracting
+   previews from a large batch of RAW files used to look frozen. It now shows
+   progress as it goes, and the Stop button works during that stage instead of
+   only after it.
+
+## Fixes
+
+4. **Changing a bird's species now actually moves the photo.** Correcting a
+   species used to update the name but leave the file in the old species folder
+   — and a second correction on the same photo would silently do nothing at all.
+   Both are fixed. The correction also now writes the new name into the photo's
+   XMP metadata (title and keywords), so Lightroom and other tools see it too;
+   previously the file on disk kept the wrong name forever.
+
+5. **Correct several photos at once.** Tick multiple thumbnails, right-click,
+   and the species change applies to all of them. Burst groups are handled as a
+   whole, so correcting one frame corrects the entire burst.
+
+6. **Fixed a random crash.** The app could abort at unpredictable moments
+   because thumbnail loading threads were destroyed while still running. This
+   accounted for half the crash reports collected on the development machine.
+
+7. **The Video page is back in Settings.** It had been removed from the
+   settings navigation while the underlying feature was still active, which left
+   the video toggle unreachable for anyone who had not turned it on before
+   upgrading.
+
+8. **Cross-folder burst merging no longer creates folders from low-confidence
+   names.** A burst spanning two folders could end up filed under a species name
+   the identifier was not confident about.
+
+---
+
+# SuperPicky 4.6.1（中文）
+
+这一版的重点是把你的观测记录送进 eBird，以及让「改鸟种」真正生效。
+
+## 这一版有什么新东西
+
+1. **导出 eBird 观测记录。** 选鸟结果浏览器新增「导出 eBird」按钮，把你拍到的
+   鸟整理成 eBird 清单文件，可直接在 eBird 网站上传。按拍摄日期一天一份清单，
+   同一天同一鸟种一行，数量固定 1。地点名你填一次，坐标自动取自照片 GPS（取
+   当天的中位数，个别漂移点不会把位置带偏）。只统计 2 星以上、已识别出鸟种的
+   照片。鸟种用学名标识，因此不受你 eBird 账号显示语言的影响——一个全球通用
+   的英文名在澳洲或英国账号下仍可能被拒收，用学名可以完全绕开这个问题。上传
+   时在 eBird 选「Import Data」→「eBird Record Format (Extended)」。
+
+2. **可以显示你自己的第二套罕见度。** 如果你手上有一份自己信得过的鸟种罕见度
+   数据（每种 0 到 10 分），可以在「设置 → 识鸟」里导入，详情页就会把它显示在
+   内置的全球罕见度旁边，形如「传奇 (91.5 - 7.97)」。SuperPicky 本身不附带任何
+   这类数据，只提供接口。评星与排序完全不受影响，纯属参考。
+
+3. **RAW 提取阶段现在有进度，也能中途停止。** 处理大批 RAW 时的预览提取过去
+   看起来像卡住了，现在会持续报告进度，「停止」按钮在这一阶段也能立即响应，
+   不必等它跑完。
+
+## 修复
+
+4. **改鸟种现在真的会把照片移过去。** 过去改完鸟种，名字变了但文件还留在原来的
+   鸟种目录里；对同一张照片改第二次更是完全没有反应。两个问题都已修复。改鸟种
+   现在还会把新鸟名写进照片的 XMP 元数据（标题与关键字），Lightroom 等软件也能
+   看到——过去磁盘上的文件会一直保留着错误的鸟名。
+
+5. **可以一次改多张。** 勾选多张缩略图后右键改鸟种，会一次性全部改掉。连拍组
+   整组处理，改其中一张等于改整组。
+
+6. **修复了一个随机崩溃。** 缩略图加载线程在仍然运行时被销毁，会让程序在不确定
+   的时刻整个退出。开发机上收集到的崩溃报告有一半源于此。
+
+7. **设置中心的「视频」页回来了。** 之前它被从设置导航里摘掉，而视频功能本身
+   还在运行，导致升级前没开过该功能的人再也打不开这个开关。
+
+8. **跨目录连拍合并不再用低置信度鸟名建目录。** 跨两个目录的连拍组可能被归到
+   一个识别器本身并不确定的鸟种名下。
+
+---
+
+# SuperPicky 4.6.0
+
+This release is about getting your results out of the app: export a shareable
+report of the day's shoot, send your keepers to Apple Photos, and fix a whole
+misidentified species in one go.
+
+## What's new
+
+1. **Export a shareable report of your shoot.** The results browser has a new
+   Export Report button. It produces a single HTML file in your picking folder
+   that opens by double-clicking, with the photos embedded inside it — send it
+   to a friend, post it in a group, or keep it as your own record. It works
+   offline and the images never go missing. The report opens on your best frame
+   of the day, then gives each species its own section ordered by rarity, with
+   its Chinese and scientific names, a rarity badge, an IUCN badge for
+   threatened species, and up to four photos. Burst frames are collapsed to one
+   per burst, so you get four different moments rather than four near-identical
+   ones. Every photo carries its exposure settings, and the lead shot of each
+   species also shows its sharpness, aesthetics and species beauty scores.
+   Below that is a breakdown of your stars, keeper rate, in-flight and sharp
+   counts, burst groups and gear. Click any photo to enlarge it. A Save as PDF
+   button prints it on white paper. A typical shoot — 284 photos, 12 species —
+   comes to about 4 MB.
+
+2. **Send your keepers straight to Apple Photos (macOS only).** The results
+   browser has an Add to Photos button. It imports the RAW file whenever one
+   exists, and writes the bird's name, your star rating and the quality figures
+   into the Photos title, description and keywords, so you can search for a
+   species inside Photos itself. Photos you have already sent across are
+   skipped, so running it a second time will not duplicate anything. If you have
+   ticked any thumbnails, only those are imported; if you have ticked none, the
+   whole filtered list goes. Each run creates or reuses an album named after the
+   folder and the date, filed under a SuperPicky Imports folder. Your RAW files
+   are never modified, and XMP sidecars are never sent to Photos. Contributed by
+   @orientaldollarbird.
+
+3. **Fix a whole misidentified species in one go.** When a batch gets the same
+   bird wrong from end to end, right-click any of those photos and pick
+   Change all <species> to…. It retags every photo of that species in the
+   database — not just the ones currently filtered on screen — and moves them
+   into the new species' folders, keeping burst groups together. Before anything
+   moves you get a confirmation showing how many photos are involved, how many
+   burst groups, and the exact target folders, so a batch organised in English
+   won't quietly grow a second set of folders in Chinese. Related fix: changing
+   a species used to fail silently when a file with the same name already sat in
+   the target folder — the database was updated while the file stayed put. Now
+   the file and the database never disagree.
+
+4. **4 and 5 stars get their own folders.** Photos you promote by hand are no
+   longer filed with the 3-star ones, and the keyboard now goes all the way to
+   5. Your manual promotions also count in the statistics: the keeper rate is
+   now 3 stars and above, so promoting a photo no longer makes the number go
+   down.
+
+5. **Picked only is its own switch, and your picks always sort first.** The
+   crown used to sit in the row of star filters, where it looked like it added
+   photos to the list — it actually cut the list down to just your picks. It is
+   now a separate checkbox under that row. And because a pick is the overlap of
+   the sharpest and the best-looking of your 3-star shots, sorting by sharpness
+   or rarity alone used to scatter them: in one test the twelve picks landed at
+   positions 2, 4, 8 … 44, and as far down as 120 when sorted by rarity. Picks
+   now always come first, with your chosen sort applied inside them. Sorting by
+   filename is left alone, since its whole point is shooting order.
+
+6. **Anonymous usage statistics — and a switch to turn them off.** Settings →
+   About now has a switch for anonymous usage statistics, and the first launch
+   tells you what is collected before anything is sent. What is sent: the app
+   version, your operating system, the interface language, and a random ID that
+   changes every day. What is never sent: photos, file paths, or personal
+   information.
+
+7. **Check for a newer version from the About page.** The About page has its
+   website link back, plus a button that looks up the current release when you
+   ask it to. Nothing is checked in the background and nothing is downloaded or
+   installed — it only reads the version number when you click.
+
+8. **Dark menus no longer show white edges.** Drop-down lists throughout the app
+   — filters, sorting, the bird ID country and region pickers, Settings — were
+   drawn on top of the macOS light panel, leaving white strips above and below
+   the list. Right-click menus in text fields carried icons drawn for a light
+   theme, which were all but invisible on a dark menu.
+
+9. **The app no longer hangs forever when an external tool stops responding.**
+   Thirteen places that call out to external programs had no time limit, so one
+   stuck call could freeze the app for good.
+
+10. **Folders processed by older versions open again.** A results database
+    written by an earlier version could be missing columns the browser expects;
+    missing columns are now filled in on open.
+
+11. **What the app tells you now matches what it does.** The star rules on the
+    console and in step 2 of the usage guide describe the batch-quota system
+    actually in use, the burst note quotes the minimum you configured instead of
+    a hard-coded 4, and a few Chinese strings that leaked into the English
+    interface are gone.
+
+12. **Smaller fixes.** On macOS the app no longer leaves behind the helper that
+    keeps your Mac awake after you quit; deleting files copes with unusual
+    characters in filenames; the aesthetics threshold can go as low as the
+    slider allows instead of snapping back; and cancelling an Apple Photos
+    import now actually stops.
+
+---
+
+# SuperPicky 4.6.0（中文）
+
+这一版的重点是把成果带出软件：导出一份可以直接发给别人的报告、把选出的照片送进
+Apple 照片、以及一次改掉整个认错的鸟种。
+
+## 这一版有什么新东西
+
+1. **导出一份可以分享的拍摄报告。** 选鸟浏览器新增「导出报告」按钮，会在选鸟目录
+   里生成一个 HTML 文件，双击就能打开，照片直接嵌在文件里——发给鸟友、发到群里，
+   或者留着自己回顾都行。断网也能看，图片永远不会丢。报告开头是这次最好的一张，
+   接着每个鸟种一块、按罕见度排序，带中文名、学名、罕见度标签，受威胁鸟种还有
+   IUCN 标签，每种最多四张。同一组连拍只取一张，所以看到的是四个不同瞬间，而不是
+   四张几乎一样的照片。每张都标着曝光参数，每种的代表作还会显示锐度、美学和鸟种
+   颜值。下面是星级分布、命中率、飞版数、精焦数、连拍组数和器材统计。点任意一张
+   可以放大。还有「存为 PDF」按钮，会转成白底适合打印。一次外拍的量——284 张照片、
+   12 个鸟种——大约 4 MB。
+
+2. **把选出的照片直接送进 Apple 照片（仅 macOS）。** 选鸟浏览器新增「添加到照片」
+   按钮。有 RAW 就导入 RAW，并把鸟种名、你打的星级和质量数据写进照片的标题、描述
+   和关键词，这样在「照片」里就能直接搜鸟种。已经送过去的会自动跳过，再点一次不会
+   重复。勾选了缩略图就只导入勾选的，一张没勾就导入当前筛选出的全部。每次运行会
+   按文件夹名和日期建一个相簿，收在「SuperPicky Imports」文件夹下。你的 RAW 文件
+   不会被改动，XMP 边车也不会送进「照片」。由 @orientaldollarbird 贡献。
+
+3. **一次改掉整个认错的鸟种。** 一批照片从头到尾认成同一种错鸟时，右键任意一张选
+   「把整个「某某鸟」改为…」。它会把数据库里这个鸟种的**全部**照片改掉——不只是
+   当前筛选出来的那些——并搬进新鸟种的文件夹，连拍组整组一起走。动手之前会先给你
+   一份确认：涉及多少张、多少个连拍组、目标文件夹的确切名字，所以用英文整理过的
+   目录不会悄悄多出一套中文文件夹。顺带修了一个老问题：改鸟种时如果目标文件夹里
+   已有同名文件，以前会静默失败——数据库改了、文件却没动。现在文件和数据库不会再
+   各说各话。
+
+4. **4 星和 5 星有了自己的文件夹。** 手动升上去的照片不再和 3 星混在一起，键盘打星
+   也放开到了 5 星。手动升的星现在也计入统计：命中率改成「3 星及以上」，升一张星
+   不会再让命中率反而下降。
+
+5. **「只看精选」变成独立开关，精选永远排在最前面。** 皇冠原来挤在星级筛选那一排
+   里，看着像是往列表里加照片，实际上是把列表缩到只剩精选。现在它是那一排下面单独
+   的一个勾选框。另外，精选是「3 星里又锐又好看」的交集，所以单按锐度或罕见度排序
+   会把它们打散：实测十二张精选分别落在第 2、4、8……44 位，按罕见度排时最远的排到
+   第 120 位。现在精选永远排在最前面，你选的排序在精选内部生效。按文件名排序不受
+   影响，因为它的意义就是拍摄顺序。
+
+6. **匿名使用统计，以及一个可以关掉它的开关。** 设置 →「关于」新增匿名使用统计
+   开关，首次启动会在发送任何数据之前告诉你收集了什么。发送的是：软件版本、操作
+   系统、界面语言，以及一个每天都会变的随机 ID。绝不发送：照片、文件路径、个人
+   信息。
+
+7. **可以在「关于」页查最新版本。** 「关于」页恢复了官网入口，并新增一个按钮，点了
+   才去查当前发布版本。后台不做任何检查，也不下载、不安装——只有你点的时候才读一次
+   版本号。
+
+8. **深色界面的菜单不再露白边。** 全软件的下拉列表——筛选、排序、识鸟的国家和地区
+   选择、设置——原本画在 macOS 的浅色面板上，列表上下会露出白条。文本框的右键菜单
+   用的是浅色主题的图标，在深色菜单上几乎看不见。
+
+9. **外部工具卡住时软件不会再永久无响应。** 十三处调用外部程序的地方没有超时限制，
+   一次卡住就会让软件永远转圈。
+
+10. **旧版本处理过的目录又能打开了。** 早期版本写的结果数据库可能缺少浏览器需要的
+    列，现在打开时会自动补上。
+
+11. **软件说的和它做的对上了。** 控制台和使用步骤第 2 步里的星级规则，现在描述的是
+    实际在用的批内配额；连拍提示引用的是你自己设的最小张数，不再是写死的 4；漏进
+    英文界面的几处中文也清掉了。
+
+12. **一些小修复。** macOS 上退出软件后不会再留下那个让 Mac 保持唤醒的辅助进程；
+    删除文件能正确处理文件名里的特殊字符；美学阈值可以调到滑块允许的最低值而不会
+    弹回；取消 Apple 照片导入现在是真的会停下来。
+
+---

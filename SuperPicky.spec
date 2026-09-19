@@ -71,6 +71,11 @@ all_datas.extend(copy_metadata('imageio'))
 all_datas.extend(copy_metadata('rawpy'))
 all_datas.extend(copy_metadata('ultralytics'))
 all_datas.extend(copy_metadata('pillow_heif'))
+# pi_heif 元数据必须带上：ultralytics check_requirements("pi-heif") 靠 importlib.metadata 判断是否已装，
+# 缺元数据会被判为未安装并尝试 pip 安装（与 SuperPicky_win64.spec 对齐）。
+# pi_heif metadata is required: ultralytics check_requirements("pi-heif") uses
+# importlib.metadata, and missing metadata is treated as not installed (matches win64 spec).
+all_datas.extend(copy_metadata('pi_heif'))
 
 a = Analysis(
     ['main.py'],
@@ -120,22 +125,18 @@ a = Analysis(
         # V4.0.0: 鸟类识别模块
         'birdid',
         'birdid.bird_identifier',
-        'birdid.ebird_country_filter',
+        'birdid.geo_filter',       # 地理过滤：bird_identifier 顶层导入，其余调用点为函数内延迟导入
+        'birdid.region_locator',   # GPS 区域定位：bird_identifier 函数内延迟导入，PyInstaller 静态分析看不到
+        'birdid.region_geometry',  # 区域定位的几何工具，由 region_locator 导入
+        'tools.country_names',     # 国家显示名：仅被 region_data / birdid_server 函数内导入
         'birdid_server',
         'server_manager',  # V4.0.0: 服务器管理模块
         'flask',
         'flask.json',
         'cryptography',
         'cryptography.fernet',
-        # V4.2.1: Countly telemetry build config (dynamically imported via importlib,
-        # PyInstaller cannot auto-discover it, must be listed explicitly)
-        '_telemetry_build',
-        'app_user_stat._telemetry_build',
         'app_user_stat',
         'app_user_stat.telemetry',
-        'app_user_stat.consent_texts',
-        'app_user_stat.consent_texts.en_US',
-        'app_user_stat.consent_texts.zh_CN',
     ],
     hookspath=[],
     hooksconfig={},
@@ -149,6 +150,8 @@ a = Analysis(
         'pyarrow',
         'facexlib',
         'datasets',
+        # 一键训练工具（内部，仅 James 本地用）绝不进用户版 App
+        'tools.train',
     ],
     noarchive=False,
     optimize=0,

@@ -21,6 +21,27 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
+# 禁止 ultralytics 运行时自动 pip 安装依赖。必须在任何 import ultralytics 之前设置——
+# ultralytics 在自身 import 时把 YOLO_AUTOINSTALL 读成模块常量，之后再设无效。
+# 8.4.x 起它全局替换了 PIL.Image.open：任意 Image.open 失败（如 PIL 打开 NEF）
+# 都会 check_requirements("pi-heif")，缺包元数据时执行 [sys.executable, "-m", "pip", ...]。
+# 打包版的 sys.executable 就是 SuperPicky 本体，结果是拉起第二个完整 GUI 窗口，
+# 而调用方同步等待这个永不退出的「pip」，识鸟面板一直转圈。依赖由打包/requirements 管理，
+# 应用不应自行安装。用 setdefault 以便开发者需要时仍可通过环境变量覆盖。
+# 注意：ai_model.py 在导入本模块之前就 import ultralytics，那里单独设置了同一变量。
+#
+# Forbid ultralytics from auto-installing packages via pip at runtime. Must be set
+# BEFORE any `import ultralytics` — it reads YOLO_AUTOINSTALL into a module constant
+# at import time. Since 8.4.x it globally replaces PIL.Image.open: any failed open
+# (e.g. PIL on a NEF) calls check_requirements("pi-heif"), which runs
+# [sys.executable, "-m", "pip", ...] when package metadata is missing. In a frozen
+# build sys.executable is the SuperPicky app itself, so a second full GUI launches
+# while the caller blocks forever on that "pip", leaving the BirdID dock spinning.
+# Dependencies are managed by packaging/requirements; the app must never self-install.
+# setdefault keeps an env-var override available for developers.
+# Note: ai_model.py imports ultralytics before this module and sets the same variable.
+os.environ.setdefault("YOLO_AUTOINSTALL", "False")
+
 logger = logging.getLogger(__name__)
 
 # Torch is intentionally imported lazily.
@@ -54,8 +75,8 @@ def get_app_install_dir() -> Path:
     """
     返回应用安装根目录 / Return the application install root.
 
-    Windows Lite 打包场景下，运行时、模型和数据库必须固定落在该目录内。
-    In Windows Lite builds, runtime files, models, and databases must stay under this directory.
+    Windows 打包场景下，运行时、模型和数据库必须固定落在该目录内。
+    In Windows builds, runtime files, models, and databases must stay under this directory.
     """
     if getattr(sys, "frozen", False):
         executable = Path(sys.executable).resolve()
@@ -148,7 +169,7 @@ def get_install_scoped_resource_path(
     """
     返回安装目录约束下的资源路径 / Return a resource path constrained to the install directory when required.
 
-    Windows Lite 打包环境下，模型/数据库/运行时等可变资源必须位于安装目录。
+    Windows 打包环境下，模型/数据库/运行时等可变资源必须位于安装目录。
     Other environments keep using the bundled resource layout.
     """
     if getattr(sys, "frozen", False) and sys.platform == "win32":
@@ -158,7 +179,7 @@ def get_install_scoped_resource_path(
 
 
 def get_packaged_model_relative_path(relative_path: str) -> str:
-    """返回 Windows Lite 打包环境下模型的内部相对路径 / Return the packaged relative path for models in Windows Lite builds."""
+    """返回 Windows 打包环境下模型的内部相对路径 / Return the packaged relative path for models in Windows builds."""
     normalized = relative_path.replace("\\", "/")
     if normalized.startswith("models/"):
         return "models/" + normalized.split("/", 1)[1]
@@ -364,6 +385,13 @@ class AIConfig:
     CENTER_THRESHOLD: float = 0.15
     SHARPNESS_NORMALIZATION: Optional[str] = None
 
+    # V4.6: 无鸟补救扫描参数 / No-bird rescue scan parameters
+    RESCUE_IMGSZ: int = 1024      # 补救重扫推理分辨率 / rescue rescan imgsz
+    RESCUE_CONF: float = 0.05     # 补救重扫置信度地板 / rescue conf floor
+    # COCO 中飞鸟常被误认的类别 / COCO classes birds in flight are mistaken for
+    RESCUE_CONFUSABLE_CLASS_IDS: dict = field(
+        default_factory=lambda: {4: "airplane", 33: "kite"})
+
     def get_model_path(self) -> str:
         """
         返回主模型的实际可访问路径 / Return the actual accessible path to the main model.
@@ -493,7 +521,17 @@ class EndpointConfig:
     """
 
     MIRROR_BASE_URL: str = "http://1.119.150.179:59080/superpicky"
-    UPDATE_DOWNLOAD_PAGE: str = "https://superpicky.jamesphotography.com.au/#download"
+    # 官网域名为 superpicky.app（GitHub Pages，见 docs/CNAME）。
+    # 旧地址 superpicky.jamesphotography.com.au 已无 DNS 记录，属死链，勿再使用。
+    # The official site is superpicky.app (GitHub Pages, see docs/CNAME). The old
+    # superpicky.jamesphotography.com.au host has no DNS record and must not be used.
+    UPDATE_DOWNLOAD_PAGE: str = "https://superpicky.app/#download"
+    # 官网发布清单：由维护者随发布手工更新，供应用内“检查最新版本”只读查询。
+    # 不走 GitHub Release API，以避开 CUDA 包 >2GB 无法进 Release 的限制。
+    # Site release manifest, hand-maintained per release and read-only for the
+    # in-app version check. Avoids the GitHub Release API because the CUDA
+    # installer exceeds the 2 GiB asset limit and never lands there.
+    DOWNLOAD_MANIFEST_URL: str = "https://superpicky.app/downloads_github.json"
     EBIRD_API_BASE: str = "https://api.ebird.org/v2"
     NOMINATIM_REVERSE_URL: str = "https://nominatim.openstreetmap.org/reverse"
 
@@ -514,6 +552,11 @@ class EndpointConfig:
             UPDATE_DOWNLOAD_PAGE=str(
                 _env_or_override(
                     "SUPERPICKY_DOWNLOAD_PAGE", None, cls.UPDATE_DOWNLOAD_PAGE
+                )
+            ),
+            DOWNLOAD_MANIFEST_URL=str(
+                _env_or_override(
+                    "SUPERPICKY_DOWNLOAD_MANIFEST_URL", None, cls.DOWNLOAD_MANIFEST_URL
                 )
             ),
             EBIRD_API_BASE=str(
@@ -667,6 +710,50 @@ def get_lazy_registry() -> LazyRegistry:
     Callers should use this entry point to get the shared registry and avoid cache fragmentation caused by creating their own registries.
     """
     return _lazy_registry
+
+
+def ensure_cv2_thread_pool() -> None:
+    """
+    恢复被 ultralytics 关掉的 OpenCV 线程池。
+
+    `import ultralytics` 时会全局调用 cv2.setNumThreads(0)，用于规避其训练
+    场景下 fork 式 DataLoader 与 OpenCV 线程池的死锁；副作用是整个进程的
+    cv2 退化为单线程（实测 45MP 照片 INTER_AREA 从 ~24ms 变 ~225ms），
+    TOPIQ 两段式 resize、视频抽帧等所有 cv2 热路径都被拖慢。
+
+    SuperPicky 是纯推理应用：不使用 fork 式 DataLoader，且 macOS 与
+    Windows 的 multiprocessing 启动方式均为 spawn（子进程重新导入，不继承
+    线程池状态），该保护不适用。所以在每个 ultralytics 导入点之后调用本
+    函数，把线程数恢复为 OpenCV 自身的默认值（逻辑 CPU 数）。
+
+    返回:
+    None
+
+    Restore the OpenCV thread pool that ultralytics disables.
+
+    `import ultralytics` globally calls cv2.setNumThreads(0) to avoid a
+    fork-DataLoader deadlock in their training scenarios; the side effect is
+    process-wide single-threaded cv2 (measured: INTER_AREA on a 45MP frame
+    goes from ~24ms to ~225ms), slowing the TOPIQ two-stage resize, video
+    frame extraction, and every other cv2 hot path.
+
+    SuperPicky is inference-only: no fork DataLoaders, and multiprocessing
+    spawns on both macOS and Windows (children re-import and don't inherit
+    pool state), so the guard does not apply. Call this right after each
+    ultralytics import site to restore OpenCV's own default (logical CPUs).
+
+    Return:
+    None
+    """
+    try:
+        import cv2
+
+        cv2.setNumThreads(cv2.getNumberOfCPUs())
+    except Exception:
+        # cv2 不可用或后端不支持线程控制时静默跳过，不影响功能
+        # Silently skip when cv2 is unavailable or the backend doesn't
+        # support thread control — functionality is unaffected.
+        pass
 
 
 def get_best_device():

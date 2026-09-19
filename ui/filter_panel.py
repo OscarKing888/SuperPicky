@@ -17,6 +17,8 @@ from PySide6.QtGui import QIcon
 
 from ui.styles import COLORS, FONTS
 from ui.icon_utils import load_tinted_icon, stars_pixmap, checkbox_indicator_qss
+from ui.combo_popup import style_combo_popup
+from tools.report_db import SPECIES_FILTER_OTHER
 
 # 排序项图标:降序项(rarity/sharpness/aesthetic)用向下箭头,当前选中项用对勾
 _SORT_DESC_ICON = "arrow-down.svg"
@@ -37,8 +39,13 @@ _CHIP_STAR_GAP = 1
 
 # 评分按钮配置 (mode_key, label, ratings_list)
 # ratings_list = None → 不过滤评分
+# 注意：这一排筹码全部是**并集**语义（勾 3★+2★ = 3★∪2★）。
+# 「精选」不在此列——它是 AND 收窄（WHERE picked=1），与并集混排会让人误以为
+# 勾上它是「再加进来一批」，实际是把结果塌成精选那十几张。故独立成
+# 「只看精选」开关，见 _build_picked_only_check()。
+# Every chip here is a union branch. "Picked" is an AND narrowing filter, so it
+# lives in its own checkbox instead of being mixed in with these.
 _RATING_OPTIONS = [
-    ("picked", "🏆",   [3, 4, 5]),   # 精选：Top 25% 3★ 照片
     ("3",     "★★★", [3, 4, 5]),
     ("2",     "★★",  [2]),
     ("1",     "★",   [1]),
@@ -50,12 +57,15 @@ _RATING_OPTIONS = [
 # photographers typically review first.
 _DEFAULT_RATINGS = {"3", "2"}
 
-# 对焦按钮配置 (mode_key, label, statuses_list, color_key)
-# statuses_list 是传给 DB 的 focus_status 列表
+# 对焦按钮配置 (mode_key, statuses_list, color_key)
+# statuses_list 是传给 DB 的 focus_status 列表;显示文案统一走
+# browser.focus_state_* i18n 键,与右侧详情面板同词(Paul 反馈 P0-1)。
+# Focus filter config (mode_key, statuses, color). Labels come from the
+# browser.focus_state_* i18n keys so both panel sides use the same terms.
 _FOCUS_OPTIONS = [
-    ("BEST",  "精焦", ["BEST"],         COLORS['focus_best']),
-    ("GOOD",  "合焦", ["GOOD"],         COLORS['focus_good']),
-    ("BAD",   "失焦", ["BAD", "WORST"], COLORS['focus_bad']),   # 失焦 = BAD + WORST 合并
+    ("BEST", ["BEST"],         COLORS['focus_best']),
+    ("GOOD", ["GOOD"],         COLORS['focus_good']),
+    ("BAD",  ["BAD", "WORST"], COLORS['focus_bad']),   # 失焦 = BAD + WORST 合并
 ]
 _DEFAULT_FOCUS = "BEST"
 
@@ -107,9 +117,17 @@ class FilterPanel(QWidget):
         self._adv_config = get_advanced_config()
 
         self.setFixedWidth(236)
+        # 带选择器：这条规则若写成无选择器的裸声明，会传播到子树内每一个控件，
+        # 并且「更近的祖先」优先级高于主窗口 GLOBAL_STYLE，于是连两个下拉的
+        # 弹出列表容器（QComboBoxPrivateContainer）也一并被它接管，
+        # GLOBAL_STYLE 里给容器写的深色规则就永远轮不上。
+        # Scoped on purpose: a bare declaration propagates to every descendant and
+        # a nearer ancestor outranks the main window's GLOBAL_STYLE, so it would
+        # also claim each combo's popup container and suppress its dark rule.
+        self.setObjectName("filterPanel")
         self.setStyleSheet(
-            f"background-color: {COLORS['bg_elevated']};"
-            f" border-right: 1px solid {COLORS['border_subtle']};"
+            f"QWidget#filterPanel {{ background-color: {COLORS['bg_elevated']};"
+            f" border-right: 1px solid {COLORS['border_subtle']}; }}"
         )
 
         self._build_ui()
@@ -129,7 +147,14 @@ class FilterPanel(QWidget):
         scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
 
         container = QWidget()
-        container.setStyleSheet("background: transparent;")
+        # 必须带选择器：无选择器的裸声明会传播到子树内所有控件（包括下拉弹出
+        # 列表的 QComboBoxPrivateContainer），把它打成透明，macOS 随即用原生
+        # 浅色菜单面板绘制，列表上下便露出白边。
+        # The selector is required: a bare declaration propagates to every
+        # descendant — including each combo's popup container — turning it
+        # transparent so macOS paints its native light panel behind the list.
+        container.setObjectName("filterPanelBody")
+        container.setStyleSheet("QWidget#filterPanelBody { background: transparent; }")
         layout = QVBoxLayout(container)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(20)
@@ -152,18 +177,22 @@ class FilterPanel(QWidget):
             QComboBox::drop-down {{ border: none; width: 20px; }}
             QComboBox QAbstractItemView {{
                 background-color: {COLORS['bg_elevated']};
-                border: 1px solid {COLORS['border']};
-                border-radius: 6px;
+                border: none;
+                border-radius: 8px;
+                padding: 4px;
                 color: {COLORS['text_primary']};
                 selection-background-color: {COLORS['accent_dim']};
                 selection-color: {COLORS['accent']};
                 outline: none;
             }}
             QComboBox QAbstractItemView::item {{
-                padding: 6px 12px;
-                min-height: 24px;
+                padding: 5px 10px;
+                min-height: 22px;
             }}
         """)
+        # 弹出列表容器必须单独接线，祖先样式表够不到它（详见 ui/combo_popup.py）。
+        # The popup container needs per-instance styling; ancestor sheets can't reach it.
+        style_combo_popup(self.species_combo)
         self.species_combo.currentIndexChanged.connect(self._on_species_changed)
         self._refresh_species_icon()
         layout.addWidget(self.species_combo)
@@ -173,6 +202,9 @@ class FilterPanel(QWidget):
         # --- 评分筛选（单选）---
         layout.addWidget(_section_label(self.i18n.t("browser.filter_rating")))
         layout.addWidget(self._build_rating_buttons())
+        # 「只看精选」与上排筹码语义不同(收窄而非并集),独立成行。
+        # Narrowing filter, deliberately separated from the union chips above.
+        layout.addWidget(self._build_picked_only_check())
 
         layout.addWidget(self._divider())
 
@@ -195,6 +227,7 @@ class FilterPanel(QWidget):
         self._sort_combo.addItem(self.i18n.t("browser.sort_filename"), "filename")
         self._sort_combo.addItem(self.i18n.t("browser.sort_sharpness"), "sharpness_desc")
         self._sort_combo.addItem(self.i18n.t("browser.sort_aesthetic"), "aesthetic_desc")
+        self._sort_combo.addItem(self.i18n.t("browser.sort_species_beauty"), "species_beauty_desc")
         self._sort_combo.setStyleSheet(f"""
             QComboBox {{
                 background-color: {COLORS['bg_input']};
@@ -209,18 +242,21 @@ class FilterPanel(QWidget):
             QComboBox::drop-down {{ border: none; width: 20px; }}
             QComboBox QAbstractItemView {{
                 background-color: {COLORS['bg_elevated']};
-                border: 1px solid {COLORS['border']};
-                border-radius: 6px;
+                border: none;
+                border-radius: 8px;
+                padding: 4px;
                 color: {COLORS['text_primary']};
                 selection-background-color: {COLORS['accent_dim']};
                 selection-color: {COLORS['accent']};
                 outline: none;
             }}
             QComboBox QAbstractItemView::item {{
-                padding: 6px 12px;
-                min-height: 24px;
+                padding: 5px 10px;
+                min-height: 22px;
             }}
         """)
+        style_combo_popup(self._sort_combo)
+
         # 恢复用户上次选择（默认锐度）
         saved_sort = self._adv_config.get_browser_sort()
         idx = self._sort_combo.findData(saved_sort)
@@ -259,16 +295,19 @@ class FilterPanel(QWidget):
         w.setStyleSheet("background: transparent;")
         row = QHBoxLayout(w)
         row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(4)
+        # 间距 3px:筹码最小总宽须 ≤204px(面板 236 - 左右 margin 16×2)。
+        # 「精选」移出本排后余量变宽松,间距保持 3px 不动以维持既有观感。
+        # 3px spacing: the chips must fit within 204px (236 panel - 16×2 margins).
+        # Since "picked" moved out there is slack now, but the spacing is kept.
+        row.setSpacing(3)
 
         self._rating_btns: dict = {}  # mode -> QPushButton
 
         # 窄按钮固定宽度(★★★ 用 Expanding,留出 3 颗星空间)
-        _narrow = {"2": 40, "1": 30, "nobird": 32, "picked": 32}
+        _narrow = {"2": 40, "1": 30, "nobird": 32}
         # 图标筹码 tooltip(图标无文字,用提示说明含义)
         _is_zh = not getattr(self.i18n, 'current_lang', 'zh_CN').startswith('en')
         _tips = {
-            "picked": "精选 Top 25%" if _is_zh else "Picked (Top 25%)",
             "3": "三星" if _is_zh else "3 stars",
             "2": "二星" if _is_zh else "2 stars",
             "1": "一星" if _is_zh else "1 star",
@@ -296,6 +335,61 @@ class FilterPanel(QWidget):
             self._rating_btns[mode] = btn
             row.addWidget(btn)
 
+        return w
+
+    def _build_picked_only_check(self) -> QWidget:
+        """
+        「只看精选」开关。
+
+        与上方评分筹码的区别：评分筹码是并集（勾 3★+2★ 得到两者之和），本开关
+        是 AND 收窄（``WHERE picked = 1``），勾上后结果只剩精选那一小批。两者
+        语义相反，混在同一排会让人误读，因此独立成行并配图标与说明。
+
+        精选本身恒排在最前（见 tools/report_db.py 的排序），所以日常浏览无需
+        勾选此开关；它的用途是「我只想处理精选这一批」。
+
+        返回 / Return:
+            QWidget: 承载 checkbox 的行容器。
+
+        The "picked only" switch. Unlike the union chips above, this narrows the
+        result set (WHERE picked = 1), so it gets its own row. Picked photos are
+        always sorted first anyway; this switch is for working on them alone.
+        """
+        w = QWidget()
+        w.setObjectName("filterPickedOnlyRow")
+        w.setStyleSheet("QWidget#filterPickedOnlyRow { background: transparent; }")
+        row = QHBoxLayout(w)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(6)
+
+        self._picked_only_cb = QCheckBox(self.i18n.t("browser.picked_only"))
+        self._picked_only_cb.setToolTip(self.i18n.t("browser.picked_only_tip"))
+        self._picked_only_cb.setStyleSheet(
+            f"QCheckBox {{ color: {COLORS['star_gold']}; font-size: 12px; spacing: 6px; }}"
+            + checkbox_indicator_qss(15, COLORS['text_muted'], COLORS['star_gold'])
+        )
+        # 样式表里的 spacing 不计入 sizeHint,不显式撑开的话文字会顶到皇冠上。
+        # The stylesheet spacing is not part of sizeHint, so the label would
+        # otherwise collide with the crown next to it.
+        self._picked_only_cb.setMinimumWidth(
+            self._picked_only_cb.sizeHint().width() + 10
+        )
+        self._picked_only_cb.stateChanged.connect(self._emit_filters)
+
+        crown = QLabel()
+        crown.setPixmap(load_tinted_icon(
+            _ICON_CHIPS["picked"], COLORS['star_gold'], 14
+        ).pixmap(14, 14))
+        crown.setStyleSheet("background: transparent;")
+
+        # checkbox 在最左,与下方「对焦 / 飞行」两组勾选框左对齐;皇冠跟在文字后
+        # 作为语义标识(与缩略图上的皇冠角标呼应)。
+        # The checkbox goes first so it lines up with the focus/flight rows below;
+        # the crown trails the label as the badge users already know from the grid.
+        row.addWidget(self._picked_only_cb, 0)
+        row.addSpacing(4)
+        row.addWidget(crown, 0)
+        row.addStretch(1)
         return w
 
     def _apply_chip_icon(self, btn, mode: str, active: bool) -> None:
@@ -350,20 +444,29 @@ class FilterPanel(QWidget):
     # ------------------------------------------------------------------
 
     def _build_focus_checkboxes(self) -> QWidget:
-        """3个对焦多选 checkbox（精焦/合焦/失焦），默认全选。"""
-        _is_zh = not getattr(self.i18n, 'current_lang', 'zh_CN').startswith('en')
+        """
+        3个对焦多选 checkbox（精焦/合焦/失焦），默认全选。文案走 i18n，与详情面板同词。
 
+        布局用 2 列网格而非单行横排：英文文案（Critical Focus / Good Focus / Soft）
+        单行需 257px，超过面板 236px 固定宽的内容可用宽(204px)，会把滚动容器撑宽并
+        裁掉右侧内容（评分行最右的 0★ 筹码首当其冲）。2 列下最宽仅 ~200px，中英皆可容纳。
+
+        Uses a 2-column grid instead of a single row: the English labels need 257px on one
+        line, exceeding the 204px usable width inside the 236px fixed-width panel. That
+        widened the scroll container and clipped content on the right (notably the 0★ chip
+        in the rating row). A 2-column grid stays at ~200px and fits both locales.
+        """
         w = QWidget()
         w.setStyleSheet("background: transparent;")
-        row = QHBoxLayout(w)
-        row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(8)
+        grid = QGridLayout(w)
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setSpacing(6)
 
         # 默认勾选全部对焦状态，避免 burst 结果被默认 focus 再过滤一次
         _defaults = set(_DEFAULT_CHECKED_FOCUS)
 
-        for mode, label_zh, statuses, color in _FOCUS_OPTIONS:
-            label = label_zh if _is_zh else mode
+        for idx, (mode, statuses, color) in enumerate(_FOCUS_OPTIONS):
+            label = self.i18n.t(f"browser.focus_state_{mode.lower()}")
             cb = QCheckBox(label)
             cb.setChecked(mode in _defaults)
             cb.setStyleSheet(
@@ -372,7 +475,7 @@ class FilterPanel(QWidget):
             )
             cb.stateChanged.connect(self._emit_filters)
             self._focus_checks[mode] = cb
-            row.addWidget(cb)
+            grid.addWidget(cb, idx // 2, idx % 2)
 
         return w
 
@@ -420,7 +523,7 @@ class FilterPanel(QWidget):
     # ------------------------------------------------------------------
 
     def update_count(self, count: int):
-        """由 ResultsBrowserWidget 在每次应用筛选后调用，更新数量标签。"""
+        """由 ResultsBrowserWindow 在每次应用筛选后调用，更新数量标签。"""
         if not hasattr(self, '_count_label'):
             return
         warning_color = COLORS.get('warning', '#E8C000')
@@ -440,15 +543,45 @@ class FilterPanel(QWidget):
             )
             self._count_label.setText(self.i18n.t("browser.matched_count", count=count))
 
-    def update_species_list(self, species: list):
-        """更新鸟种下拉列表。"""
+    def update_species_list(self, species: list, has_other: bool = False):
+        """
+        更新鸟种下拉列表。
+
+        列表只列「磁盘上有自己目录」的鸟种（有 2★以上照片的），末尾按需追加
+        一个「其他鸟类」兜底项——低星照片即使识别出鸟种也统一归「其他鸟类」
+        （见 core/folder_layout.py），所以只有低星照片的鸟种在磁盘上没有目录，
+        列在下拉里纯属干扰；但它们的照片必须仍能从鸟种维度找到，故用兜底项
+        接住，两者构成不重不漏的划分。
+
+        鸟种逐项编号（「全部鸟种」与「其他鸟类」不编号：前者不是鸟种，后者是
+        兜底桶，可能装着好几种，给它们编号会让末位序号不再等于鸟种数）。
+
+        参数 / Args:
+            species:   有目录的鸟种名列表
+            has_other: 当前筛选下是否存在「无自己目录」的照片；False 时不显示
+                       兜底项，避免用户点进去是空的
+
+        List only foldered species, appending an "other birds" catch-all when
+        the current filter still leaves unfoldered photos to reach.
+        """
         self._species_list = species
         self.species_combo.blockSignals(True)
         current = self.species_combo.currentData()
         self.species_combo.clear()
         self.species_combo.addItem(self.i18n.t("browser.species_all"), "")
-        for sp in species:
-            self.species_combo.addItem(sp, sp)
+        # 逐项编号：拉到底看最后一个序号就知道这批拍到了多少种，不必自己数
+        # （合并十天常有四五十种）。序号只进显示文案，itemData 仍是纯鸟种名——
+        # 筛选、记忆当前选中项、与数据库比对全靠它。
+        # Numbered for a species count at a glance; the item data stays the
+        # bare name, since every lookup keys on it.
+        for number, sp in enumerate(species, 1):
+            self.species_combo.addItem(f"{number}. {sp}", sp)
+        if has_other:
+            # 与磁盘上的「其他鸟类」目录同名，让下拉和目录结构对得上
+            # Same label as the on-disk folder so the two line up.
+            self.species_combo.addItem(
+                self.i18n.t("logs.folder_other_birds"), SPECIES_FILTER_OTHER
+            )
         idx = self.species_combo.findData(current)
         if idx >= 0:
             self.species_combo.setCurrentIndex(idx)
@@ -470,13 +603,13 @@ class FilterPanel(QWidget):
 
         # 对焦：所有勾选的 checkbox 对应的 statuses 合并
         selected_focus = []
-        for mode, label_zh, statuses, color in _FOCUS_OPTIONS:
+        for mode, statuses, color in _FOCUS_OPTIONS:
             cb = self._focus_checks.get(mode)
             if cb and cb.isChecked():
                 selected_focus.extend(statuses)
         if not selected_focus:
             # 全取消时降级为全选，避免空结果
-            selected_focus = [s for _, _, statuses, _ in _FOCUS_OPTIONS for s in statuses]
+            selected_focus = [s for _, statuses, _ in _FOCUS_OPTIONS for s in statuses]
 
         # 飞行
         is_flying = [v for v, cb in self._flight_cbs.items() if cb.isChecked()]
@@ -494,7 +627,7 @@ class FilterPanel(QWidget):
             "is_flying":      is_flying,
             species_key:      bird_species,
             "sort_by":        sort_by,
-            "picked_only":    "picked" in self._active_ratings,
+            "picked_only":    self._picked_only_cb.isChecked(),
         }
 
     # ------------------------------------------------------------------
@@ -503,8 +636,12 @@ class FilterPanel(QWidget):
 
     def reset_all(self):
         """重置筛选条件到默认值。"""
-        # 评分 → 默认 ★★★ + ★★
+        # 评分 → 默认 ★★★ + ★★；「只看精选」一并关掉
+        # Rating chips back to default; the picked-only narrowing is cleared too.
         self._active_ratings = set(_DEFAULT_RATINGS)
+        self._picked_only_cb.blockSignals(True)
+        self._picked_only_cb.setChecked(False)
+        self._picked_only_cb.blockSignals(False)
         for m, btn in self._rating_btns.items():
             _active = m in _DEFAULT_RATINGS
             btn.setStyleSheet(self._rating_btn_style(_active, m))
@@ -541,8 +678,19 @@ class FilterPanel(QWidget):
         self._emit_filters()
 
     def select_all_ratings(self):
-        """回退：清空评分筛选，返回所有评分。用于默认筛选无结果时。"""
+        """
+        回退：清空评分筛选，返回所有评分。用于默认筛选无结果时。
+
+        必须同时解除「只看精选」，否则它作为 AND 条件（``picked = 1``）会继续
+        把结果卡成空集——清空星级根本救不回来（旧目录 picked 列全为 0 时尤其
+        明显）。
+        The picked-only narrowing must be cleared as well: as an AND condition it
+        would keep the result empty no matter how wide the rating filter gets.
+        """
         self._active_ratings = set()
+        self._picked_only_cb.blockSignals(True)
+        self._picked_only_cb.setChecked(False)
+        self._picked_only_cb.blockSignals(False)
         for m, btn in self._rating_btns.items():
             btn.setStyleSheet(self._rating_btn_style(False, m))
             if m in _ICONIZED_CHIPS:

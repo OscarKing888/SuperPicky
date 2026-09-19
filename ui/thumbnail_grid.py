@@ -6,7 +6,9 @@ ThumbnailCard: 单张照片卡片（评分角标 + 对焦指示点）
 ThumbnailLoader: QThread 后台加载缩略图
 """
 
+import atexit
 import os
+import weakref
 import threading
 from collections import OrderedDict
 from typing import Optional
@@ -16,21 +18,58 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QSizePolicy, QGraphicsOpacityEffect
 )
 from PySide6.QtCore import Qt, Signal, QThread, QObject, Slot, QSize, QTimer, QPoint, QRect, QEasingCurve, QPropertyAnimation
-from PySide6.QtGui import QPixmap, QColor, QPainter, QPen, QFont, QBrush, QImage
+from PySide6.QtGui import QPixmap, QColor, QPainter, QPen, QFont, QBrush, QImage, QImageReader
 
 from ui.styles import COLORS, FONTS
 from ui.icon_utils import render_tinted_image, ICON_DANGER
 from tools.i18n import get_i18n
+from tools.file_utils import sibling_jpeg
+from tools.species_display import species_display_text
 
 
 def _display_name(photo: dict) -> str:
-    """卡片底部显示名:优先鸟种(跟随语言),无鸟种则用文件名。"""
-    is_en = get_i18n().current_lang.startswith("en")
-    if is_en:
-        species = photo.get("bird_species_en") or photo.get("bird_species_cn")
-    else:
-        species = photo.get("bird_species_cn") or photo.get("bird_species_en")
-    return species or photo.get("filename", "")
+    """
+    卡片底部显示名：优先确认鸟种（跟随语言）；没有确认鸟种但有待确定候选时显示
+    「鸟名（待确定 N%）」；都没有则用文件名。
+
+    Tile display name: the confirmed species (localized) first; otherwise an
+    unconfirmed candidate as "name (unconfirmed N%)"; otherwise the filename.
+
+    参数 / Parameters:
+        photo (dict): 照片记录 / photo record.
+
+    返回 / Returns:
+        str: 显示名 / display name.
+    """
+    i18n = get_i18n()
+    text = species_display_text(
+        photo,
+        is_en=i18n.current_lang.startswith("en"),
+        format_unconfirmed=lambda name, conf: i18n.t(
+            "birdid.species_unconfirmed", name=name, confidence=conf
+        ),
+    )
+    return text or photo.get("filename", "")
+
+
+def _tile_label_text(photo: dict, burst_suffix: str = "") -> str:
+    """
+    卡片底部标签文本:单行显示——有鸟种时显示鸟名(跟随语言),无鸟种时显示
+    文件名,尾部附连拍数量后缀。文件名不再占第二行,改由整卡 tooltip 悬停查看。
+
+    Tile label text: a single line — the species name (localized) when the
+    photo has one, otherwise the filename, with the burst-count suffix
+    appended. The filename is no longer shown on a second line; it is
+    revealed via the card's hover tooltip instead.
+
+    参数 / Parameters:
+        photo (dict): 照片记录 / photo record.
+        burst_suffix (str): 连拍数量后缀,如 " (5)" / burst-count suffix.
+
+    返回 / Returns:
+        str: QLabel 纯文本单行 / a single plain-text line for the QLabel.
+    """
+    return _display_name(photo) + burst_suffix
 
 
 # 对焦状态指示颜色（WORST 不显示圆点）
@@ -64,20 +103,12 @@ def _photo_key(photo: dict):
     return filename
 
 
-def _overlay_key(photo: dict):
-    """
-    缩略图缓存键:身份键 + 影响右上/左下角标的状态(评分/精选/对焦/连拍)。
-    把这些烤进缓存的状态纳入键,使其变化(如重跑选鸟后 picked 变化)时缓存自动失效,
-    避免显示过期角标。身份键 _photo_key 不含可变状态,继续用于卡片/选择。
-    """
-    return (
-        _photo_key(photo),
-        photo.get("rating", 0),
-        1 if photo.get("picked") else 0,
-        photo.get("focus_status"),
-        photo.get("burst_position"),
-        photo.get("burst_total"),
-    )
+# 缩略图缓存键就是身份键 _photo_key:缓存只存「干净」缩略图,评分/精选/
+# 对焦等角标全部在 ThumbnailCard._draw_overlays 动态层现画。这样改星/
+# 重跑选鸟只触发重绘(<1ms),不再作废缓存、不再在主线程重解码磁盘图。
+# The thumb cache is keyed by identity (_photo_key) and stores CLEAN
+# thumbnails only; rating/picked/focus badges are painted in the card's
+# dynamic overlay layer, so state changes redraw instead of re-decoding.
 
 
 # ============================================================
@@ -85,32 +116,56 @@ def _overlay_key(photo: dict):
 # ============================================================
 
 class _LRUCache:
+    """
+    线程安全的缩略图 LRU 缓存。
+    被多个 _ThumbnailWorker 工作线程与主线程并发访问,必须持锁:
+    无锁时 get() 的「检查后取值」在并发淘汰(popitem)下会抛 KeyError
+    并静默杀死工作线程(压测 160 万次操作可复现)。
+
+    Thread-safe thumbnail LRU cache. Accessed concurrently by several
+    _ThumbnailWorker threads plus the GUI thread, so every operation
+    holds the lock; the unlocked check-then-get raced with eviction and
+    raised KeyError, silently killing worker threads.
+    """
+
     def __init__(self, maxsize: int = 500):
         self._cache: OrderedDict = OrderedDict()
         self._maxsize = maxsize
+        self._lock = threading.Lock()
 
     def get(self, key) -> Optional[QImage]:
-        if key not in self._cache:
-            return None
-        self._cache.move_to_end(key)
-        return self._cache[key]
+        with self._lock:
+            if key not in self._cache:
+                return None
+            self._cache.move_to_end(key)
+            return self._cache[key]
 
     def put(self, key, value: QImage):
-        if key in self._cache:
-            self._cache.move_to_end(key)
-        self._cache[key] = value
-        if len(self._cache) > self._maxsize:
-            self._cache.popitem(last=False)
+        with self._lock:
+            if key in self._cache:
+                self._cache.move_to_end(key)
+            self._cache[key] = value
+            if len(self._cache) > self._maxsize:
+                self._cache.popitem(last=False)
 
     def clear(self):
-        self._cache.clear()
+        with self._lock:
+            self._cache.clear()
 
 
 _thumb_cache = _LRUCache(500)
 
 
-def _draw_static_overlays(image: QImage, photo: dict):
-    """在 QImage 上预先绘制静态叠加层（评分、对焦状态等）。"""
+def _draw_static_overlays(image, photo: dict):
+    """
+    绘制评分/精选/对焦角标。image 可为 QImage 或 QPixmap(paint device 均可)。
+    自缓存去角标化后由 ThumbnailCard._draw_overlays 每次重绘时调用,
+    不再烤进缓存图。
+
+    Draw the rating/picked/focus badges onto a QImage or QPixmap. Since
+    the cache stores clean thumbnails, this is invoked from the card's
+    dynamic overlay pass instead of being baked into cached images.
+    """
     painter = QPainter(image)
     painter.setRenderHint(QPainter.Antialiasing)
 
@@ -166,31 +221,64 @@ def _draw_static_overlays(image: QImage, photo: dict):
     painter.end()
 
 
-def _load_thumbnail_image(photo: dict, thumb_size: int) -> Optional[QImage]:
-    """按优先级查找可用图片文件并返回裁切后的缩略图 QImage。"""
+def _thumbnail_candidates(photo: dict) -> list:
+    """
+    按优先级返回缩略图可用的「干净原图」路径列表:temp_jpeg_path → 原始 JPEG。
+
+    刻意**不含**任何带标注的调试图(yolo_debug_path 全图红框、debug_crop_path
+    裁切+对焦十字/头圈)——缩略图应展示原图,与全屏 HD 链路(fullscreen_viewer
+    ._resolve_hd_path)保持一致;调试图仅供详情面板的「裁切诊断视图」按钮使用。
+
+    Return the ordered list of clean, decodable image paths for a thumbnail:
+    temp_jpeg_path → original JPEG. Debug artifacts (the boxed yolo_debug_path
+    and the annotated debug_crop_path) are deliberately excluded so the grid
+    shows the actual photo, matching the full-screen HD path resolver.
+
+    参数 / Parameters:
+        photo (dict): 照片记录 / photo record.
+
+    返回 / Returns:
+        list[str]: 存在的候选路径,按优先级排列 / existing candidate paths.
+    """
     candidates = []
 
-    ydp = photo.get("yolo_debug_path")
-    if ydp and os.path.exists(ydp):
-        candidates.append(ydp)
+    def _add(path):
+        if path and path not in candidates and os.path.exists(path):
+            candidates.append(path)
 
-    tjp = photo.get("temp_jpeg_path")
-    if tjp and os.path.exists(tjp):
-        candidates.append(tjp)
+    # 1. temp_jpeg_path:RAW→JPEG 预览 / 配对 JPG(可能因多轮整理失同步)。
+    _add(photo.get("temp_jpeg_path"))
 
-    dcp = photo.get("debug_crop_path")
-    if dcp and os.path.exists(dcp):
-        candidates.append(dcp)
+    # 2. 兜底:从可靠的 current_path/original_path 推导同目录同名 JPG 边车。
+    #    RAW+JPG 成对且随文件移动,可修复 temp_jpeg_path 失同步导致的缺图。
+    #    Fall back to the JPG sibling derived from the reliable current path.
+    _add(sibling_jpeg(photo.get("current_path")))
+    _add(sibling_jpeg(photo.get("original_path")))
 
-    op = photo.get("original_path") or photo.get("current_path")
-    if op and os.path.exists(op):
-        ext = os.path.splitext(op)[1].lower()
-        if ext in ('.jpg', '.jpeg'):
-            candidates.append(op)
+    return candidates
+
+
+def _load_thumbnail_image(photo: dict, thumb_size: int) -> Optional[QImage]:
+    """按优先级查找可用图片文件并返回裁切后的缩略图 QImage。"""
+    candidates = _thumbnail_candidates(photo)
 
     for path in candidates:
-        image = QImage(path)
-        if image.isNull():
+        # 解码期降采样:QImageReader.setScaledSize 让 JPEG 直接按低分辨率
+        # 解码(libjpeg 1/2、1/4、1/8 DCT 缩放),避免全尺寸解码后再缩小。
+        # Decode-time downscaling: setScaledSize lets libjpeg decode at a
+        # reduced resolution instead of full-res decode + scale.
+        reader = QImageReader(path)
+        reader.setAutoTransform(True)   # 保持与 QImage(path) 一致的 EXIF 旋转行为
+        src = reader.size()             # 仅读头部,不触发解码 / header only
+        if src.isValid() and src.width() > 0 and src.height() > 0:
+            scale = max(thumb_size / src.width(), thumb_size / src.height())
+            if scale < 1.0:             # 只缩不放 / never upscale
+                reader.setScaledSize(QSize(
+                    max(thumb_size, round(src.width() * scale)),
+                    max(thumb_size, round(src.height() * scale)),
+                ))
+        image = reader.read()
+        if image is None or image.isNull():
             continue
         size = QSize(thumb_size, thumb_size)
         image = image.scaled(
@@ -215,6 +303,47 @@ class _LoaderSignals(QObject):
     thumbnail_ready = Signal(object, object)   # photo_key, QImage
     load_error = Signal(object)
 
+# ── 进程退出兜底 / Process-exit safety net ──────────────────────────────────
+# 工作线程阻塞在条件变量上等任务，只有 cancel() 能唤醒它们退出。若某个网格
+# 没走到 cleanup 就到了进程退出（忘了调、或走了不经过 closeEvent 的退出路径），
+# PySide 的 destructionVisitor 会析构仍在运行的 QThread，Qt 直接 qFatal 掉整个
+# 进程——线上表现为随机的 abort / 堆损坏 SIGTRAP（2026-09-07 定位，18 份崩溃
+# 报告同源）。这里登记所有活动网格，在解释器退出时统一收线程。
+# 用 WeakSet：注册表本身不得延长网格寿命。
+#
+# Worker threads park on a condition variable and only cancel() wakes them.
+# A grid that never gets cleaned up leaves live QThreads for PySide to destroy
+# at interpreter shutdown, which makes Qt qFatal the process. Track grids
+# weakly and drain them from an atexit hook.
+_LIVE_GRIDS: "weakref.WeakSet" = weakref.WeakSet()
+
+
+def _loader_still_running(loader) -> bool:
+    """
+    加载器是否还有线程在跑；对象已被 Qt 侧销毁时视为已结束。
+
+    Whether any worker thread is still alive; a destroyed object counts as done.
+    """
+    try:
+        return bool(loader.isRunning())
+    except (RuntimeError, AttributeError):
+        return False
+
+
+def _stop_all_grid_loaders() -> None:
+    """解释器退出前停掉所有网格的加载线程（atexit 钩子）。"""
+    for grid in list(_LIVE_GRIDS):
+        try:
+            grid.cleanup()
+        except Exception:
+            # 退出阶段 Qt 对象可能已部分失效，尽力而为即可
+            # Best-effort: Qt objects may already be partly torn down.
+            pass
+
+
+atexit.register(_stop_all_grid_loaders)
+
+
 class _ThumbnailWorker(QThread):
     def __init__(self, manager):
         super().__init__()
@@ -228,10 +357,10 @@ class _ThumbnailWorker(QThread):
                 
             photo, thumb_size = task
             photo_key = _photo_key(photo)
-            ckey = _overlay_key(photo)
 
-            # 先查缓存(键含角标状态,过期角标自动失效)
-            cached = _thumb_cache.get(ckey)
+            # 缓存键=身份键;缓存存干净图,角标由卡片动态层现画
+            # Identity-keyed cache of clean thumbnails; badges drawn by the card.
+            cached = _thumb_cache.get(photo_key)
             if cached is not None:
                 self.manager.signals.thumbnail_ready.emit(photo_key, cached)
                 continue
@@ -249,8 +378,7 @@ class _ThumbnailWorker(QThread):
                     y = (pixmap.height() - thumb_size) // 2
                     pixmap = pixmap.copy(x, y, thumb_size, thumb_size)
 
-                _draw_static_overlays(pixmap, photo)
-                _thumb_cache.put(ckey, pixmap)
+                _thumb_cache.put(photo_key, pixmap)
                 self.manager.signals.thumbnail_ready.emit(photo_key, pixmap)
             else:
                 self.manager.signals.thumbnail_ready.emit(photo_key, QImage())
@@ -344,12 +472,17 @@ class ThumbnailCard(QFrame):
     信号 double_clicked(photo_dict) 在用户双击时发出。
     信号 context_menu_requested(photo_dict, QPoint) 在右键时发出（C4）。
     """
-    clicked = Signal(dict)
-    double_clicked = Signal(dict)
-    context_menu_requested = Signal(dict, object)  # C4 右键菜单
+    # 一律用 Signal(object) 传 photo：Signal(dict) 会被 PySide6 做
+    # QVariantMap 往返转换，接收方拿到的是副本，对 photo 的任何写回
+    # (改鸟种后的新 current_path 等) 都到不了网格持有的原对象。
+    # Always pass photo via Signal(object); Signal(dict) round-trips through
+    # QVariantMap and hands the receiver a copy, so write-backs never land.
+    clicked = Signal(object)
+    double_clicked = Signal(object)
+    context_menu_requested = Signal(object, object)  # C4 右键菜单
 
     # V5: Add badge clicked signal
-    badge_clicked = Signal(dict)
+    badge_clicked = Signal(object)
 
     def __init__(self, photo: dict, thumb_size: int = _DEFAULT_THUMB_SIZE, parent=None):
         super().__init__(parent)
@@ -394,12 +527,14 @@ class ThumbnailCard(QFrame):
         self.img_label.setText("") 
         layout.addWidget(self.img_label)
 
-        # 卡片底部:默认显示鸟种(无则文件名);悬停整张卡显示文件名
-        fn = _display_name(photo)
-        if self.is_burst_group and self.burst_count > 1:
-            fn = f"{fn} ({self.burst_count})"
+        # 卡片底部:单行显示鸟名(有鸟种)或文件名(无鸟种);文件名靠整卡
+        # tooltip 悬停查看。鸟种编辑/补录改由右键菜单进入(见 results_browser)。
+        # Tile footer: a single line showing the species (if any) or the
+        # filename; the filename is revealed via the card's hover tooltip.
+        # Species edit/assign now lives in the right-click menu.
+        burst_suffix = f" ({self.burst_count})" if (self.is_burst_group and self.burst_count > 1) else ""
         self.setToolTip(photo.get("filename", ""))
-        self.name_label = QLabel(fn)
+        self.name_label = QLabel(_tile_label_text(photo, burst_suffix))
         self.name_label.setAlignment(Qt.AlignCenter)
         self.name_label.setStyleSheet(f"""
             QLabel {{
@@ -408,8 +543,8 @@ class ThumbnailCard(QFrame):
                 background: transparent;
             }}
         """)
-        self.name_label.setMaximumWidth(thumb_size + 4)
-        layout.addWidget(self.name_label)
+        self.name_label.setMaximumWidth(thumb_size - 16)
+        layout.addWidget(self.name_label, alignment=Qt.AlignHCenter)
 
     def set_pixmap(self, image: QImage):
         try:
@@ -427,6 +562,24 @@ class ThumbnailCard(QFrame):
             # 基础 C++ 对象已销毁，忽略此次更新
             pass
 
+    def refresh_caption(self) -> None:
+        """
+        按 photo 现值重算卡片底部文字（鸟名，无鸟种时退回文件名）。
+
+        标签在构造时算过一次就再没人更新——改鸟种、标记为无鸟之后，卡片上
+        显示的还是那个旧鸟名，用户看到的就是「点完没反应」。连拍数量后缀由
+        卡片自身属性重算，不依赖调用方。
+
+        Recompute the footer caption from the photo's current values. The label
+        was only ever set at construction, so a species change or a "no bird"
+        mark left the stale name on screen.
+        """
+        burst_suffix = (
+            f" ({self.burst_count})"
+            if (self.is_burst_group and self.burst_count > 1) else ""
+        )
+        self.name_label.setText(_tile_label_text(self.photo, burst_suffix))
+
     def _draw_overlays(self):
         """在 img_label 的 pixmap 上绘制动态叠加层（选中边框、多选勾选）。"""
         try:
@@ -439,6 +592,13 @@ class ThumbnailCard(QFrame):
 
         # 始终从 raw_image 转换后的 pixmap 开始，避免反复叠加
         overlay = QPixmap(self._final_pixmap)
+
+        # 评分/精选/对焦角标:缓存图是干净的,每次重绘时现画
+        # (打星/重跑选鸟只需重绘,不再重解码磁盘图)
+        # Rating/picked/focus badges painted per redraw on the clean
+        # cached image — a star press is now a repaint, not a re-decode.
+        _draw_static_overlays(overlay, self.photo)
+
         painter = QPainter(overlay)
         painter.setRenderHint(QPainter.Antialiasing)
         
@@ -601,7 +761,7 @@ class ThumbnailCard(QFrame):
         super().mouseDoubleClickEvent(event)
 
     def contextMenuEvent(self, event):
-        """C4：右键菜单 — 发射信号，由 ResultsBrowserWidget 处理。"""
+        """C4：右键菜单 — 发射信号，由 ResultsBrowserWindow 处理。"""
         self.context_menu_requested.emit(self.photo, self.mapToGlobal(event.pos()))
         event.accept()
 
@@ -631,8 +791,11 @@ class ThumbnailGrid(QScrollArea):
     信号 multi_selection_changed(list) 多选状态变化时发出（C3）。
     信号 burst_badge_clicked(burst_id) 当连拍角标被点击时发出。
     """
-    photo_selected = Signal(dict)
-    photo_double_clicked = Signal(dict)
+    # 同 ResultCard：photo 必须按引用传递，否则详情面板持有的是副本，
+    # 改鸟种/改星级写回的新路径永远同步不回 _filtered_photos。
+    # photo must travel by reference, or the detail panel holds a copy.
+    photo_selected = Signal(object)
+    photo_double_clicked = Signal(object)
     multi_selection_changed = Signal(list)   # C3 多选信号
     burst_badge_clicked = Signal(int)        # V5: Burst badge click signal
 
@@ -649,6 +812,11 @@ class ThumbnailGrid(QScrollArea):
         self._transition_anim: Optional[QPropertyAnimation] = None
         # C3 多选状态
         self._multi_selected: set = set()       # photo_key 集合
+        # 已废弃但线程可能还在收尾的加载器：必须持有引用直到它们真正结束，
+        # 否则 GC 回收后 QThread 在运行中被析构，Qt 会 qFatal。
+        # Retired loaders are kept referenced until their threads exit.
+        self._retired_loaders: list = []
+        _LIVE_GRIDS.add(self)
         self._last_clicked_idx: int = -1        # Shift 范围选起点
         self._anchor_photo: Optional[dict] = None  # 单选锚点（对比视图左侧）
         self._pending_photos: Optional[list] = None  # 延迟构建用
@@ -744,10 +912,11 @@ class ThumbnailGrid(QScrollArea):
 
     def load_photos(self, photos: list, keep_scroll: bool = False):
         """加载照片列表并重建网格。延迟 50ms 构建以等布局稳定，避免列数跳变。"""
-        # 取消上一个加载任务
-        if self._loader and self._loader.isRunning():
-            self._loader.cancel()
-            self._loader.wait(500)
+        # 取消上一个加载任务:断开信号防止旧结果进入新网格,不在主线程 wait
+        # (旧 wait(500) 会在切筛选时冻结 UI 最多半秒;worker 收到 cancel 后自然退出)
+        # Cancel the previous loader: disconnect so stale results can't reach
+        # the new grid; never block the GUI thread waiting for workers.
+        self._detach_loader()
         self._start_transition_overlay()
 
         # 记录高精度滚动位置（基于索引的浮点行偏移，可跨列数精确恢复）
@@ -773,12 +942,63 @@ class ThumbnailGrid(QScrollArea):
         self._build_timer.start()
 
     def cleanup(self):
+        """
+        停掉本网格的所有加载线程（当前的与已废弃的），确定性等待其结束。
+
+        必须把 _retired_loaders 一并收干净：它们的线程同样会在进程退出时被
+        PySide 析构，届时若还在运行，Qt 会 qFatal 整个进程。
+
+        Stop every loader owned by this grid, retired ones included; a live
+        QThread at interpreter shutdown makes Qt abort the process.
+        """
         self._build_timer.stop()
         self._batch_timer.stop()
         self._clear_transition_overlay()
         if self._loader:
-            self._loader.cleanup()
+            self._loader.cleanup()   # 退出时确定性等待线程结束 / deterministic join on exit
             self._loader = None
+        for ldr in self._retired_loaders:
+            try:
+                ldr.cleanup()
+            except Exception:
+                pass
+        self._retired_loaders = []
+
+    def _detach_loader(self):
+        """
+        非阻塞地废弃当前加载器:断开信号并 cancel,让工作线程自行退出。
+        供 load_photos/_build_batch 在重建网格前调用;与 cleanup 的区别是
+        不在主线程 join(阻塞交互),仅保证旧结果不再回流。
+
+        Retire the current loader without blocking: disconnect its signal
+        and cancel; worker threads drain on their own. Unlike cleanup this
+        never joins on the GUI thread — it only guarantees stale results
+        can no longer flow back.
+        """
+        if not self._loader:
+            return
+        try:
+            self._loader.signals.thumbnail_ready.disconnect(self._on_thumbnail_ready)
+        except (RuntimeError, TypeError):
+            pass
+        self._loader.cancel()
+        # 不能直接丢引用：cancel 只是叫线程退出，真正退出还需要一点时间，
+        # 期间若被 GC 回收，QThread 会在运行中析构 → Qt qFatal。
+        # Hold the reference until the threads have actually exited.
+        self._retired_loaders.append(self._loader)
+        self._loader = None
+        self._reap_retired_loaders()
+
+    def _reap_retired_loaders(self) -> None:
+        """
+        放掉已经跑完的废弃加载器，避免连续切筛选时无限堆积。
+
+        Release retired loaders whose threads have finished.
+        """
+        self._retired_loaders = [
+            ldr for ldr in self._retired_loaders
+            if _loader_still_running(ldr)
+        ]
 
     def _deferred_build(self):
         """延迟构建网格开始（布局稳定后执行）。"""
@@ -873,7 +1093,7 @@ class ThumbnailGrid(QScrollArea):
             # 强制设置行最小高度
             self._grid.setRowMinimumHeight(row, self._thumb_size + 32)
 
-            cached = _thumb_cache.get(_overlay_key(photo))
+            cached = _thumb_cache.get(photo_key)
             if cached:
                 card.set_pixmap(cached)
 
@@ -891,9 +1111,7 @@ class ThumbnailGrid(QScrollArea):
             # 完成后移除 MinimumHeight 限制，让布局自由发挥
             self._container.setMinimumHeight(0)
 
-            if self._loader and self._loader.isRunning():
-                self._loader.cancel()
-                self._loader.wait(500)
+            self._detach_loader()
             self._loader = ThumbnailLoader(self._photos, self._thumb_size, self)
             self._loader.signals.thumbnail_ready.connect(self._on_thumbnail_ready)
             self._loader.start()
@@ -915,6 +1133,29 @@ class ThumbnailGrid(QScrollArea):
                 return [self._anchor_photo] + in_multi
         return in_multi
 
+    def get_explicitly_selected_photos(self) -> list[dict]:
+        """
+        返回所有带蓝色勾选标记的照片，并保持当前网格的显示顺序。
+
+        此接口只反映用户通过 Command/Ctrl、Shift 或全选明确勾选的项目，
+        不会像 ``get_multi_selected_photos`` 那样为双图对比自动补入未勾选的
+        锚点照片。因此，批量导入等操作可以精确遵循界面上的勾选状态。
+
+        Return every photo carrying the blue checked marker, preserving the
+        current grid order. Unlike ``get_multi_selected_photos``, this method
+        never injects the unchecked comparison anchor, so batch operations can
+        follow the visible checked state exactly.
+
+        返回 / Returns:
+            list[dict]: 明确勾选的照片记录 / explicitly checked photo records.
+        """
+
+        return [
+            photo
+            for photo in self._photos
+            if _photo_key(photo) in self._multi_selected
+        ]
+
     def select_all(self):
         """全选当前网格中所有可见照片（Command/Ctrl+A）。"""
         if not self._photos:
@@ -935,19 +1176,34 @@ class ThumbnailGrid(QScrollArea):
         self._anchor_photo = None
         self._emit_multi_selection()
 
+    def refresh_caption(self, photo_or_key) -> None:
+        """
+        刷新指定照片卡片的底部文字（鸟名/文件名）。
+
+        与 refresh_photo 分开：那个只重绘评分角标（高频、纯重绘），这个用于
+        鸟种发生变化的场合（改鸟种、标记为无鸟）。
+
+        Refresh one card's footer caption after its species changed.
+        """
+        photo_key = _photo_key(photo_or_key) if isinstance(photo_or_key, dict) else photo_or_key
+        card = self._cards.get(photo_key)
+        if card:
+            card.refresh_caption()
+
     def refresh_photo(self, photo_or_key, new_rating: int):
-        """更新指定照片的评分角标（不重新加载缩略图）。"""
+        """
+        更新指定照片的评分角标。角标在动态层现画,这里只需重绘,
+        不做任何磁盘 IO/解码(旧实现会在主线程同步重解码一张图)。
+
+        Update the rating badge of one photo. Badges live in the dynamic
+        overlay layer, so this is a pure repaint — no disk IO or decoding
+        on the GUI thread (the old code re-decoded the image synchronously).
+        """
         photo_key = _photo_key(photo_or_key) if isinstance(photo_or_key, dict) else photo_or_key
         card = self._cards.get(photo_key)
         if card:
             card.photo["rating"] = new_rating
-            image = _load_thumbnail_image(card.photo, self._thumb_size)
-            if image and not image.isNull():
-                _draw_static_overlays(image, card.photo)
-                _thumb_cache.put(_overlay_key(card.photo), image)
-                card.set_pixmap(image)
-            else:
-                card._draw_overlays()
+            card._draw_overlays()
 
     def remove_photo(self, photo_or_key):
         """从网格中移除指定缩略图卡片（不重新加载全部数据）。"""
@@ -1072,8 +1328,8 @@ class ThumbnailGrid(QScrollArea):
 
     def _on_context_menu_requested(self, photo: dict, pos):
         """C4：将右键菜单请求向上传递（由父级窗口处理）。"""
-        # 通过信号链向上传递：ThumbnailGrid → ResultsBrowserWidget
-        # 使用 parent chain 找到 ResultsBrowserWidget
+        # 通过信号链向上传递：ThumbnailGrid → ResultsBrowserWindow
+        # 使用 parent chain 找到 ResultsBrowserWindow
         node = self.parent()
         while node is not None:
             handler = getattr(node, '_show_context_menu', None)
@@ -1084,10 +1340,21 @@ class ThumbnailGrid(QScrollArea):
 
     def keyPressEvent(self, event):
         key = event.key()
-        if key in (Qt.Key_Left, Qt.Key_Up):
+        if key == Qt.Key_Left:
             self._select_adjacent(-1)
-        elif key in (Qt.Key_Right, Qt.Key_Down):
+        elif key == Qt.Key_Right:
             self._select_adjacent(1)
+        elif key in (Qt.Key_Up, Qt.Key_Down):
+            # 键盘打星(Paul P0-3):Up/Down 交给宿主窗口的打星分支处理。
+            # 必须显式 ignore 并直接返回——不能落入 QScrollArea 默认滚动,
+            # 否则焦点在网格上时(点过缩略图后的常态)事件到不了窗口,
+            # 表现为「有时候打星不工作」(macOS 实测反馈)。
+            # Keyboard rating: hand Up/Down to the host window's rating
+            # branch. Explicitly ignore and return — falling through to
+            # QScrollArea's default scrolling would swallow the event
+            # whenever the grid has focus (the norm after clicking a tile),
+            # which surfaced as "rating keys sometimes don't work" on macOS.
+            event.ignore()
         else:
             super().keyPressEvent(event)
 

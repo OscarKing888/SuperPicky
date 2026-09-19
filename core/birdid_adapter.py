@@ -8,7 +8,7 @@ SuperPicky V4.3 Phase 2 — BirdID 适配器
 
 核心做法：
     1. numpy BGR 帧 → smart_square_crop（如有 bbox）→ PIL RGB Image
-    2. 调 identify_bird(preloaded_crop=..., use_gps=False, use_ebird=False, ...)
+    2. 调 identify_bird(preloaded_crop=..., use_gps=False, use_geo_filter=False, ...)
        - 视频帧没有 EXIF / GPS，关闭这两项
        - preloaded_crop 跳过内部 YOLO 复检（性能 ↑）
     3. 把返回的 dict 列表 → SpeciesResult 列表
@@ -30,7 +30,6 @@ from PIL import Image
 from core.bird_classifier_base import BirdClassifier, SpeciesResult
 from tools.image_crop import smart_square_crop
 
-
 class BirdIDAdapter(BirdClassifier):
     """
     包装现有 birdid 模块为 BirdClassifier 接口
@@ -41,6 +40,17 @@ class BirdIDAdapter(BirdClassifier):
     Adapter wrapping the in-tree birdid module as a BirdClassifier.
     Model loading is handled lazily by birdid.bird_identifier on first call.
     """
+
+    # V4.5: identify() 在视频分析里逐帧调用，如果模型/数据库持续损坏，朴素的
+    # warning 会每帧打印一次刷屏；用类属性把日志限制为进程内只打印一次
+    # （跨实例共享，语义与旧实现一致；此前是模块级全局变量 + global 关键字，
+    # 违反 CLAUDE.md「避免全局变量、优先类封装」，已收进类里）。
+    # V4.5: identify() runs once per video frame; a naive warning would flood
+    # the log if the model/DB stays broken. This class attribute caps it to a
+    # single print per process (shared across instances, same semantics as
+    # before; it used to be a module-level global mutated via `global`, which
+    # violated CLAUDE.md's "avoid globals, prefer class encapsulation").
+    _warned_identify_failure: bool = False
 
     def __init__(self, padding_ratio: float = 0.15,
                  name_format: Optional[str] = None):
@@ -102,7 +112,7 @@ class BirdIDAdapter(BirdClassifier):
             preloaded_crop=pil_image,
             use_yolo=False,                  # 已在 video_analyzer 层做过 YOLO
             use_gps=False,                   # 视频帧无 EXIF GPS
-            use_ebird=False,                 # 同上
+            use_geo_filter=False,            # 同上
             top_k=top_k,
         )
         if self.name_format is not None:
@@ -110,9 +120,15 @@ class BirdIDAdapter(BirdClassifier):
 
         try:
             result_dict = identify_bird(**kwargs)
-        except Exception:
-            # 任何异常（模型加载失败、数据库缺失等）返回空列表
-            # Return empty on any failure (model load, DB missing, etc.)
+        except Exception as e:
+            # 任何异常（模型加载失败、数据库缺失等）返回空列表；只在进程内首次
+            # 失败时打印一次，避免逐帧刷屏（见类属性 _warned_identify_failure 说明）。
+            # Return empty on any failure (model load, DB missing, etc.); only
+            # print once per process to avoid per-frame log spam (see the
+            # _warned_identify_failure class-attribute note above).
+            if not BirdIDAdapter._warned_identify_failure:
+                BirdIDAdapter._warned_identify_failure = True
+                print(f"[BirdIDAdapter] identify_bird 调用失败(本进程仅提示一次) / identify_bird call failed (logged once per process): {e}")
             return []
 
         if not result_dict.get("success"):

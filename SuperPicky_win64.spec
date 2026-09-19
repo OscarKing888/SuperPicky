@@ -122,22 +122,18 @@ a = Analysis(
         # V4.0.0: 鸟类识别模块
         'birdid',
         'birdid.bird_identifier',
-        'birdid.ebird_country_filter',
+        'birdid.geo_filter',       # 地理过滤：bird_identifier 顶层导入，其余调用点为函数内延迟导入
+        'birdid.region_locator',   # GPS 区域定位：bird_identifier 函数内延迟导入，PyInstaller 静态分析看不到
+        'birdid.region_geometry',  # 区域定位的几何工具，由 region_locator 导入
+        'tools.country_names',     # 国家显示名：仅被 region_data / birdid_server 函数内导入
         'birdid_server',
         'server_manager',  # V4.0.0: 服务器管理模块
         'flask',
         'flask.json',
         'cryptography',
         'cryptography.fernet',
-        # V4.2.1: Countly telemetry build config (dynamically imported via importlib,
-        # PyInstaller cannot auto-discover it, must be listed explicitly)
-        '_telemetry_build',
-        'app_user_stat._telemetry_build',
         'app_user_stat',
         'app_user_stat.telemetry',
-        'app_user_stat.consent_texts',
-        'app_user_stat.consent_texts.en_US',
-        'app_user_stat.consent_texts.zh_CN',
     ],
     hookspath=[],
     hooksconfig={},
@@ -146,6 +142,85 @@ a = Analysis(
     noarchive=False,
     optimize=0,
 )
+
+# ---------------------------------------------------------------------------
+# CUDA 瘦身：排除运行时永远不会加载的 cuDNN 子库
+# CUDA slimming: drop cuDNN sub-libraries that are never loaded at runtime
+#
+# cuDNN 9 已经把单体库拆成「dispatcher + 按需加载的子库」：cudnn64_9.dll 只有
+# 0.4 MiB，真正的实现分散在 cudnn_ops / cudnn_cnn / cudnn_adv / cudnn_graph /
+# cudnn_engines_* 等子库里，由 dispatcher 在实际调用到对应 API 时才
+# LoadLibrary。其中 adv 子库只服务 RNN / LSTM / multi-head attention，而本项目
+# 全部是 CNN 前向推理（YOLO 检测、timm 分类、TOPIQ 美学），运行时不可能碰到它。
+#
+# 因为是运行时按需加载而非 PE 静态导入，删掉它不会让 import torch 失败。
+# 注意：cusolver / cufft / cusparse / curand / cublasLt 则是 torch_cuda.dll 的
+# 静态导入（PyTorch v2.7.1 只对 nvcuda.dll 做了 DELAYLOAD，见 pytorch 仓库
+# caffe2/CMakeLists.txt:553-559），少任何一个都会让 torch 直接导入失败，
+# 绝对不要加进这个列表。
+#
+# 收益：未压缩 229.9 MiB，CUDA 安装器约减少 80 MB。
+# 本 spec 由 CPU 与 CUDA 两种构建共用，而 CPU 版的 torch wheel 不含任何 cudnn
+# DLL（只有 torch/backends/cudnn 那些 .py），所以此过滤对 CPU 构建是空操作；
+# macOS 构建使用 SuperPicky_full.spec，完全不经过这里。
+#
+# cuDNN 9 splits the monolithic library into a small dispatcher plus on-demand
+# sub-libraries; the `adv` one only serves RNN/LSTM/attention, which this
+# CNN-only inference pipeline never calls. It is loaded via LoadLibrary rather
+# than the PE import table, so removing it cannot break `import torch`.
+# Do NOT add cusolver/cufft/cusparse/curand/cublasLt here: those are statically
+# imported by torch_cuda.dll and their removal breaks torch outright.
+EXCLUDED_BINARY_NAMES = {
+    'cudnn_adv64_9.dll',
+}
+
+def _binary_basename(dest_name):
+    """
+    取二进制条目的文件名（大小写归一）/ Extract a binary entry's file name.
+
+    不用 os.path.basename：PyInstaller 的条目名带 Windows 分隔符，而在
+    macOS/Linux 上 os.path.basename 不把 '\\' 当分隔符，会让整条过滤静默失效，
+    连本地校验都做不了。这里两种分隔符都处理。
+
+    Not os.path.basename: entry names carry Windows separators, which POSIX
+    os.path.basename does not split on — that would silently disable the filter
+    and make local verification impossible. Handle both separators.
+
+    参数 / Parameters:
+    dest_name (str): 打包目标路径，如 'torch\\lib\\cudnn_adv64_9.dll'。
+
+    返回 / Return:
+    str: 小写文件名，如 'cudnn_adv64_9.dll'。
+    """
+    return dest_name.replace('\\', '/').rsplit('/', 1)[-1].lower()
+
+
+_excluded_binaries = [
+    entry for entry in a.binaries
+    if _binary_basename(entry[0]) in EXCLUDED_BINARY_NAMES
+]
+a.binaries = [
+    entry for entry in a.binaries
+    if _binary_basename(entry[0]) not in EXCLUDED_BINARY_NAMES
+]
+# 注意：以下 print 必须是纯 ASCII。
+# .spec 由 PyInstaller 子进程执行，它的 stdout 编码不受本项目控制——在 Windows
+# runner 上是 cp1252，输出中文会抛 UnicodeEncodeError 并让整个构建失败
+# （v4.6.3-rc2 的 Windows 构建就是这么挂的）。中文说明写在注释里，运行时输出
+# 保持 ASCII，这样无论谁、用什么方式调用 pyinstaller 都不会炸。
+#
+# NOTE: these prints must stay pure ASCII. The .spec runs inside a PyInstaller
+# subprocess whose stdout encoding we do not control (cp1252 on the Windows
+# runner); non-ASCII output raises UnicodeEncodeError and fails the whole build.
+# Chinese explanations live in comments; runtime output stays ASCII.
+for _entry in _excluded_binaries:
+    print("[spec] excluded binary: %s" % _entry[0])
+if not _excluded_binaries:
+    # CPU 构建走到这里是正常的（本来就没有 cudnn DLL）；CUDA 构建若没排除到
+    # 任何东西，说明 torch 的 cuDNN 布局变了，需要重新核对文件名。
+    # Hitting this on a CPU build is expected; on a CUDA build it means torch's
+    # cuDNN layout changed and the name list needs revisiting.
+    print("[spec] no binaries matched the exclusion list (expected for CPU builds)")
 
 pyz = PYZ(a.pure)
 

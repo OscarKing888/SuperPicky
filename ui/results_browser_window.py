@@ -15,20 +15,25 @@ import os
 import subprocess
 import sys
 from collections import Counter
+from dataclasses import replace
 from datetime import datetime
 
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
     QLabel, QPushButton, QStatusBar,
     QSlider, QComboBox, QMessageBox, QSizePolicy, QApplication,
-    QStackedWidget, QMenu
+    QStackedWidget, QMenu, QInputDialog, QLineEdit, QProgressDialog
 )
-from PySide6.QtCore import Qt, Signal, Slot, QProcess, QSize
-from PySide6.QtGui import QAction, QKeyEvent, QIcon, QFont
+from PySide6.QtCore import Qt, Signal, Slot, QProcess, QSize, QTimer
+from PySide6.QtGui import QAction, QKeyEvent, QIcon
+from ui.custom_dialogs import StyledMessageBox
+from PySide6.QtWidgets import QDialog
+from ui.directory_select_dialog import DirectorySelectDialog
 
 from ui.icon_utils import load_tinted_icon, ICON_IDLE
 
 from ui.styles import COLORS, GLOBAL_STYLE, FONTS
+from ui.combo_popup import style_combo_popup
 from ui.filter_panel import FilterPanel
 from ui.thumbnail_grid import ThumbnailGrid
 from ui.detail_panel import DetailPanel
@@ -37,7 +42,15 @@ from ui.comparison_viewer import ComparisonViewer
 from typing import Optional
 
 from tools.i18n import get_i18n
-from tools.report_db import ReportDB
+from tools.report_db import ReportDB, SPECIES_FILTER_OTHER
+from constants import APP_VERSION
+
+
+# _stack 的页面索引：0=网格 1=全屏 2=双图对比
+# Page indices of the main QStackedWidget.
+_PAGE_GRID = 0
+_PAGE_FULLSCREEN = 1
+_PAGE_COMPARISON = 2
 
 
 def _photo_identity(photo: dict) -> tuple:
@@ -52,6 +65,86 @@ def _photo_db_key(photo: dict):
     return filename
 
 
+def _patch_cached_photos(photo: dict, updates: dict, *caches,
+                          include_burst: bool = True) -> None:
+    """
+    把一批字段改动同步到照片本身与所有内存缓存列表。
+
+    浏览器持有**三份**缓存，读它们的人各不相同，漏掉任何一份都会让界面与
+    产物对不上：
+
+      - ``_filtered_photos`` —— 当前筛选下的可见列表，缩略图网格与详情面板读它；
+      - ``_all_photos``      —— 全量列表，HTML 报告、eBird 导出、「本次拍到的
+        鸟种」、整种合并的取样池读它；
+      - ``_raw_filtered_photos`` —— 筛选查询的原始结果，``_filtered_photos``
+        是从它**逐条 dict() 拷贝**出来的（连拍折叠/展开在拷贝时成形）。只补
+        拷贝不补源，用户点一下连拍组的展开/收起就会触发
+        ``_update_display_list`` 重建，刚改好的值被旧值盖回去；全屏翻页用的
+        导航列表（``_build_collapsed_navigation_list`` /
+        ``_build_burst_sequence``）也直接读它。
+
+    匹配范围是「这张照片 + 它所在的连拍组全部成员」：改鸟种会把整组一起改掉
+    （``core.rating_mover._change_bird_species_burst`` 更新组内每条记录），只补
+    被点的那一张，组里其余成员就会在报告里停在旧鸟名。
+
+    两条匹配边界必须守住：
+
+    - ``burst_id`` 为空时**不**按组匹配，否则所有非连拍照片（burst_id 同为
+      None）会被一次全改；
+    - 按组匹配时**同时比对 source_dir**。这是防御性的，不是在修一个现行缺陷：
+      库里的 burst_id 确实是 per-目录 的、跨批次会撞号（见
+      ``tools/merged_report_db.get_photos_by_burst_id`` 的说明），但浏览器两条
+      载入路径（``_load_single`` / ``_load_merged``）都会调 ``_compute_burst_ids``
+      清空重算，重算是在全量照片上做的，所以载入后的 id 在当前视图内是唯一的，
+      撞号到不了这里。留这道判断是因为它几乎不要钱，而一旦重算逻辑变化、或将来
+      有路径不重算就载入合并数据，只比 burst_id 就会把另一批次里同号的整组连拍
+      一起改掉——那批的库与文件都没动，只有内存错，报告会凭空多出一组张冠李戴的
+      记录，且界面上看不出任何异常。
+
+    参数 / Parameters:
+    photo (dict): 被改动的照片记录，会就地更新。
+    updates (dict): 要写入的字段，如 ``{"bird_species_cn": "家燕"}``。
+    *caches: 若干缓存列表（``_filtered_photos`` / ``_all_photos`` /
+        ``_raw_filtered_photos``），可为 None。
+    include_burst (bool): 是否连同连拍组其他成员一起改。默认 True，对应改鸟种
+        ——core 会整组写库，只补被点的那张会让组里其余成员在报告里停在旧鸟名。
+        改**星级**必须传 False：星级是逐张的（组内挑一张给 3★、其余留 1★ 正是
+        选片日常），库里也只改那一条，跟着整组改会让界面与库当场分叉。
+
+    返回 / Return:
+    None: 全部就地修改。
+
+    Apply one set of field updates to the photo and to every in-memory cache.
+    The browser keeps three caches with different consumers — the grid reads
+    `_filtered_photos`, the report / eBird export / session-species list /
+    species-merge pool read `_all_photos`, and `_filtered_photos` itself is
+    rebuilt by copying from `_raw_filtered_photos` on every burst toggle — so
+    patching only some of them makes the UI and the exported artifacts
+    disagree. Burst group members are matched too, because a species change
+    rewrites the whole group in the DB.
+    """
+    burst_id = photo.get("burst_id")
+    target_identity = _photo_identity(photo)
+    source_dir = photo.get("source_dir") or ""
+
+    def _matches(candidate: dict) -> bool:
+        if _photo_identity(candidate) == target_identity:
+            return True
+        if not include_burst:
+            return False
+        if not burst_id or candidate.get("burst_id") != burst_id:
+            return False
+        # 同号还不够，必须同一批次——合并浏览时 burst_id 跨目录撞号
+        # Same burst id is not enough: ids collide across merged batches.
+        return (candidate.get("source_dir") or "") == source_dir
+
+    photo.update(updates)
+    for cache in caches:
+        for cached in cache or []:
+            if cached is not photo and _matches(cached):
+                cached.update(updates)
+
+
 def _coerce_photo(photo_or_filename, photo_pool: list, fallback_photo: Optional[dict] = None) -> Optional[dict]:
     if isinstance(photo_or_filename, dict):
         return photo_or_filename
@@ -64,6 +157,58 @@ def _coerce_photo(photo_or_filename, photo_pool: list, fallback_photo: Optional[
     if len(matches) == 1:
         return matches[0]
     return fallback_photo if isinstance(fallback_photo, dict) else (matches[0] if matches else None)
+
+
+# 键盘打星键集(数字 0-5 + 上下箭头) / keys handled by keyboard rating
+# 4/5 星是手动升星档(自动评分只产 -1..3),上限与详情面板 ▲ 和对比视图的
+# 1-5 星按钮对齐——这里漏键会让事件分发直接跳过打星分支。
+# 4/5 are manual-only tiers (the auto pipeline emits -1..3); the cap mirrors
+# the detail panel and comparison view, and a missing key here would skip
+# the rating branch entirely during dispatch.
+_RATING_KEYS = (
+    Qt.Key_0, Qt.Key_1, Qt.Key_2, Qt.Key_3, Qt.Key_4, Qt.Key_5,
+    Qt.Key_Up, Qt.Key_Down,
+)
+
+
+def _rating_key_action(key: int, current_rating) -> Optional[int]:
+    """
+    键盘打星决策(Paul 反馈 P0-3):数字键 0-5 直接设星;Up/Down 星级 ±1,
+    钳制 0-5——-1★(无鸟)可经 Up(→0)或数字键救回,Down 减到 0 为止。
+
+    4/5 星为手动升星档:自动评分只产 -1..3,4/5 由用户自己打出来,并各自
+    对应「4星_精华」「5星_杰作」目录(见 constants.RATING_FOLDER_NAMES)。
+
+    Decide the new star rating for a key press: digits 0-5 set directly;
+    Up/Down step by one within 0-5 (-1 recovers via Up→0 or digits; Down
+    never goes below 0). 4/5 are manual-only tiers with their own folders.
+
+    参数 / Parameters:
+        key (int): Qt 键码 / Qt key code.
+        current_rating: 当前星级(可能为 None/-1..5) / current rating.
+
+    返回 / Returns:
+        Optional[int]: 新星级;None 表示与打星无关或星级无变化。
+    """
+    digit_map = {
+        Qt.Key_0: 0, Qt.Key_1: 1, Qt.Key_2: 2,
+        Qt.Key_3: 3, Qt.Key_4: 4, Qt.Key_5: 5,
+    }
+    try:
+        cur = int(current_rating) if current_rating is not None else 0
+    except (TypeError, ValueError):
+        cur = 0
+    if key in digit_map:
+        new = digit_map[key]
+    elif key == Qt.Key_Up:
+        new = 0 if cur < 0 else min(5, cur + 1)
+    elif key == Qt.Key_Down:
+        if cur <= 0:
+            return None
+        new = cur - 1
+    else:
+        return None
+    return new if new != cur else None
 
 
 def _parse_capture_time(value) -> Optional[datetime]:
@@ -124,14 +269,17 @@ def _burst_sharpness(photo: dict) -> float:
     return float(v) if v is not None else float("-inf")
 
 
+from core.burst_ranking import burst_composite_key
+
 def _burst_representative(photos: list) -> dict:
     """
-    从同组连拍中选「锐度最高」的一张作为折叠封面代表。
+    组内「最佳」代表:分层排序(对焦仲裁档 → 层内眼清为主+头锐为辅)。
+    折叠封面与展开标红均取此结果。
 
-    Pick the sharpest photo in a burst group as the collapsed-cover representative.
+    Pick the burst representative via tiered ranking (focus tier, then
+    eye-led + head sharpness). Used for the collapsed cover and highlight.
     """
-    return max(photos, key=_burst_sharpness)
-
+    return max(photos, key=burst_composite_key)
 
 def _build_burst_update_map(photos: list) -> dict:
     grouped = {}
@@ -199,6 +347,519 @@ def _trigger_rating_move(
     threading.Thread(target=_do, daemon=True).start()
 
 
+def compute_dropdown_species(db, use_en: bool, ratings=None):
+    """
+    算出鸟种下拉该显示什么：有目录的鸟种 + 是否需要「其他鸟类」兜底项。
+
+    磁盘上只有 2★以上的照片才会建鸟种目录（低星一律归「其他鸟类」，见
+    core/folder_layout.py）。所以只有低星照片的鸟种在磁盘上没有目录，列进
+    下拉纯属干扰；但它们的照片必须仍能从鸟种维度找到，故用兜底项接住。
+    兜底项跟随当前星级筛选：这一档下没有无目录照片就不显示，免得点进去是空的。
+
+    参数 / Args:
+        db:      ReportDB 或 MergedReportDB
+        use_en:  界面是否英文（决定用哪个鸟种列）
+        ratings: 当前星级筛选；None 表示不限
+
+    返回 / Returns:
+        (有目录的鸟种列表, 是否需要兜底项)
+
+    Decide dropdown contents: foldered species plus whether the "other birds"
+    catch-all is needed under the active rating filter.
+    """
+    species = db.get_distinct_species(use_en=use_en, ratings=ratings, foldered_only=True)
+    key = "bird_species_en" if use_en else "bird_species_cn"
+    probe = {key: SPECIES_FILTER_OTHER}
+    if ratings is not None:
+        probe["ratings"] = ratings
+    has_other = bool(db.get_photos_by_filters(probe))
+    return species, has_other
+
+
+def _photos_of_same_species(photos: list, target: dict) -> list:
+    """
+    从照片池里挑出与 target 同一鸟种的全部照片（用于整种合并）。
+
+    匹配以中文鸟名优先；target 没有中文名时（英文环境处理的批次）退回英文名。
+    没有鸟名的记录永远不匹配——空名不是一个「鸟种」。
+
+    参数 / Args:
+        photos: 照片字典列表（通常是浏览器的 _all_photos）
+        target: 用户右键点中的那张照片
+
+    返回 / Returns:
+        同鸟种的照片列表，保持原顺序
+
+    Pick every photo sharing the target's species. Chinese name takes
+    priority; falls back to English when the target has no Chinese name.
+    Records without a species never match.
+    """
+    target_cn = (target.get("bird_species_cn") or "").strip()
+    target_en = (target.get("bird_species_en") or "").strip()
+
+    if target_cn:
+        key, expected = "bird_species_cn", target_cn
+    elif target_en:
+        key, expected = "bird_species_en", target_en
+    else:
+        return []
+
+    return [p for p in photos if (p.get(key) or "").strip() == expected]
+
+
+def _merge_reason_text(reason: str) -> str:
+    """
+    把 core 回传的稳定原因代码翻成本地化文案。
+
+    core 只产出代码（target_exists / move_error:XxxError），中文/英文措辞留在
+    UI 层，避免把界面文案写进算法模块。
+
+    参数 / Args:
+        reason: 原因代码
+
+    返回 / Returns:
+        本地化的失败说明
+
+    Localize the stable reason codes produced by core.rating_mover.
+    """
+    i18n = get_i18n()
+    if reason.startswith("move_error:"):
+        return i18n.t('browser.merge_reason_move_error').format(
+            detail=reason.split(":", 1)[1]
+        )
+    if reason == "target_exists":
+        return i18n.t('browser.merge_reason_target_exists')
+    if reason == "source_missing":
+        return i18n.t('browser.merge_reason_source_missing')
+    return reason
+
+
+def _merge_target_folders(photos: list, new_bird_name: str, layout: str) -> list:
+    """
+    计算整种合并后会用到的目标目录（相对根目录），用于确认弹窗提前展示。
+
+    目录名跟随当前界面语言，所以这里把真实路径摆给用户看，可以在动手之前
+    发现「英文界面整理的批次、现在用中文界面合并会生成中文目录」这类分叉。
+    还在根目录（未整理）的照片不会被移动，不计入预览。
+
+    参数 / Args:
+        photos:        待合并的照片列表（current_path 需为绝对路径，且含 _base_dir）
+        new_bird_name: 用于目录命名的新鸟名
+        layout:        "species-first" | "rating-first"
+
+    返回 / Returns:
+        去重并排序后的相对目录列表
+
+    Compute the target folders a merge would use, for the confirmation dialog.
+    Root-level (unorganized) photos are excluded — they never move.
+    """
+    from core.folder_layout import compute_target_folder, normalize_layout
+    from core.rating_mover import _is_in_root
+
+    layout = normalize_layout(layout)
+    folders: set = set()
+
+    for photo in photos:
+        current_abs = photo.get("current_path") or photo.get("original_path") or ""
+        base_dir = photo.get("_base_dir") or ""
+        if not current_abs or not base_dir:
+            continue
+        try:
+            current_rel = os.path.relpath(current_abs, base_dir)
+        except ValueError:
+            continue                      # Windows 跨盘符
+        if _is_in_root(current_rel):
+            continue                      # 未整理的照片不移动
+        folders.add(
+            compute_target_folder(photo.get("rating") or 0, new_bird_name or None, layout)
+        )
+
+    return sorted(folders)
+
+
+# 确认弹窗里最多逐个列出几个批次。批次名可能是「2026/03/15」这类嵌套路径，
+# 全列会把弹窗撑得看不完；超出的部分只报个数。
+# Max batches listed by name in the confirmation; the rest are counted.
+MERGE_BATCH_PREVIEW_LIMIT = 6
+
+
+def _merge_batch_labels(photos: list) -> list:
+    """
+    取出这批照片涉及的批次名（去重排序），用于整种合并的确认弹窗。
+
+    批次名即 ``source_dir``——合并视图下每条记录带的、相对合并根的目录路径，
+    也正是用户在目录选择框里勾的那些名字。单目录浏览的照片没有这个字段，返回
+    空列表，调用方据此**完全不显示**批次提示，单目录弹窗因此逐字不变。
+
+    去重后排序而不是保持出现顺序：同一批照片两次打开弹窗必须给出同样的文案，
+    否则用户会以为范围变了。
+
+    参数 / Parameters:
+    photos (list): 待合并的照片记录列表。
+
+    返回 / Return:
+    list: 去重并排序的批次名；单目录模式下为空列表。
+
+    Distinct, sorted batch names (``source_dir``) for the merge confirmation.
+    Single-directory photos carry no ``source_dir``, so this returns an empty
+    list and the caller shows no hint at all — keeping that dialog unchanged.
+    """
+    return sorted({
+        (photo.get("source_dir") or "").strip()
+        for photo in photos
+        if (photo.get("source_dir") or "").strip()
+    })
+
+
+def _merge_batch_note(labels: list, i18n) -> str:
+    """
+    把批次名渲染成确认弹窗里的那句提示。
+
+    只有**两个及以上**批次才出提示：合并视图里只勾了一个目录时，「分布在 1 个
+    批次」是纯噪音。超过 MERGE_BATCH_PREVIEW_LIMIT 个时列出前几个并补一句还有
+    多少个——总数必须说清，用户才知道自己动的是 8 天而不是 6 天。
+
+    参数 / Parameters:
+    labels (list): _merge_batch_labels 的结果。
+    i18n: 国际化单例，文案与分隔符都跟随当前界面语言。
+
+    返回 / Return:
+    str: 提示文本；不需要提示时为空串（直接拼进正文模板即可）。
+
+    Render the batch hint. Shown only for two or more batches, truncated past
+    the preview limit with the remaining count spelled out.
+    """
+    if len(labels) < 2:
+        return ""
+
+    separator = i18n.t('browser.merge_batch_sep')
+    shown = labels[:MERGE_BATCH_PREVIEW_LIMIT]
+    text = separator.join(shown)
+    remaining = len(labels) - len(shown)
+    if remaining:
+        text += separator + i18n.t('browser.merge_batch_more').format(n=remaining)
+
+    return i18n.t('browser.merge_batch_note').format(
+        count=len(labels), batches=text
+    )
+
+
+def _species_edit_targets(window, photo: dict) -> list:
+    """
+    决定「修改鸟种」这一次作用于哪些照片。
+
+    规则与 Finder / Lightroom 一致：右键点中的照片**在勾选集里**时作用于整个
+    勾选集，否则只作用于点中的那一张——用户明确指向了它，不该顺手改掉别的。
+    一张都没勾选时同样只改点中的那张（单张编辑的老行为）。
+
+    用 get_explicitly_selected_photos（严格勾选集）而非
+    get_multi_selected_photos：后者会为双图对比自动补入未勾选的锚点，拿它当
+    批量改鸟种的范围会改到用户没勾的照片。
+
+    Decide the scope of one species edit: the whole checked selection when the
+    right-clicked photo belongs to it, otherwise just that photo. Uses the
+    strict checked set, never the comparison-anchor-augmented one.
+
+    参数 / Args:
+        window: 持有 _thumb_grid 的浏览器窗口
+        photo:  右键点中（或铅笔所在）的照片
+
+    返回 / Returns:
+        list: 本次要改的照片列表，至少包含 photo 自身
+    """
+    # 全屏是单张浏览：画面上就只有这一张，勾选集与它无关，绝不能批量。
+    # Fullscreen shows exactly one photo; never batch from there.
+    stack = getattr(window, "_stack", None)
+    if stack is not None:
+        try:
+            if stack.currentIndex() == _PAGE_FULLSCREEN:
+                return [photo]
+        except Exception:
+            pass
+
+    grid = getattr(window, "_thumb_grid", None)
+    getter = getattr(grid, "get_explicitly_selected_photos", None)
+    if not callable(getter):
+        return [photo]
+    try:
+        selected = list(getter() or [])
+    except Exception:
+        return [photo]
+    if len(selected) <= 1:
+        return [photo]
+    identity = _photo_identity(photo)
+    if any(_photo_identity(p) == identity for p in selected):
+        return selected
+    return [photo]
+
+
+def _run_species_change(
+    dir_path: str,
+    photo: dict,
+    new_bird_cn: str,
+    new_bird_en: str,
+    report_db,
+    db_key,
+    on_failures=None,
+    old_bird_cn: str = "",
+    old_bird_en: str = "",
+    metadata_writer=None,
+    species_extras: Optional[dict] = None,
+) -> bool:
+    """
+    同步执行因改鸟种引发的 DB 更新与文件移动，并把失败原因回报给调用方。
+
+    与 _trigger_species_change 分开是为了可测试：后台线程版只负责调度，真正
+    的业务在这里，测试可以直接同步调用并断言结果。
+
+    失败必须回报——2026-09-05 之前这里连 failures 参数都没传给 core，移动
+    失败的原因在后台线程里被完全丢弃，用户只看到「改了没反应」。
+
+    Synchronous body of the species change so it can be unit-tested; also
+    collects and surfaces failures instead of discarding them.
+
+    参数 / Args:
+        dir_path:    批处理根目录（绝对路径）
+        photo:       照片字典（会被就地更新 current_path / 鸟名）
+        new_bird_cn: 新中文鸟名
+        new_bird_en: 新英文鸟名
+        report_db:   ReportDB / MergedReportDB 实例，或 None
+        db_key:      透传给 DB 的稳定键
+        on_failures: 可选回调；仅在存在失败时以 [(文件名, 原因码)] 调用一次
+        old_bird_cn / old_bird_en: 改之前的鸟名，用于把关键字里的旧鸟名删掉
+                     （调用方必须在覆盖 photo 鸟名之前取好）。
+                     The pre-edit names, used to drop the stale keyword.
+        metadata_writer: 元数据写入器，默认取常驻 ExifToolManager；测试可注入。
+                     Metadata writer; defaults to the resident ExifToolManager.
+        species_extras: 新鸟种的鸟种级属性（罕见度/IUCN/颜值），透传给 core 一并
+                     写库；连拍组由 core 整组写。None 表示不动这三个字段。
+                     The new species' rarity/IUCN/beauty, written by core.
+
+    返回 / Returns:
+        bool: core 的返回值，True 表示执行了更新
+    """
+    from advanced_config import get_advanced_config
+    from core.rating_mover import change_bird_species
+
+    cfg = get_advanced_config()
+    layout = cfg.folder_layout
+    failures: list = []
+    changed_files: list = []
+    try:
+        result = change_bird_species(
+            dir_path, photo, new_bird_cn, new_bird_en, layout,
+            report_db, db_key, failures, changed_files, species_extras,
+        )
+    except Exception as e:
+        from tools.utils import log_message
+        log_message(f"[rating_mover] species change failed: {e}")
+        failures.append((os.path.basename(photo.get("current_path") or ""),
+                         f"move_error:{e.__class__.__name__}"))
+        result = False
+
+    # 同步照片自身的鸟名元数据。主流程把鸟名写进 XMP:Title(+可选关键字)，
+    # 纠正鸟种若不跟着写，磁盘上与 Lightroom 里看到的一直是识别错的旧名。
+    # Propagate the correction into the files themselves; the main pipeline
+    # writes the species into XMP:Title, so a correction must update it too.
+    if changed_files:
+        _write_species_metadata(
+            changed_files, new_bird_cn, new_bird_en,
+            old_bird_cn, old_bird_en, cfg, metadata_writer,
+        )
+
+    if failures and callable(on_failures):
+        on_failures(failures)
+    return result
+
+
+def _species_metadata_title(bird_cn: str, bird_en: str) -> str:
+    """
+    按当前界面语言选写进元数据的鸟名，与主流程 bird_title 的取法一致。
+
+    Pick the species name written to metadata, matching the main pipeline.
+    """
+    if get_i18n().current_lang.startswith('en'):
+        return (bird_en or bird_cn or "").strip()
+    return (bird_cn or bird_en or "").strip()
+
+
+def _write_species_metadata(
+    files: list,
+    new_bird_cn: str,
+    new_bird_en: str,
+    old_bird_cn: str,
+    old_bird_en: str,
+    cfg,
+    metadata_writer=None,
+) -> None:
+    """
+    把新鸟名写进这些文件的 XMP 元数据（Title，按开关同步关键字）。
+
+    单个文件写失败不影响其余文件——元数据是附加价值，不能因为一张写不进去
+    就让整批纠错半途而废；失败只记日志。
+
+    Write the corrected species into each file's XMP metadata. A per-file
+    failure never aborts the rest; metadata is best-effort and only logged.
+
+    参数 / Args:
+        files: 需要写入的文件绝对路径列表
+        new_bird_cn / new_bird_en: 新鸟名（中/英）
+        old_bird_cn / old_bird_en: 旧鸟名（中/英），用于删除旧关键字
+        cfg: AdvancedConfig 实例（读 birdid_write_keywords 开关）
+        metadata_writer: 写入器，None 时取常驻 ExifToolManager
+    """
+    new_title = _species_metadata_title(new_bird_cn, new_bird_en)
+    if not new_title:
+        return
+    old_title = _species_metadata_title(old_bird_cn, old_bird_en)
+
+    writer = metadata_writer
+    if writer is None:
+        from tools.exiftool_manager import get_exiftool_manager
+        writer = get_exiftool_manager()
+
+    write_keywords = bool(getattr(cfg, "birdid_write_keywords", False))
+    for path in files:
+        try:
+            writer.update_species_metadata(
+                path, new_title, old_title=old_title or None,
+                write_keywords=write_keywords,
+            )
+        except Exception as e:
+            from tools.utils import log_message
+            log_message(
+                f"[species] metadata write failed [{os.path.basename(path)}]: {e}"
+            )
+
+
+def _mark_no_bird_files(photo: dict) -> list:
+    """
+    收集这张照片需要清鸟名元数据的文件：RAW/JPEG 本体 + 配套 JPEG。
+
+    内部缓存预览不算——它不是用户的文件，跟改鸟种那边的判断保持一致。
+
+    The files whose species metadata must be cleared; the internal cache
+    preview is excluded, matching the species-change path.
+    """
+    files = []
+    main = photo.get("current_path") or photo.get("original_path") or ""
+    if main and os.path.exists(main):
+        files.append(main)
+    jpeg = photo.get("temp_jpeg_path") or ""
+    if jpeg and os.path.exists(jpeg) and not _is_internal_cache_path(jpeg):
+        files.append(jpeg)
+    return files
+
+
+def _run_mark_no_bird(
+    dir_path: str,
+    photo: dict,
+    report_db,
+    db_key,
+    i18n,
+    old_bird_cn: str = "",
+    old_bird_en: str = "",
+    metadata_writer=None,
+) -> bool:
+    """
+    同步把一张照片标记为「没有鸟」：写库 + 移文件 + 清元数据。
+
+    必须一次写三个字段，缺一个就自相矛盾：
+      - has_bird=0    —— 报告的鸟种名录按它过滤（core/report_export.py），
+                         不改的话误检的鸟种照样列在名录里、还算一张；
+      - 鸟种名清空    —— 决定目录归属，清空后自动落到「其他鸟类」分支；
+      - rating=-1     —— -1 就是既有的「无鸟」档，同时把文件带进 0星_放弃。
+
+    连拍组不扩散：无鸟是逐张的判断（同一组里别的帧可能真拍到了鸟），与改星级
+    的既有行为一致，而不同于改鸟种的整组处理。
+
+    Mark one photo as having no bird: DB, file move, and metadata in one go.
+    All three fields must change together; burst groups are NOT propagated
+    because "no bird" is a per-frame judgement.
+
+    参数 / Args:
+        dir_path:        批处理根目录（绝对路径）
+        photo:           照片字典（会被就地更新：鸟名清空、rating、current_path）
+        report_db:       ReportDB / MergedReportDB 实例，或 None
+        db_key:          _photo_db_key(photo) 的结果
+        i18n:            用于取当前语言下的鸟名（决定旧目录名）
+        old_bird_cn / old_bird_en: 改之前的鸟名。调用方通常已在主线程做过乐观
+                         更新（界面要立刻变），那时 photo 里的鸟名已被清空，
+                         清关键字就再也认不出该删哪一项——所以必须由调用方在
+                         清空前取好传进来。省略时退回从 photo 现值读取。
+                         The pre-clear names; the caller's optimistic UI update
+                         wipes them from `photo`, so they must be passed in.
+        metadata_writer: 元数据写入器，默认取常驻 ExifToolManager；测试可注入
+
+    返回 / Returns:
+        bool: 是否发生了文件移动
+    """
+    from advanced_config import get_advanced_config
+    from core.rating_mover import move_photo_on_metadata_change
+
+    cfg = get_advanced_config()
+    layout = cfg.folder_layout
+
+    # 旧鸟名要在清空之前抓住：清元数据时要靠它认出该删哪个关键字。
+    # Capture the old names before clearing; the metadata cleanup needs them.
+    old_cn = (old_bird_cn or photo.get("bird_species_cn") or "").strip()
+    old_en = (old_bird_en or photo.get("bird_species_en") or "").strip()
+
+    # 1. 先写库：即使随后文件移动失败，报告也已经不再把它算成那种鸟。
+    if report_db is not None:
+        report_db.update_photo(db_key, {
+            "has_bird": 0,
+            "bird_species_cn": None,
+            "bird_species_en": None,
+            # 待确定候选一并清掉，否则卡片仍会显示「鸟名（待确定 N%）」
+            # Clear the unconfirmed candidate too, or the tile keeps showing it
+            "alt_species_cn": None,
+            "alt_species_en": None,
+            "alt_confidence": None,
+            "rating": -1,
+        })
+
+    # 2. 同步内存副本，界面刷新与目录计算都读它
+    photo["bird_species_cn"] = ""
+    photo["bird_species_en"] = ""
+    photo["alt_species_cn"] = ""
+    photo["alt_species_en"] = ""
+    photo["alt_confidence"] = None
+    photo["has_bird"] = 0
+    photo["rating"] = -1
+
+    # 3. 移文件：鸟名已清空 + rating=-1 → compute_target_folder 落到
+    #    「其他鸟类/0星_放弃」。连拍组内与根目录下的文件由 core 自行跳过。
+    moved = False
+    try:
+        moved = move_photo_on_metadata_change(
+            dir_path, photo, -1, "", layout, report_db, db_key
+        )
+    except Exception as e:
+        from tools.utils import log_message
+        log_message(f"[rating_mover] mark-no-bird move failed: {e}")
+
+    # 4. 清掉文件里的鸟名，并把星级同步进元数据。
+    #    移动之后 photo["current_path"] 已被 core 更新为新路径。
+    writer = metadata_writer
+    if writer is None:
+        from tools.exiftool_manager import get_exiftool_manager
+        writer = get_exiftool_manager()
+    write_keywords = bool(getattr(cfg, "birdid_write_keywords", False))
+    for path in _mark_no_bird_files(photo):
+        try:
+            writer.clear_species_metadata(
+                path, old_title=_species_metadata_title(old_cn, old_en) or None,
+                write_keywords=write_keywords,
+            )
+            writer.set_rating_and_pick(path, -1)
+        except Exception as e:
+            from tools.utils import log_message
+            log_message(f"[mark_no_bird] metadata write failed for {path}: {e}")
+
+    return moved
+
+
 def _trigger_species_change(
     dir_path: str,
     photo: dict,
@@ -206,6 +867,10 @@ def _trigger_species_change(
     new_bird_en: str,
     report_db,
     db_key,
+    on_failures=None,
+    old_bird_cn: str = "",
+    old_bird_en: str = "",
+    species_extras: Optional[dict] = None,
 ) -> None:
     """
     在后台线程中执行因改鸟种引发的 DB 更新与文件移动。
@@ -213,23 +878,198 @@ def _trigger_species_change(
 
     Spawn a daemon thread to update species in DB and move files after a species change.
     Burst groups are handled as a whole; single photos move individually.
+
+    参数 / Args:
+        on_failures: 可选回调，在**后台线程**中被调用；若要碰 UI，调用方需自行
+                     切回主线程（本文件用 QTimer.singleShot(0, ...) 转发）。
+                     Called on the worker thread; marshal to the GUI thread yourself.
+    """
+    import threading
+    threading.Thread(
+        target=_run_species_change,
+        args=(dir_path, photo, new_bird_cn, new_bird_en, report_db, db_key,
+              on_failures, old_bird_cn, old_bird_en, None, species_extras),
+        daemon=True,
+    ).start()
+
+
+# ============================================================
+#  纠错样本提交（Correction Submission）
+#  说明：本文件内 ResultsBrowserWindow / ResultsBrowserWidget 是两个并行的
+#  三栏浏览器实现（QMainWindow 版 + 可嵌入的 QWidget 版），改鸟种/提交纠错的
+#  业务逻辑完全一致。参照上面 _trigger_species_change 的既有写法——把共享
+#  逻辑放到模块级函数，两个类各自的方法只做薄封装——避免同一段逻辑在两个
+#  类里各写一份、后续各自漂移。
+#
+#  Note: this file has two parallel three-pane browser implementations
+#  (a QMainWindow version and an embeddable QWidget version) with identical
+#  species-edit / submit-corrections logic. Following the existing pattern
+#  of _trigger_species_change above, the shared logic lives in module-level
+#  functions; each class's method is a thin wrapper. This avoids duplicating
+#  the same block in both classes and letting them drift apart.
+# ============================================================
+
+
+def build_correction_payload(photo: dict, new_cn: str, new_en: str,
+                              new_latin: str) -> dict:
+    """
+    从 photo 现值(原预测) + 新选鸟种拼 CorrectionTracker.record_correction 入参。
+
+    **必须在把新鸟种覆盖进 photo/DB 之前调用**，否则原预测(wrong_*)已丢。
+
+    Build the payload for CorrectionTracker.record_correction from the
+    current (pre-overwrite) photo values plus the newly chosen species.
+
+    **MUST be called before the new species is written into photo/DB**,
+    otherwise the original prediction (wrong_*) is already lost.
+
+    参数 / Args:
+        photo: 当前照片字典（覆盖前）。
+        new_cn / new_en / new_latin: 用户新选中文名/英文名/学名。
+
+    返回 / Returns:
+        dict: 供 CorrectionTracker.record_correction(**payload 派生参数) 使用的字段。
+    """
+    return {
+        "filename": photo.get("filename"),
+        "wrong_cn": photo.get("bird_species_cn"),
+        "wrong_en": photo.get("bird_species_en"),
+        "corrected_cn": new_cn,
+        "corrected_en": new_en,
+        "corrected_latin": new_latin,
+        "birdid_confidence": photo.get("birdid_confidence"),
+    }
+
+
+def _record_species_correction(window, photo: dict, new_cn: str, new_en: str,
+                                new_latin: str) -> None:
+    """
+    改鸟种确认后记录纠错样本（供「提交本次纠错」使用）。
+
+    调用方必须在覆盖 photo["bird_species_cn"/"bird_species_en"] 之前调用本
+    函数，否则原预测已丢失（build_correction_payload 依赖 photo 现值）。
+    纠错记录失败不得阻断改鸟种主流程，因此内部吞掉异常仅打印警告。
+
+    Record a correction sample after a species edit is confirmed (used later
+    by "submit corrections"). Callers MUST invoke this BEFORE overwriting
+    photo["bird_species_cn"/"bird_species_en"], otherwise the original
+    prediction is already lost (build_correction_payload reads photo as-is).
+    A recording failure must never block the species-change flow, so
+    exceptions are swallowed here (with a printed warning).
+
+    参数 / Args:
+        window: 持有 _db / _correction_tracker 属性的窗口或部件实例
+                （ResultsBrowserWindow 或 ResultsBrowserWidget）。
+        photo: 当前照片字典（覆盖前，含原预测）。
+        new_cn / new_en / new_latin: 用户新选中文名/英文名/学名。
+    """
+    if not getattr(window, "_db", None):
+        return
+    try:
+        from core.correction_tracker import CorrectionTracker
+        from birdid.bird_database_manager import BirdDatabaseManager
+        if getattr(window, "_correction_tracker", None) is None:
+            window._correction_tracker = CorrectionTracker(
+                window._db, BirdDatabaseManager()
+            )
+        payload = build_correction_payload(photo, new_cn, new_en, new_latin)
+        window._correction_tracker.record_correction(
+            filename=payload["filename"],
+            wrong_cn=payload["wrong_cn"], wrong_en=payload["wrong_en"],
+            corrected_cn=payload["corrected_cn"],
+            corrected_en=payload["corrected_en"],
+            corrected_latin=payload["corrected_latin"],
+            birdid_confidence=payload["birdid_confidence"],
+            # 合并模式下跨子目录可能重名，带上 (source_dir, filename) 精确落库
+            # Disambiguate same-named photos across sub-directories.
+            photo_key=_photo_db_key(photo),
+        )
+    except Exception as e:
+        # 走日志而非 print：打包版看不到 stdout，这里失败过整整一批也没人察觉
+        # （MergedReportDB 缺 insert_correction 时纠错样本静默丢了数月）。
+        # Log instead of print; a packaged build shows no stdout, which is how
+        # months of correction samples were lost unnoticed.
+        from tools.utils import log_message
+        log_message(f"[Correction] 记录纠错失败(不阻断改鸟种): {e}")
+
+
+def _open_submission_review(window) -> None:
+    """
+    「提交本次纠错」核心逻辑：读 corrections 表→按鸟种分组→（首次）征询
+    自愿说明→弹复审窗打包到桌面。ResultsBrowserWindow / ResultsBrowserWidget
+    共用本函数。
+
+    Core "submit corrections" logic: read the corrections table, group by
+    species, ask for one-time voluntary consent, then open the review
+    dialog to pack results to the desktop. Shared by both
+    ResultsBrowserWindow and ResultsBrowserWidget.
+
+    参数 / Args:
+        window: 持有 _db / _correction_tracker / i18n 属性的窗口或部件实例，
+                同时作为弹窗 parent。
     """
     from advanced_config import get_advanced_config
-    from core.rating_mover import change_bird_species
+    from ui.submission_review_dialog import SubmissionReviewDialog, SpeciesGroup
 
-    layout = get_advanced_config().folder_layout
+    if not window._db:
+        return
+    if not hasattr(window._db, "get_corrections"):
+        # 合并多目录模式下的 MergedReportDB 暂不支持纠错查询，优雅退回而非崩溃。
+        # MergedReportDB (merged multi-directory mode) doesn't support
+        # correction queries yet; bail out gracefully instead of crashing.
+        QMessageBox.information(
+            window, window.i18n.t("submission.title"),
+            window.i18n.t("submission.no_corrections"))
+        return
 
-    def _do() -> None:
-        try:
-            change_bird_species(
-                dir_path, photo, new_bird_cn, new_bird_en, layout, report_db, db_key
-            )
-        except Exception as e:
-            from tools.utils import log_message
-            log_message(f"[rating_mover] species change failed: {e}")
+    corrections = window._db.get_corrections()
+    if not corrections:
+        QMessageBox.information(
+            window, window.i18n.t("submission.title"),
+            window.i18n.t("submission.no_corrections"))
+        return
 
-    import threading
-    threading.Thread(target=_do, daemon=True).start()
+    # 首次自愿说明
+    # One-time voluntary consent prompt.
+    cfg = get_advanced_config()
+    if not cfg.correction_consent_shown:
+        ans = QMessageBox.question(
+            window, window.i18n.t("submission.consent_title"),
+            window.i18n.t("submission.consent_body"),
+            QMessageBox.Yes | QMessageBox.No)
+        if ans != QMessageBox.Yes:
+            return
+        cfg.set_correction_consent_shown(True)
+
+    # 按鸟种分组：每条 correction = 一个被改正图 + 同鸟种正样本
+    # Group by species: each correction row = one corrected photo + positives of the same species.
+    groups = []
+    for c in corrections:
+        failed = window._db.get_photo(c["filename"]) or {"filename": c["filename"]}
+        positives = window._correction_tracker.find_positive_samples(
+            c["corrected_cn"], c["corrected_en"], exclude_filename=c["filename"]
+        ) if getattr(window, "_correction_tracker", None) else \
+            window._db.get_photos_by_species(
+                cn=c["corrected_cn"], en=c["corrected_en"],
+                exclude_filename=c["filename"])
+        # DB 里 current_path/original_path 存的是相对 dir_path 的相对路径，
+        # 必须用 _resolve_photo_paths 转成绝对路径，否则 load_image 找不到文件。
+        # current_path/original_path in the DB are stored relative to dir_path;
+        # must resolve to absolute paths via _resolve_photo_paths, otherwise
+        # load_image cannot locate the file.
+        failed = window._resolve_photo_paths(failed)
+        positives = [window._resolve_photo_paths(p) for p in positives]
+        groups.append(SpeciesGroup(
+            corrected_cn=c["corrected_cn"] or "",
+            corrected_en=c["corrected_en"] or "",
+            model_class_id=c["corrected_model_class_id"],
+            failed=failed, positives=positives,
+        ))
+
+    desktop = os.path.join(os.path.expanduser("~"), "Desktop")
+    out_dir = desktop if os.path.isdir(desktop) else os.path.expanduser("~")
+    dlg = SubmissionReviewDialog(groups, out_dir, APP_VERSION, parent=window)
+    dlg.exec()
 
 
 # ============================================================
@@ -291,8 +1131,14 @@ def _best_reveal_target(*filepaths: str) -> str:
     return ""
 
 
-def _show_context_menu_impl(parent_widget, photo: dict, pos, directory: str):
-    """构建并显示右键菜单（C4）。外部应用列表从 advanced_config 读取。"""
+def _build_context_menu(parent_widget, photo: dict, directory: str):
+    """
+    构建右键菜单(C4)并返回 QMenu,不负责弹出——便于单测各菜单项接线。
+    外部应用列表从 advanced_config 读取。弹出由 _show_context_menu_impl 负责。
+
+    Build and return the right-click QMenu (without showing it), so each menu
+    item's wiring can be unit-tested. Display is handled separately.
+    """
     from advanced_config import get_advanced_config
 
     # current_path 是整理后的实际位置（优先），original_path 是处理时的原始位置（兜底）
@@ -350,6 +1196,50 @@ def _show_context_menu_impl(parent_widget, photo: dict, pos, directory: str):
     finder_action.triggered.connect(_reveal)
     menu.addAction(finder_action)
 
+    # 修改鸟种 / 补录(取代原网格卡片上的常驻铅笔;对所有照片可用):
+    # 有鸟名=纠错,无鸟名=人工补录,复用浏览器既有编辑弹窗与目录移动逻辑。
+    # Edit/assign species (replaces the tile's always-on pencil; available
+    # for every photo). Reuses the browser's existing edit dialog.
+    # 多选时把张数写进菜单文案——不然用户不知道这一下会改 N 张
+    # Spell out the count so a batch edit is never a surprise.
+    _targets = _species_edit_targets(parent_widget, photo)
+    _species_label = (
+        _i18n.t('browser.ctx_edit_species_batch').format(count=len(_targets))
+        if len(_targets) > 1 else _i18n.t('browser.ctx_edit_species')
+    )
+    species_action = QAction(_species_label, parent_widget)
+
+    def _edit_species(_checked=False, _p=photo):
+        handler = getattr(parent_widget, "_on_species_edit_requested", None)
+        if callable(handler):
+            handler(_p)
+
+    species_action.triggered.connect(_edit_species)
+    menu.addAction(species_action)
+
+    # 整种合并:把这张照片所属鸟种的全部照片一次性改为另一个鸟种。
+    # 用于「整批都被认成同一个错误鸟种」的场景,避免逐张点「修改鸟种」。
+    # 没有鸟名的照片无种可合并,不显示该项。
+    # Whole-species merge: retag every photo of this species at once.
+    # Hidden for photos without a species (nothing to merge).
+    merge_species_name = (
+        photo.get("bird_species_en") if _i18n.current_lang.startswith("en")
+        else photo.get("bird_species_cn")
+    ) or ""
+    if merge_species_name:
+        merge_action = QAction(
+            _i18n.t('browser.ctx_merge_species').format(species=merge_species_name),
+            parent_widget,
+        )
+
+        def _merge_species(_checked=False, _p=photo):
+            handler = getattr(parent_widget, "_on_merge_species_requested", None)
+            if callable(handler):
+                handler(_p)
+
+        merge_action.triggered.connect(_merge_species)
+        menu.addAction(merge_action)
+
     # 用户配置的外部应用列表（设置 → 外部应用）
     external_apps = get_advanced_config().get_external_apps()
     if external_apps:
@@ -390,6 +1280,12 @@ def _show_context_menu_impl(parent_widget, photo: dict, pos, directory: str):
         copy_action.triggered.connect(_copy_path)
     menu.addAction(copy_action)
 
+    return menu
+
+
+def _show_context_menu_impl(parent_widget, photo: dict, pos, directory: str):
+    """构建并在 pos 处弹出右键菜单(C4)。"""
+    menu = _build_context_menu(parent_widget, photo, directory)
     menu.exec(pos)
 
 
@@ -402,11 +1298,31 @@ def _move_to_trash(filepath: str) -> bool:
         return False
     try:
         if sys.platform == "darwin":
-            # macOS: osascript 调用 Finder 移入回收站
-            escaped = filepath.replace('"', '\\"')
-            script = f'tell application "Finder" to delete POSIX file "{escaped}"'
+            # macOS: osascript 调用 Finder 移入回收站。
+            # 路径经 argv 传入，脚本本身是静态常量——绝不可把路径插值进脚本源。
+            # 旧写法只转义双引号(filepath.replace('"', '\\"'))，反斜杠未转义，
+            # 文件名中的 \" 组合会提前闭合 AppleScript 字符串，使其余部分作为
+            # 代码执行(已实测可执行任意表达式)。macOS 文件名允许 \ 和 "，
+            # 因此一个特制文件名即可在删除操作中触发任意代码执行。
+            # Pass the path through argv against a static script — never
+            # interpolate it into AppleScript source. The previous code escaped
+            # only double quotes, leaving backslashes untouched, so a \" pair in
+            # a filename closed the string early and executed the remainder as
+            # code. macOS permits both \ and " in filenames, so a crafted name
+            # meant arbitrary code execution during a delete.
+            # POSIX file 的转换必须放在 tell 块之外：在 tell application "Finder"
+            # 内部，POSIX file 会被 Finder 的术语解释，作用于变量时报 -1728。
+            # The POSIX file coercion must happen outside the tell block: inside
+            # tell application "Finder" it is resolved against Finder's own
+            # terminology and fails with -1728 when applied to a variable.
+            script = (
+                "on run argv\n"
+                "    set targetFile to POSIX file (item 1 of argv) as alias\n"
+                '    tell application "Finder" to delete targetFile\n'
+                "end run"
+            )
             result = subprocess.run(
-                ["osascript", "-e", script],
+                ["osascript", "-e", script, "--", filepath],
                 capture_output=True, text=True, timeout=10
             )
             return result.returncode == 0
@@ -450,12 +1366,22 @@ class ResultsBrowserWindow(QMainWindow):
 
     可以在主窗口之外独立显示/隐藏，不会阻塞主窗口操作。
     """
+
+    # 后台任务完成后回主线程刷新界面。
+    # 必须用信号而不是 QTimer.singleShot：后者从没有事件循环的工作线程调用
+    # 时不会触发（已实测），界面就永远停在旧状态。跨线程信号走队列连接，是
+    # Qt 里唯一可靠的回主线程方式。
+    # Cross-thread signals are the only reliable way back to the GUI thread;
+    # QTimer.singleShot silently never fires when called from a worker thread.
+    bg_refresh_requested = Signal()
+    species_change_failed = Signal(list)
     closed = Signal()   # 窗口关闭时通知主窗口
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.i18n = get_i18n()
         self._db: Optional[ReportDB] = None
+        self._correction_tracker = None  # 惰性创建的纠错记录器 / lazily-created CorrectionTracker
         self._directory: str = ""
         self._all_photos: list = []
         self._filtered_photos: list = []
@@ -464,6 +1390,8 @@ class ResultsBrowserWindow(QMainWindow):
         self._is_merged: bool = False
         self._sub_dirs: list = []
         self._fullscreen_nav_photos: list = []
+        self._apple_photos_importer = None
+        self._apple_photos_progress = None
 
         self._setup_window()
         self._setup_menu()
@@ -543,10 +1471,16 @@ class ResultsBrowserWindow(QMainWindow):
         center_layout.addWidget(self._toolbar)
 
         self._thumb_grid = ThumbnailGrid(self.i18n, self)
+        # 后台线程完成后的界面刷新与失败提示，一律经信号回主线程
+        self.bg_refresh_requested.connect(self._refresh_after_background_change)
+        self.species_change_failed.connect(self._show_species_change_failures)
+
         self._thumb_grid.photo_selected.connect(self._on_photo_selected)
         self._thumb_grid.photo_double_clicked.connect(self._enter_fullscreen)
         self._thumb_grid.multi_selection_changed.connect(self._on_multi_selection_changed)
         self._thumb_grid.burst_badge_clicked.connect(self._toggle_burst)
+        # issue #106: 网格鸟种编辑改由右键菜单进入(见 _show_context_menu_impl)
+        # issue #106: grid species-edit now lives in the right-click menu
         center_layout.addWidget(self._thumb_grid, 1)
 
         main_h.addWidget(center_widget, 1)
@@ -561,6 +1495,8 @@ class ResultsBrowserWindow(QMainWindow):
         self._fullscreen.context_menu_requested.connect(self._on_fullscreen_context_menu)
         self._fullscreen.species_edit_requested.connect(self._on_species_edit_requested)
         self._fullscreen.crop_advice_requested.connect(self._on_crop_advice_requested)
+        self._fullscreen.auto_retouch_requested.connect(
+            lambda p: self._open_studio_with_action(p, "enhance"))
         self._fullscreen.burst_sequence_requested.connect(self._open_burst_sequence)
         self._stack.addWidget(self._fullscreen)   # index 1
 
@@ -604,6 +1540,15 @@ class ResultsBrowserWindow(QMainWindow):
         back_btn.clicked.connect(self._go_back_to_main)
         layout.addWidget(back_btn)
 
+        # 合并目录入口：随时增删要一起统计的目录（可跨文件夹、跨盘）
+        # Entry point to the directory list; batches often live far apart.
+        merge_btn = QPushButton(self.i18n.t("browser.merge_dirs"))
+        merge_btn.setObjectName("tertiary")
+        merge_btn.setFixedHeight(32)
+        merge_btn.setToolTip(self.i18n.t("browser.merge_dirs_tooltip"))
+        merge_btn.clicked.connect(self._open_merge_picker)
+        layout.addWidget(merge_btn)
+
         layout.addSpacing(8)
 
         # Directory switcher combo box
@@ -623,6 +1568,9 @@ class ResultsBrowserWindow(QMainWindow):
             }}
             QComboBox::drop-down {{ border: none; width: 20px; }}
         """)
+        # 弹出列表容器需逐个接线，祖先样式表够不到顶层 popup（见 ui/combo_popup.py）。
+        # Per-instance styling: ancestor sheets cannot reach a top-level popup.
+        style_combo_popup(self._dir_combo)
         self._dir_combo.currentIndexChanged.connect(self._on_subdir_changed)
         self._dir_combo.hide()
         layout.addWidget(self._dir_combo)
@@ -662,6 +1610,43 @@ class ResultsBrowserWindow(QMainWindow):
         self._compare_btn.clicked.connect(self._enter_comparison)
         layout.addWidget(self._compare_btn)
 
+        # 导出报告：把当前载入的全量照片聚合成一个可分享的 HTML（spec D4）。
+        # 刻意**不受筛选面板影响**——报告的统计口径必须是「这次拍的全部」，
+        # 跟随筛选会让命中率变成 62/62=100% 这种无意义的数字。
+        # Export report over the full loaded set, never the filtered view.
+        self._export_btn = QPushButton(self.i18n.t("report_export.button"))
+        self._export_btn.setObjectName("secondary")
+        self._export_btn.setFixedHeight(32)
+        self._export_btn.setToolTip(self.i18n.t("report_export.button_tip"))
+        self._export_btn.clicked.connect(self._export_report)
+        layout.addWidget(self._export_btn)
+
+        # 导出 eBird 观测记录：口径与报告一致，取全量而非当前筛选——
+        # 观测记录讲的是「这次拍到了什么」，跟随筛选会漏报。
+        # Export eBird observations over the full set, not the filtered view.
+        self._ebird_btn = QPushButton(self.i18n.t("ebird_export.button"))
+        self._ebird_btn.setObjectName("secondary")
+        self._ebird_btn.setFixedHeight(32)
+        self._ebird_btn.setToolTip(self.i18n.t("ebird_export.button_tip"))
+        self._ebird_btn.clicked.connect(self._export_ebird)
+        layout.addWidget(self._ebird_btn)
+
+        # Apple Photos 导入严格限于 macOS；模块只在用户触发时惰性加载，Windows
+        # 启动和打包运行路径不导入任何 AppleScript 控制代码。
+        # Apple Photos import is macOS-only. Its controller is loaded lazily on
+        # user action so Windows startup never imports AppleScript control code.
+        self._apple_photos_btn = None
+        if sys.platform == "darwin":
+            self._apple_photos_btn = QPushButton(self.i18n.t("browser.photos_import_btn"))
+            self._apple_photos_btn.setIcon(load_tinted_icon("image-plus.svg", ICON_IDLE, 16))
+            self._apple_photos_btn.setIconSize(QSize(16, 16))
+            self._apple_photos_btn.setObjectName("secondary")
+            self._apple_photos_btn.setFixedHeight(32)
+            self._apple_photos_btn.setToolTip(self.i18n.t("browser.photos_import_tooltip"))
+            self._apple_photos_btn.setEnabled(False)
+            self._apple_photos_btn.clicked.connect(self._start_apple_photos_import)
+            layout.addWidget(self._apple_photos_btn)
+
         # 缩略图尺寸:标签 + 滑块绑成一组,紧贴显示
         size_box = QHBoxLayout()
         size_box.setContentsMargins(0, 0, 0, 0)
@@ -677,6 +1662,19 @@ class ResultsBrowserWindow(QMainWindow):
         self._size_slider.valueChanged.connect(self._on_size_changed)
         size_box.addWidget(self._size_slider)
         layout.addLayout(size_box)
+
+        # ExtremeSimple: 「提交本次纠错」按钮已从工具栏剥离（_on_submit_corrections/
+        # _open_submission_review/CorrectionTracker 等纠错提交代码本身保留不动；
+        # 鸟种手动编辑能力不受影响，record_correction_if_species_changed 仍会
+        # 静默记录本地纠错样本，只是没有入口能打包提交。未来要恢复只需把这段
+        # 按钮创建代码加回来）。
+        # ExtremeSimple: the "Submit corrections" button is stripped from the
+        # toolbar (_on_submit_corrections / _open_submission_review /
+        # CorrectionTracker etc. are untouched). Manual species editing is
+        # unaffected; record_correction_if_species_changed keeps silently
+        # logging local correction samples, there's just no entry point to
+        # package and submit them. Re-add this button-creation block to bring
+        # it back.
 
         return bar
 
@@ -698,7 +1696,15 @@ class ResultsBrowserWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def open_directory(self, directory: str):
-        """Load report.db. Supports batch multi-dir mode."""
+        """
+        打开一个目录的选鸟结果。
+
+        目录下若有多个已处理批次，先弹目录清单让用户挑（并可继续添加别处、
+        别的盘上的目录）；只有一个批次就直接打开，不拿一行的选择框去打扰他。
+
+        参数 / Args:
+            directory: 用户选中的目录
+        """
         if not directory:
             return
 
@@ -712,42 +1718,123 @@ class ResultsBrowserWindow(QMainWindow):
         self._is_merged = False
         self._sub_dirs = []
 
-        from tools.merged_report_db import find_processed_subdirs
-        processed = find_processed_subdirs(directory)
+        chosen = self._resolve_directories(directory)
+        if not chosen:
+            return
+        self._apply_selection(chosen)
 
+    def _resolve_directories(self, directory: str) -> list:
+        """
+        决定要载入哪些目录。
+
+        三种情况 / Three cases:
+          * 多个批次 → 弹清单让用户挑（预填找到的批次）
+          * 一个批次 → 直接用它
+          * 没有结果 → 给出原有提示，什么都不载入
+
+        参数 / Args:
+            directory: 用户选中的目录
+
+        返回 / Returns:
+            list: 要载入的目录；用户取消或无结果时为空
+        """
+        from tools.merged_report_db import find_processed_subdirs
+
+        processed = find_processed_subdirs(directory)
+        if len(processed) > 1:
+            return self._ask_which_batches(processed)
+        if processed:
+            return processed
+
+        db_path = os.path.join(directory, ".superpicky", "report.db")
+        if not os.path.exists(db_path):
+            self._show_no_db_hint(directory)
+            return []
+        return [directory]
+
+    def _apply_selection(self, dirs: list) -> None:
+        """
+        按给定的目录集合载入结果：一个目录走单目录模式，多个走合并模式。
+
+        合并根由 merge_root() 决定——用户可以把任意位置的目录凑在一起，不再
+        保证有共同父目录（甚至可能跨盘），所以根不能想当然地取「用户点开的
+        那个文件夹」。
+
+        参数 / Args:
+            dirs: 要载入的批次目录绝对路径
+        """
+        from tools.merged_report_db import merge_root
+
+        dirs = [d for d in dirs if d]
+        if not dirs:
+            return
+
+        if len(dirs) == 1:
+            self._sub_dirs = []
+            self._populate_dir_combo("", [])
+            self._directory = dirs[0]
+            self._load_single(dirs[0])
+            return
+
+        root = merge_root(dirs) or os.path.dirname(dirs[0])
+        self._sub_dirs = list(dirs)
+        self._populate_dir_combo(root, dirs)
+        self._directory = root
+        self._load_merged(root, dirs)
+
+    def _populate_dir_combo(self, root: str, dirs: list) -> None:
+        """
+        重建顶部的目录切换下拉；dirs 为空时隐藏它、改回单目录标签。
+
+        条目文案用相对合并根的路径，跨盘时 relpath 不可用，退回目录名。
+        Labels use paths relative to the merge root, falling back to the folder
+        name when the batch lives on another volume.
+        """
         self._dir_combo.blockSignals(True)
         self._dir_combo.clear()
 
-        if len(processed) > 1:
-            self._sub_dirs = processed
-            total = sum(self._count_db_photos(d) for d in processed)
-            self._dir_combo.addItem(f"\U0001f4c2 All ({total})", "__ALL__")
-            for d in processed:
-                rel = os.path.relpath(d, directory)
-                n = self._count_db_photos(d)
-                label = f"  ./ ({n})" if rel == '.' else f"  {rel}/ ({n})"
-                self._dir_combo.addItem(label, d)
-            self._dir_combo.show()
-            self._dir_label.hide()
-        else:
+        if not dirs:
             self._dir_combo.hide()
             self._dir_label.show()
-            if not processed:
-                db_path = os.path.join(directory, ".superpicky", "report.db")
-                if not os.path.exists(db_path):
-                    self._show_no_db_hint(directory)
-                    self._dir_combo.blockSignals(False)
-                    return
+            self._dir_combo.blockSignals(False)
+            return
 
+        total = sum(self._count_db_photos(d) for d in dirs)
+        self._dir_combo.addItem(f"\U0001f4c2 All ({total})", "__ALL__")
+        for d in dirs:
+            try:
+                rel = os.path.relpath(d, root)
+            except ValueError:
+                rel = os.path.basename(d) or d
+            n = self._count_db_photos(d)
+            label = f"  ./ ({n})" if rel == '.' else f"  {rel}/ ({n})"
+            self._dir_combo.addItem(label, d)
+        self._dir_combo.show()
+        self._dir_label.hide()
         self._dir_combo.blockSignals(False)
-        self._directory = directory
 
-        if len(processed) > 1:
-            self._load_merged(directory, processed)
-        elif len(processed) == 1:
-            self._load_single(processed[0])
-        else:
-            self._load_single(directory)
+    @Slot()
+    def _open_merge_picker(self) -> None:
+        """
+        随时打开目录清单，增删要合并的目录后重新载入。
+
+        入口不该只在「打开某个父目录」那一刻出现：用户常常先看完一天，才想起
+        要把前几天一起算进来，而那几天可能在别的文件夹、别的盘上。
+        """
+        current = list(self._sub_dirs) if self._sub_dirs else (
+            [self._directory] if self._directory else [])
+        chosen = self._ask_which_batches(current)
+        if not chosen:
+            return
+        if self._db:
+            try:
+                self._db.close()
+            except Exception:
+                pass
+            self._db = None
+        self._is_merged = False
+        self._sub_dirs = []
+        self._apply_selection(chosen)
 
     def _count_db_photos(self, directory: str) -> int:
         db_path = os.path.join(directory, ".superpicky", "report.db")
@@ -776,14 +1863,47 @@ class ResultsBrowserWindow(QMainWindow):
         self._all_photos = self._db.get_all_photos()
         self._compute_burst_ids()
         self._filter_panel.reset_all()
-        species = self._db.get_distinct_species(use_en=self.i18n.current_lang.startswith('en'))
-        self._filter_panel.update_species_list(species)
+        species, has_other = compute_dropdown_species(
+            self._db, use_en=self.i18n.current_lang.startswith('en')
+        )
+        self._filter_panel.update_species_list(species, has_other)
         if len(self._all_photos) > 0 and len(self._filtered_photos) == 0:
             self._filter_panel.select_all_ratings()
         self.setWindowTitle(f"{self.i18n.t('browser.title')} \u2014 {short_name}")
 
+    def _ask_which_batches(self, processed: list) -> list:
+        """
+        弹出目录清单，返回用户勾选的目录；取消或未选则返回空列表。
+
+        清单预填传入的目录，用户可在框内继续添加任意位置（包括别的盘）的目录。
+        概览数字走只读查询（summarize_directories），不会为了列表上的两个数字
+        就去升级用户几十个库的 schema——他可能看一眼就取消了。
+
+        Ask which directories to merge, prefilled with the ones found; the user
+        can add more from anywhere. Per-row counts come from a read-only query
+        so nothing is migrated for a directory the user may not open.
+
+        参数 / Args:
+            processed: 预填的目录（可为空）
+
+        返回 / Returns:
+            list: 选中的目录绝对路径；用户取消时为空
+        """
+        from tools.merged_report_db import summarize_directories
+
+        entries = summarize_directories(processed)
+        dialog = DirectorySelectDialog(self.i18n, entries, self)
+        if dialog.exec() != QDialog.Accepted:
+            return []
+        chosen = dialog.selected_directories()
+        if not chosen:
+            StyledMessageBox.warning(self, self.i18n.t("messages.hint"),
+                                     self.i18n.t("dir_select.none_selected"))
+            return []
+        return chosen
+
     def _load_merged(self, root_dir: str, sub_dirs: list):
-        from tools.merged_report_db import MergedReportDB
+        from tools.merged_report_db import MergedReportDB, merged_span_label
         self._is_merged = True
         try:
             self._db = MergedReportDB(root_dir, sub_dirs)
@@ -794,12 +1914,19 @@ class ResultsBrowserWindow(QMainWindow):
         self._all_photos = self._db.get_all_photos()
         self._compute_burst_ids()
         self._filter_panel.reset_all()
-        species = self._db.get_distinct_species(use_en=self.i18n.current_lang.startswith('en'))
-        self._filter_panel.update_species_list(species)
+        species, has_other = compute_dropdown_species(
+            self._db, use_en=self.i18n.current_lang.startswith('en')
+        )
+        self._filter_panel.update_species_list(species, has_other)
         if len(self._all_photos) > 0 and len(self._filtered_photos) == 0:
             self._filter_panel.select_all_ratings()
-        short = os.path.basename(root_dir) or root_dir
-        self.setWindowTitle(f"{self.i18n.t('browser.title')} \u2014 {short} (All)")
+        # 合并根的名字说明不了用户在看哪几天（多半是「2026」这种年份文件夹，
+        # 跨盘时甚至是「/」），所以标题给首尾目录名与目录个数。
+        # The merge root's name says nothing about which days are shown.
+        span = merged_span_label(sub_dirs) or (os.path.basename(root_dir) or root_dir)
+        self.setWindowTitle(
+            f"{self.i18n.t('browser.title')} \u2014 "
+            f"{self.i18n.t('browser.merged_title').format(span=span, count=len(sub_dirs))}")
 
     def _on_subdir_changed(self, index: int):
         if index < 0:
@@ -840,6 +1967,171 @@ class ResultsBrowserWindow(QMainWindow):
         self.hide()
         self.closed.emit()
 
+    @Slot()
+    def _export_ebird(self) -> None:
+        """
+        导出 eBird 观测记录 CSV（eBird Record Format，可直接在网站导入）。
+
+        口径为当前载入的**全量**照片，与报告导出一致：观测记录讲的是这次
+        拍到了什么，跟随筛选会漏报。一天一份清单、同种一行、数量固定 1。
+
+        地点名由用户填写一次、所有清单共用（按日期拆出的多份多为同一次外出；
+        若确实换了地方，导入 eBird 后逐份改地点即可）。坐标自动取当天 GPS
+        中位数，没有 GPS 就留空——eBird 会用地点名帮用户定位。
+
+        Export observations in the eBird Record Format over the full loaded
+        set: one checklist per date, one row per species, count fixed at 1.
+        """
+        from PySide6.QtWidgets import QInputDialog, QFileDialog
+        from core.ebird_export import (build_checklists, summarize, to_rows,
+                                       write_csv)
+
+        if not self._all_photos or not self._directory:
+            StyledMessageBox.warning(self, self.i18n.t("messages.hint"),
+                                     self.i18n.t("ebird_export.no_photos"))
+            return
+
+        location, ok = QInputDialog.getText(
+            self, self.i18n.t("ebird_export.title"),
+            self.i18n.t("ebird_export.location_prompt"),
+        )
+        if not ok or not location.strip():
+            return
+
+        rows_in = [self._resolve_photo_paths(p) for p in self._all_photos]
+        checklists = build_checklists(rows_in, location.strip())
+        if not checklists:
+            StyledMessageBox.warning(self, self.i18n.t("messages.hint"),
+                                     self.i18n.t("ebird_export.no_records"))
+            return
+
+        default_name = f"ebird_{os.path.basename(self._directory.rstrip(os.sep))}.csv"
+        path, _ = QFileDialog.getSaveFileName(
+            self, self.i18n.t("ebird_export.save_title"),
+            os.path.join(os.path.expanduser("~/Desktop"), default_name),
+            "CSV (*.csv)",
+        )
+        if not path:
+            return
+
+        try:
+            write_csv(path, to_rows(checklists))
+        except OSError as e:
+            StyledMessageBox.warning(
+                self, self.i18n.t("messages.hint"),
+                self.i18n.t("ebird_export.write_failed").format(error=e),
+            )
+            return
+
+        stats = summarize(checklists)
+        lines = [self.i18n.t("ebird_export.done").format(
+            checklists=stats["checklists"], rows=stats["rows"], path=path)]
+        # 需要人工核对的鸟种必须点名列出：它们在 CSV 里只有学名没有通用名，
+        # 用户得知道进 eBird 后要处理哪几条。
+        # Name the species needing review; they carry no common name in the CSV.
+        review = stats["needs_review"]
+        if review:
+            lines.append("")
+            lines.append(self.i18n.t("ebird_export.needs_review").format(
+                count=len(review)))
+            for item in review[:10]:
+                lines.append(f"  • {item}")
+            if len(review) > 10:
+                lines.append("  …")
+        StyledMessageBox.information(
+            self, self.i18n.t("ebird_export.title"), "\n".join(lines)
+        )
+
+    def _export_report(self) -> None:
+        """
+        导出可分享的 HTML 报告。
+
+        口径为当前载入的**全量**照片（`self._all_photos`），不跟随筛选面板
+        （spec D4）。路径先经 _resolve_photo_paths 解析为绝对路径再交给生成器
+        ——report.db 存的是相对路径，生成器不自行拼接（spec 4.2）。
+
+        Export the shareable HTML report over the full loaded photo set.
+        """
+        import datetime
+
+        from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QDesktopServices
+
+        from constants import APP_VERSION
+        from core.report_export import (aggregate, build_html, collect_image_jobs,
+                                        encode_preview, estimate_size,
+                                        build_output_path, preview_availability,
+                                        write_report_atomically)
+        from ui.report_export_dialog import ReportExportDialog
+        from ui.custom_dialogs import StyledMessageBox
+
+        if not self._all_photos or not self._directory:
+            StyledMessageBox.warning(self, self.i18n.t("messages.hint"),
+                                     self.i18n.t("report_export.no_photos"))
+            return
+
+        rows = [self._resolve_photo_paths(p) for p in self._all_photos]
+        available, total = preview_availability(rows)
+
+        # 预检 < 50%：拦住并说明原因（spec 7.1）。预览缓存被 keep_temp_files
+        # 关掉后清理，是本功能最可能发生的失败。
+        if total and available / total < 0.5:
+            reply = StyledMessageBox.question(
+                self, self.i18n.t("report_export.title"),
+                self.i18n.t("report_export.previews_gone", count=total - available),
+                yes_text=self.i18n.t("report_export.text_only"),
+                no_text=self.i18n.t("labels.no"))
+            if reply != StyledMessageBox.Yes:
+                return
+
+        probe = aggregate(rows, include_gps=False)
+        jobs = collect_image_jobs(probe)
+        counts = {}
+        for job in jobs:
+            kind = job.job_id.split(":", 1)[0]
+            counts[kind] = counts.get(kind, 0) + 1
+        est_bytes = estimate_size(counts)
+        est_secs = max(1, int(len(jobs) * 0.06))
+
+        dialog = ReportExportDialog(self.i18n, available, total, est_bytes,
+                                    est_secs, self)
+        if dialog.exec() != ReportExportDialog.Accepted:
+            return
+        options = dialog.get_options()
+
+        data = aggregate(rows, include_gps=options["include_gps"])
+        data = replace(data, dir_name=os.path.basename(self._directory) or self._directory)
+        jobs = collect_image_jobs(data)
+
+        progress = QProgressDialog(self.i18n.t("report_export.working"),
+                                   self.i18n.t("report_export.cancel"),
+                                   0, len(jobs), self)
+        progress.setWindowModality(Qt.WindowModal)
+        encoded = {}
+        for index, job in enumerate(jobs):
+            if progress.wasCanceled():
+                return
+            uri = encode_preview(job.path, job.max_edge, job.quality)
+            if uri:
+                encoded[job.job_id] = uri
+            progress.setValue(index + 1)
+        progress.close()
+
+        is_zh = self.i18n.current_lang.startswith("zh")
+        html = build_html(
+            data, encoded, is_zh=is_zh, app_version=APP_VERSION,
+            generated_at=datetime.datetime.now().strftime("%Y-%m-%d %H:%M"))
+        out = build_output_path(self._directory, data.dir_name, is_zh,
+                                datetime.date.today().isoformat())
+        try:
+            write_report_atomically(out, html)
+        except OSError as exc:
+            StyledMessageBox.warning(self, self.i18n.t("errors.error_title"),
+                                     self.i18n.t("report_export.write_failed",
+                                                 error=str(exc)))
+            return
+        QDesktopServices.openUrl(QUrl.fromLocalFile(out))
+
     def _resolve_photo_paths(self, photo: dict) -> dict:
         _PATH_KEYS = ('original_path', 'current_path', 'temp_jpeg_path',
                       'debug_crop_path', 'yolo_debug_path')
@@ -867,8 +2159,10 @@ class ResultsBrowserWindow(QMainWindow):
 
         # 动态刷新鸟种下拉：只显示当前星级筛选下有照片的鸟种
         use_en = self.i18n.current_lang.startswith('en')
-        species = self._db.get_distinct_species(use_en=use_en, ratings=filters.get('ratings'))
-        self._filter_panel.update_species_list(species)
+        species, has_other = compute_dropdown_species(
+            self._db, use_en=use_en, ratings=filters.get('ratings')
+        )
+        self._filter_panel.update_species_list(species, has_other)
 
         raw_photos = self._db.get_photos_by_filters(filters)
         resolved_photos = [self._resolve_photo_paths(p) for p in raw_photos]
@@ -962,7 +2256,8 @@ class ResultsBrowserWindow(QMainWindow):
             self._detail_panel.show_photo(selected_photo)
         else:
             self._detail_panel.clear()
-            
+        self._update_apple_photos_button()
+
     @Slot(int)
     def _toggle_burst(self, burst_id: int):
         if len([p for p in self._raw_filtered_photos if p.get("burst_id") == burst_id]) <= 1:
@@ -1038,7 +2333,14 @@ class ResultsBrowserWindow(QMainWindow):
         self._fullscreen_nav_photos = list(nav_photos) if nav_photos is not None else list(self._filtered_photos)
         self._fullscreen.set_photo_list(self._fullscreen_nav_photos)
         self._fullscreen.show_photo(photo)
-        self._detail_panel.show_photo(photo)
+        if self._stack.currentIndex() == 1:
+            # 全屏导航中:详情面板被盖住不可见,只同步元数据不解码大图
+            # (每次方向键少解码一整张;退出全屏时 _switch_view 刷新一次)。
+            # During fullscreen navigation the panel is hidden — sync
+            # metadata only; the image reloads once on fullscreen exit.
+            self._detail_panel.set_current_photo(photo)
+        else:
+            self._detail_panel.show_photo(photo)
 
         if any(_photo_identity(p) == _photo_identity(photo) for p in self._filtered_photos):
             self._thumb_grid.select_photo(photo)
@@ -1114,17 +2416,21 @@ class ResultsBrowserWindow(QMainWindow):
     def _prev_photo(self):
         photo = self._thumb_grid.select_prev()
         if photo:
-            self._detail_panel.show_photo(photo)
-            if self._stack.currentIndex() == 1:   # 全屏模式同步大图
+            if self._stack.currentIndex() == 1:   # 全屏模式:同步大图,面板只同步元数据
                 self._fullscreen.show_photo(photo)
+                self._detail_panel.set_current_photo(photo)
+            else:
+                self._detail_panel.show_photo(photo)
 
     @Slot()
     def _next_photo(self):
         photo = self._thumb_grid.select_next()
         if photo:
-            self._detail_panel.show_photo(photo)
-            if self._stack.currentIndex() == 1:   # 全屏模式同步大图
+            if self._stack.currentIndex() == 1:   # 全屏模式:同步大图,面板只同步元数据
                 self._fullscreen.show_photo(photo)
+                self._detail_panel.set_current_photo(photo)
+            else:
+                self._detail_panel.show_photo(photo)
 
     @Slot(dict)
     def _enter_fullscreen(self, photo: dict):
@@ -1188,12 +2494,28 @@ class ResultsBrowserWindow(QMainWindow):
         db_key = _photo_db_key(current_photo) if current_photo else filename
         if self._db:
             self._db.update_photo(db_key, {"rating": new_rating})
-        for p in self._filtered_photos:
-            if _photo_identity(p) == _photo_identity(current_photo) or (
-                not current_photo and p.get("filename") == filename
-            ):
-                p["rating"] = new_rating
-                break
+        # 三份缓存一起补：报告的星级分布读 _all_photos，显示列表每次重建又从
+        # _raw_filtered_photos 拷贝——此前只补了 _filtered_photos，于是界面上
+        # 是新星级、导出的报告却按旧星级计数，而点一下连拍组展开/收起，界面
+        # 也退回旧星级。include_burst=False：星级是逐张的，不能扩散到整组。
+        # Patch all three caches; the report counts ratings from _all_photos and
+        # the display list is rebuilt from _raw_filtered_photos. Ratings are
+        # per-photo, so they must not spread across the burst group.
+        if current_photo:
+            _patch_cached_photos(
+                current_photo, {"rating": new_rating},
+                self._filtered_photos, self._all_photos,
+                self._raw_filtered_photos, include_burst=False,
+            )
+        else:
+            # 只拿到文件名（老调用方）时按文件名匹配，行为与此前一致
+            # Filename-only callers keep the previous matching behaviour.
+            for cache in (self._filtered_photos, self._all_photos,
+                          self._raw_filtered_photos):
+                for p in cache or []:
+                    if p.get("filename") == filename:
+                        p["rating"] = new_rating
+                        break
         self._thumb_grid.refresh_photo(current_photo or filename, new_rating)
         # 异步写 EXIF（遵守 metadata_write_mode 设置，mode=none 时内部自动跳过）
         file_path = self._get_photo_file_path(current_photo or filename)
@@ -1218,6 +2540,29 @@ class ResultsBrowserWindow(QMainWindow):
             return path if path and os.path.exists(path) else None
         return None
 
+    def _session_species(self) -> list:
+        """
+        本次载入的照片里都有哪些鸟种，按张数降序。
+
+        用来给改鸟种弹窗做默认视图：认错多半是认成了隔壁那种，而那种当天通常
+        也拍到了，直接列出来比让用户重新打字快得多。合并模式下这是跨全部目录
+        的合计，正合适——用户要改成的那种可能出现在别的那一天。
+
+        张数相同的按名字排，免得同一批照片每次打开顺序都不一样。
+
+        The species actually photographed this time, most-shot first; used as
+        the picker's opening view.
+
+        返回 / Returns:
+            list: [(中文名, 张数)]，张数降序、同数按名字
+        """
+        counts: Counter = Counter()
+        for photo in (self._all_photos or []):
+            name = (photo.get("bird_species_cn") or "").strip()
+            if name:
+                counts[name] += 1
+        return sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+
     def _on_species_edit_requested(self, photo: dict):
         """
         用户点击铅笔图标 → 弹出鸟种搜索对话框，确认后后台更新 DB + 移动文件。
@@ -1226,8 +2571,24 @@ class ResultsBrowserWindow(QMainWindow):
         from ui.bird_species_edit_dialog import BirdSpeciesEditDialog
         from PySide6.QtWidgets import QDialog
 
-        dialog = BirdSpeciesEditDialog(parent=self)
+        # 勾选了多张、且右键点中的就在勾选集里 → 批量改整个勾选集
+        # Batch the whole checked selection when the clicked photo belongs to it.
+        targets = _species_edit_targets(self, photo)
+        if len(targets) > 1:
+            self._batch_species_edit(targets)
+            return
+
+        dialog = BirdSpeciesEditDialog(
+            parent=self, session_species=self._session_species(),
+            exclude_species=[photo.get("bird_species_cn") or ""])
         if dialog.exec() != QDialog.Accepted:
+            return
+
+        # 「这不是鸟」：误检没有正确鸟种可选，整条标掉，不走改鸟种流程。
+        # getattr 兼容旧的弹窗替身（测试里的 stub 没有这个属性）。
+        # A false detection has no correct species; mark the whole photo instead.
+        if getattr(dialog, "mark_no_bird", False):
+            self._mark_photos_no_bird([photo])
             return
 
         new_cn = dialog.selected_cn
@@ -1238,47 +2599,568 @@ class ResultsBrowserWindow(QMainWindow):
         db_key = _photo_db_key(photo)
         base_dir = photo.get("_base_dir") or self._directory
 
-        # 1. 同步更新 photo 副本 + 缓存列表
-        # Update both the local photo copy and the cached list so show_photo displays the new name.
-        photo["bird_species_cn"] = new_cn
-        photo["bird_species_en"] = new_en
-        for p in self._filtered_photos:
-            if _photo_identity(p) == _photo_identity(photo):
-                p["bird_species_cn"] = new_cn
-                p["bird_species_en"] = new_en
-                break
+        # 纠错记录：必须在覆盖 bird_species 字段之前抓原预测。
+        # Record correction BEFORE overwriting species fields (original prediction).
+        self._record_correction(photo, new_cn, new_en, dialog.selected_latin)
+
+        # 旧鸟名同样要在覆盖前抓住：写元数据时要把关键字里的旧鸟名删掉，
+        # 覆盖之后就再也拿不到了。
+        # Capture the previous names before overwriting; the metadata write
+        # needs them to drop the stale keyword.
+        old_cn = photo.get("bird_species_cn") or ""
+        old_en = photo.get("bird_species_en") or ""
+
+        # 鸟种级属性（罕见度/IUCN/颜值）按新鸟种的学名重查：这三个值属于**鸟种**
+        # 而不是照片，只改鸟名不改它们，报告里这一块就会顶着上一个鸟种的罕见度
+        # 与濒危徽标，还按旧罕见度排在清单前列。查不到时返回的三个 None 会把
+        # 旧值清空——显示错的徽标比不显示更糟。
+        # Re-resolve the species-level attributes; a miss clears the stale ones.
+        from core.species_extras import lookup_species_extras
+        extras = lookup_species_extras(getattr(dialog, "selected_latin", ""))
+
+        # 1. 同步更新 photo 副本 + 三份缓存列表
+        #    必须连 _all_photos 一起补：报告、eBird 导出、「本次拍到的鸟种」和
+        #    整种合并的取样池都读它。此前只补了 _filtered_photos，于是鸟种下拉
+        #    （直接查库）是新鸟名、导出的报告却还是旧鸟名。
+        #    _raw_filtered_photos 同样要补：_filtered_photos 是从它逐条拷贝出来
+        #    的，只补拷贝不补源，用户点一下连拍组展开/收起（会重建显示列表）
+        #    鸟名就变回去了，全屏翻页的导航列表也直接读它。
+        # Patch all three: the report reads _all_photos, the grid reads
+        # _filtered_photos, and _filtered_photos is rebuilt by copying from
+        # _raw_filtered_photos on every burst toggle.
+        _patch_cached_photos(
+            photo,
+            {"bird_species_cn": new_cn, "bird_species_en": new_en, **extras},
+            self._filtered_photos, self._all_photos, self._raw_filtered_photos,
+        )
 
         # 2. 同步写入 DB 鸟种字段（使下拉刷新立即生效；文件移动仍在后台执行）
         # Write species fields to DB synchronously so the dropdown refresh sees new data immediately.
         if self._db:
+            # has_bird 置回 1：用户指名了鸟种就等于确认这是鸟，这也是
+            # 「标记为无鸟」标错之后的撤销路径（报告的鸟种名录按 has_bird 过滤）。
+            # Restoring has_bird=1 is the undo path for a wrong "no bird" mark.
             self._db.update_photo(db_key, {
                 "bird_species_cn": new_cn or None,
                 "bird_species_en": new_en or None,
+                "has_bird": 1,
+                **extras,
             })
+            # has_bird 同样要进两份缓存：报告的鸟种名录按它过滤
+            # （report_export.aggregate 的 bird_rows），只补鸟名不补 has_bird，
+            # 被误标为无鸟的照片重新指名鸟种后仍然进不了报告。
+            # has_bird must reach both caches: the report filters its species
+            # list by it, so a re-named photo would still be missing.
+            _patch_cached_photos(photo, {"has_bird": 1},
+                                 self._filtered_photos, self._all_photos,
+                                 self._raw_filtered_photos)
 
-        # 3. 刷新详情面板
+        # 3. 刷新详情面板 + 全屏鸟名标签
+        #    全屏视图有自己的 _species_label，不刷它的话在全屏里改完鸟种
+        #    界面纹丝不动，用户以为没生效。
+        #    The fullscreen view owns its own species label; refresh it too.
         self._detail_panel.show_photo(photo)
+        self._fullscreen.refresh_species_label(photo)
+        # 缩略图卡片底部的鸟名同样要跟着改：它是构造时算一次的独立 QLabel，
+        # 在此之前改完鸟种，网格里显示的还是旧鸟名。
+        # The card caption is a separate QLabel set only at construction; without
+        # this the grid kept showing the stale species after a correction.
+        self._thumb_grid.refresh_caption(photo)
 
         # 4. 刷新左侧鸟种下拉
         use_en = self.i18n.current_lang.startswith("en")
         current_filters = self._filter_panel.get_filters()
-        new_species = self._db.get_distinct_species(
-            use_en=use_en, ratings=current_filters.get("ratings")
+        new_species, new_has_other = compute_dropdown_species(
+            self._db, use_en=use_en, ratings=current_filters.get("ratings")
         )
-        self._filter_panel.update_species_list(new_species)
+        self._filter_panel.update_species_list(new_species, new_has_other)
 
         # 5. 后台执行文件移动（同时更新连拍组其他成员的 DB 鸟种字段及 current_path）
+        #    失败必须让用户看见——回调在工作线程里触发，用 QTimer 转回主线程弹窗。
         # Background: move files and update burst group members' DB records.
-        _trigger_species_change(base_dir, photo, new_cn, new_en, self._db, db_key)
+        # Failures are surfaced; the callback fires on the worker thread, so
+        # marshal back to the GUI thread before touching any widget.
+        def _report(failures: list) -> None:
+            # 同上：这里在工作线程里被调用，QTimer.singleShot 不会触发，
+            # 「失败必须让用户看见」因此一直没兑现。改走跨线程信号。
+            # Also called on a worker thread; the timer never fired, so the
+            # promised failure dialog never actually appeared.
+            self.species_change_failed.emit(failures)
+
+        _trigger_species_change(
+            base_dir, photo, new_cn, new_en, self._db, db_key, on_failures=_report,
+            old_bird_cn=old_cn, old_bird_en=old_en, species_extras=extras,
+        )
+
+    def _show_species_change_failures(self, failures: list) -> None:
+        """
+        改鸟种移动失败时给出可读提示（主线程调用）。
+
+        沿用整种合并的原因码→本地化文案映射，保持两条路径口径一致。
+
+        Surface species-change move failures in the GUI thread, reusing the
+        merge flow's reason-code localization.
+
+        参数 / Args:
+            failures: [(文件名, 原因码)] 列表 / list of (basename, reason code).
+        """
+        if not failures:
+            return
+        from ui.custom_dialogs import StyledMessageBox
+        lines = [
+            self.i18n.t('browser.merge_result_failed').format(count=len(failures))
+        ]
+        for name, reason in failures[:20]:
+            lines.append(f"  • {name} — {_merge_reason_text(reason)}")
+        if len(failures) > 20:
+            lines.append("  …")
+        StyledMessageBox.information(
+            self, self.i18n.t('browser.merge_result_title'), "\n".join(lines)
+        )
+
+    def _on_merge_species_requested(self, photo: dict):
+        """
+        整种合并：把这张照片所属鸟种的**全部**照片一次性改为另一个鸟种。
+
+        用于「一整批都被认成同一个错误鸟种」的场景。范围是数据库里该鸟种的
+        全部照片，与当前左侧筛选无关——否则会只改掉一部分、剩下的散落在别处。
+
+        流程：收集同种照片 → 选目标鸟种 → 确认（含目标目录预览）→ 带进度执行
+        → 结果报告（成功/仅改名/失败清单）。按用户决定，本操作不写 corrections。
+
+        参数 / Args:
+            photo: 用户右键点中的照片（提供源鸟种）
+
+        Merge a whole species: retag every photo of this species at once.
+        Scope is DB-wide for that species, independent of the current filters.
+        """
+        from ui.bird_species_edit_dialog import BirdSpeciesEditDialog
+        from ui.custom_dialogs import StyledMessageBox
+        from PySide6.QtWidgets import QDialog
+        from advanced_config import get_advanced_config
+        from core.rating_mover import merge_bird_species
+
+        i18n = self.i18n
+        use_en = i18n.current_lang.startswith("en")
+        old_name = (
+            photo.get("bird_species_en") if use_en else photo.get("bird_species_cn")
+        ) or ""
+        if not old_name or not self._db:
+            return
+
+        # 1. 收集全部同鸟种照片（_all_photos 存的是相对路径，必须先解析成绝对路径）
+        resolved_pool = [self._resolve_photo_paths(p) for p in self._all_photos]
+        targets = _photos_of_same_species(resolved_pool, photo)
+        if not targets:
+            return
+
+        # 2. 选目标鸟种（复用单张编辑用的搜索弹窗）
+        dialog = BirdSpeciesEditDialog(
+            parent=self, session_species=self._session_species(),
+            exclude_species=[photo.get("bird_species_cn") or ""])
+        if dialog.exec() != QDialog.Accepted:
+            return
+        new_cn = dialog.selected_cn
+        new_en = dialog.selected_en
+        if not new_cn and not new_en:
+            return
+        new_name = (new_en if use_en else new_cn) or ""
+
+        # 3. 确认：把张数、连拍组数、涉及的批次和真实目标目录摆出来再动手
+        layout = get_advanced_config().folder_layout
+        folders = _merge_target_folders(targets, new_name, layout)
+        burst_count = len({p.get("burst_id") for p in targets if p.get("burst_id")})
+        burst_note = (
+            i18n.t('browser.merge_burst_note').format(bursts=burst_count)
+            if burst_count else ""
+        )
+
+        # 合并浏览时本操作的作用域是全部批次，而目标目录清单是相对各自批次的
+        # 路径再去重——day1 与 day2 的照片若星级相同就只显示一行，看起来像一个
+        # 文件夹，实际是两个日期目录下各一份。补一句批次说明，并把目录标题换成
+        # 「（各批次下）」，让这份清单的口径自己说清楚。
+        # 单批次（含单目录浏览）时 batch_note 为空串、标题用不带括号的那个，
+        # 渲染结果与加这段之前逐字相同。
+        # The merge spans every batch, but the folder list is per-batch relative
+        # paths, de-duplicated — so one line can mean one folder in each of
+        # several date directories. Name the batches and qualify the heading.
+        batch_labels = _merge_batch_labels(targets)
+        batch_note = _merge_batch_note(batch_labels, i18n)
+        folders_label = i18n.t(
+            'browser.merge_folders_label_merged' if batch_note
+            else 'browser.merge_folders_label'
+        )
+
+        body = i18n.t('browser.merge_confirm_body').format(
+            old=old_name, count=len(targets), burst_note=burst_note,
+            batch_note=batch_note, new=new_name,
+            folders_label=folders_label,
+            folders="\n".join(folders) if folders else "—",
+        )
+        confirmed = StyledMessageBox.question(
+            self, i18n.t('browser.merge_confirm_title'), body
+        )
+        if confirmed != StyledMessageBox.Yes:
+            return
+
+        # 4-6. 执行 + 刷新 + 结果报告（与多选批量共用同一套）
+        self._execute_batch_species_change(
+            targets, new_cn, new_en, layout,
+            getattr(dialog, "selected_latin", "") or "")
+
+    def _mark_photos_no_bird(self, targets: list) -> None:
+        """
+        把选中的照片标记为「没有鸟」：写库 + 界面立刻反映 + 后台移文件清元数据。
+
+        单张与批量共用本方法。多于一张时先弹确认——这一步会移动文件并把星级
+        压到 0 星，勾错了不好恢复（唯一的回头路是重新指定鸟种）。
+
+        界面先按结果乐观更新，耗时的文件移动与元数据写入放后台线程；这与改
+        鸟种/改星级的既有节奏一致，避免点完之后界面愣住。
+
+        Mark the given photos as having no bird. Shared by the single-photo and
+        batch entry points; the UI updates optimistically while the file move
+        and metadata writes run in the background.
+
+        参数 / Args:
+            targets: 待标记的照片列表（current_path 已是绝对路径）
+        """
+        from ui.custom_dialogs import StyledMessageBox
+
+        if not targets:
+            return
+
+        i18n = self.i18n
+        if len(targets) > 1:
+            if StyledMessageBox.question(
+                self,
+                i18n.t('browser.mark_no_bird_confirm_title'),
+                i18n.t('browser.mark_no_bird_confirm_body').format(
+                    count=len(targets)),
+            ) != StyledMessageBox.Yes:
+                return
+
+        # 旧鸟名必须在乐观更新之前逐张抓好：后台清关键字时要靠它认出该删哪项。
+        # Capture the old names BEFORE the optimistic update wipes them.
+        jobs = []
+        for photo in targets:
+            jobs.append((
+                photo,
+                photo.get("_base_dir") or self._directory,
+                _photo_db_key(photo),
+                (photo.get("bird_species_cn") or "").strip(),
+                (photo.get("bird_species_en") or "").strip(),
+            ))
+
+        # 乐观更新内存副本 + 缓存列表，界面立刻显示为无鸟 / 0 星
+        for photo, _base, _key, _ocn, _oen in jobs:
+            for target in (photo, *[
+                p for p in self._filtered_photos
+                if _photo_identity(p) == _photo_identity(photo)
+            ]):
+                target["bird_species_cn"] = ""
+                target["bird_species_en"] = ""
+                target["has_bird"] = 0
+                target["rating"] = -1
+            self._thumb_grid.refresh_photo(photo, -1)
+            # 卡片底部的鸟名是独立 QLabel，refresh_photo 只重绘角标碰不到它
+            self._thumb_grid.refresh_caption(photo)
+
+        # 详情面板与全屏鸟名标签跟着刷新，否则改完界面纹丝不动
+        current = getattr(self._detail_panel, "_current_photo", None)
+        if current is not None and any(
+            _photo_identity(current) == _photo_identity(p) for p, *_ in jobs
+        ):
+            self._detail_panel.show_photo(current)
+            self._fullscreen.refresh_species_label(current)
+
+        db = self._db
+
+        def _do() -> None:
+            try:
+                for photo, base_dir, db_key, old_cn, old_en in jobs:
+                    _run_mark_no_bird(base_dir, photo, db, db_key, i18n,
+                                      old_bird_cn=old_cn, old_bird_en=old_en)
+            except Exception as e:
+                from tools.utils import log_message
+                log_message(f"[mark_no_bird] failed: {e}")
+            finally:
+                # 经信号回主线程；QTimer.singleShot 在工作线程里不会触发
+                self.bg_refresh_requested.emit()
+
+        import threading
+        threading.Thread(target=_do, daemon=True).start()
+
+    @Slot()
+    def _refresh_after_background_change(self) -> None:
+        """
+        后台改动落定后重放筛选，让整个浏览器反映新数据（主线程槽）。
+
+        重读库而不是打补丁：标记为无鸟会同时改掉鸟种、星级和文件位置，牵动
+        缩略图、鸟种下拉、星级筛选与张数统计。批量改鸟种早就是这么收尾的
+        （_execute_batch_species_change），这里沿用同一条路径，免得两处的
+        刷新程度各不相同。
+
+        Reload from the DB and re-apply filters so the whole browser reflects
+        the change; the batch species flow already ends this way.
+        """
+        if not self._db:
+            return
+        self._all_photos = self._db.get_all_photos()
+        self._apply_filters(self._filter_panel.get_filters())
+
+    def _batch_species_edit(self, targets: list) -> None:
+        """
+        多选批量改鸟种：把勾选的若干张一次性改成同一个鸟种。
+
+        与「整种合并」的区别只在范围——这里是用户手动勾选的任意若干张（可跨
+        鸟种），合并那边是数据库里某个鸟种的全部照片。执行/刷新/汇报共用
+        _execute_batch_species_change。
+
+        勾选集里若含同一连拍组的多张，core 会按 burst_id 去重、整组处理一次，
+        组内未勾选的成员也一并改掉——同一组照片分属不同鸟种没有意义。
+
+        纠错样本按每张记录（与单张编辑一致），供「提交本次纠错」使用。
+
+        Batch-retag the checked selection to one species; scope is the only
+        difference from the whole-species merge, so execution is shared.
+
+        参数 / Args:
+            targets: 勾选的照片列表（current_path 已是绝对路径）
+        """
+        from ui.bird_species_edit_dialog import BirdSpeciesEditDialog
+        from ui.custom_dialogs import StyledMessageBox
+        from PySide6.QtWidgets import QDialog
+        from advanced_config import get_advanced_config
+
+        if not self._db or not targets:
+            return
+
+        i18n = self.i18n
+        use_en = i18n.current_lang.startswith("en")
+
+        # 勾选集同属一种时把它排除（改成自己没意义）；混着好几种就都留着，
+        # 因为其中任何一种都可能是用户要统一改成的那个。
+        # Exclude the current species only when the whole selection shares one.
+        current = {(t.get("bird_species_cn") or "").strip() for t in targets}
+        exclude = list(current) if len(current) == 1 else []
+        dialog = BirdSpeciesEditDialog(
+            parent=self, session_species=self._session_species(),
+            exclude_species=exclude)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        # 「这不是鸟」：整个勾选集一起标掉（勾了一串鳄鱼的情形）。
+        # Mark the whole checked selection as having no bird.
+        if getattr(dialog, "mark_no_bird", False):
+            self._mark_photos_no_bird(targets)
+            return
+        new_cn = dialog.selected_cn
+        new_en = dialog.selected_en
+        if not new_cn and not new_en:
+            return
+        new_name = (new_en if use_en else new_cn) or ""
+
+        # 确认：把张数、连拍组数与真实目标目录摆出来再动手
+        layout = get_advanced_config().folder_layout
+        folders = _merge_target_folders(targets, new_name, layout)
+        burst_count = len({p.get("burst_id") for p in targets if p.get("burst_id")})
+        burst_note = (
+            i18n.t('browser.merge_burst_note').format(bursts=burst_count)
+            if burst_count else ""
+        )
+        body = i18n.t('browser.batch_species_confirm_body').format(
+            count=len(targets), burst_note=burst_note, new=new_name,
+            folders="\n".join(folders) if folders else "—",
+        )
+        if StyledMessageBox.question(
+            self, i18n.t('browser.batch_species_confirm_title'), body
+        ) != StyledMessageBox.Yes:
+            return
+
+        # 纠错样本：必须在鸟名被覆盖之前逐张记录（原预测就在 photo 现值里）
+        # Record corrections BEFORE the species fields get overwritten.
+        for p in targets:
+            self._record_correction(p, new_cn, new_en, dialog.selected_latin)
+
+        self._execute_batch_species_change(
+            targets, new_cn, new_en, layout,
+            getattr(dialog, "selected_latin", "") or "")
+
+    def _execute_batch_species_change(self, targets: list, new_cn: str,
+                                      new_en: str, layout: str,
+                                      new_latin: str = "") -> None:
+        """
+        批量改鸟种的执行体：带进度跑完 → 写元数据 → 刷新界面 → 结果报告。
+
+        「整种合并」与「多选批量改鸟种」共用本方法——两者只是目标集与确认文案
+        不同，执行、刷新与汇报完全一致，分开写必然各自漂移。
+
+        连拍组由 core 的 merge_bird_species 按 burst_id 去重整组处理，因此
+        即使用户勾了同一组里的好几张，也只会执行一次、且组内每张都被改到。
+
+        Shared execution body for both batch species flows (whole-species merge
+        and multi-selection edit): run with progress, write metadata, refresh,
+        then report. Burst groups are de-duplicated by core.
+
+        参数 / Args:
+            targets:  待改鸟种的照片列表（current_path 已是绝对路径）
+            new_cn:   新中文鸟名
+            new_en:   新英文鸟名
+            layout:   目录布局（species-first / rating-first / flat）
+            new_latin: 新鸟种学名，用于重查鸟种级属性（罕见度/IUCN/颜值）。
+                      取不到学名时按查不到处理，即把这三个字段清空——留着
+                      旧鸟种的值会让整批照片顶着错误徽标进报告。
+                      Used to re-resolve the species-level attributes; an empty
+                      name clears them rather than keeping the previous ones.
+        """
+        from ui.custom_dialogs import StyledMessageBox
+        from core.rating_mover import merge_bird_species
+        from core.species_extras import lookup_species_extras
+
+        i18n = self.i18n
+
+        # 鸟种级属性整批只查一次：全批改成同一个鸟种，这三个值完全相同。
+        # Resolved once; the whole batch becomes the same species.
+        extras = lookup_species_extras(new_latin)
+
+        # 合并库的照片分属不同批次目录，按 _base_dir 分组各调一次
+        # Photos of a merged library live under different batch dirs.
+        by_base: dict = {}
+        for p in targets:
+            by_base.setdefault(p.get("_base_dir") or self._directory, []).append(p)
+
+        progress = QProgressDialog(
+            i18n.t('browser.merge_progress_title'), i18n.t('buttons.cancel'),
+            0, len(targets), self,
+        )
+        progress.setWindowModality(Qt.WindowModal)
+        progress.setMinimumDuration(0)
+        progress.setValue(0)
+
+        state = {"offset": 0}
+
+        def _on_progress(done: int, total: int, name: str) -> bool:
+            """进度回调；返回 False 表示用户点了取消。Return False to cancel."""
+            progress.setValue(state["offset"] + done)
+            progress.setLabelText(
+                i18n.t('browser.merge_progress_label').format(name=name)
+            )
+            QApplication.processEvents()
+            return not progress.wasCanceled()
+
+        total_moved = 0
+        total_db_only = 0
+        all_failed: list = []
+        changed_files: list = []
+        cancelled = False
+
+        for base_dir, group in by_base.items():
+            result = merge_bird_species(
+                base_dir, group, new_cn, new_en, layout,
+                self._db, _photo_db_key, _on_progress, changed_files, extras,
+            )
+            total_moved += result["moved"]
+            total_db_only += result["db_only"]
+            all_failed.extend(result["failed"])
+            state["offset"] += len(group)
+            if result["cancelled"]:
+                cancelled = True
+                break
+            # has_bird 置回 1：与单张改鸟种一致——指名了鸟种就等于确认这是鸟，
+            # 也是「标记为无鸟」标错之后的批量撤销路径。core 只管鸟名与移动，
+            # has_bird 归 UI 层统一收口。
+            # Same as the single-photo path: naming a species confirms it is a
+            # bird, and this is the batch undo for a wrong "no bird" mark.
+            if self._db:
+                for p in group:
+                    # 与 has_bird 一同收口：core 只在真正执行了更新的分支里写
+                    # 鸟种级属性，移动失败或跳过的照片不会被写到；这里兜底，
+                    # 保证「鸟名换了但罕见度没换」的半截状态不会留在库里。
+                    # Backstop: core writes the extras only on the paths it
+                    # actually updated, leaving skipped photos half-changed.
+                    self._db.update_photo(
+                        _photo_db_key(p), {"has_bird": 1, **extras})
+                    p["has_bird"] = 1
+                    p.update(extras)
+
+        progress.close()
+
+        # 元数据：旧鸟名不逐张传——批量里每张的旧名各不相同，写入器会从各自
+        # 文件现有的 Title 推断出来再删对应的旧关键字。
+        # Metadata: the writer infers each file's old species from its own Title.
+        if changed_files:
+            from advanced_config import get_advanced_config
+            _write_species_metadata(
+                changed_files, new_cn, new_en, "", "", get_advanced_config()
+            )
+
+        # 刷新：重新读库并重放当前筛选（_apply_filters 会顺带刷新鸟种下拉）
+        self._all_photos = self._db.get_all_photos()
+        self._apply_filters(self._filter_panel.get_filters())
+
+        # 结果报告：不静默，成功和失败都说清楚
+        lines: list = []
+        if total_moved:
+            lines.append(i18n.t('browser.merge_result_moved').format(count=total_moved))
+        if total_db_only:
+            lines.append(
+                i18n.t('browser.merge_result_db_only').format(count=total_db_only)
+            )
+        if all_failed:
+            lines.append(
+                i18n.t('browser.merge_result_failed').format(count=len(all_failed))
+            )
+            for name, reason in all_failed[:20]:
+                lines.append(f"  • {name} — {_merge_reason_text(reason)}")
+            if len(all_failed) > 20:
+                lines.append("  …")
+        if cancelled:
+            lines.append(i18n.t('browser.merge_result_cancelled'))
+
+        StyledMessageBox.information(
+            self, i18n.t('browser.merge_result_title'), "\n".join(lines)
+        )
+
+    def _record_correction(self, photo: dict, new_cn: str, new_en: str,
+                            new_latin: str) -> None:
+        """
+        薄封装：调用模块级共享实现 _record_species_correction，
+        ResultsBrowserWindow / ResultsBrowserWidget 两处改鸟种入口共用同一份逻辑，避免发散。
+
+        Thin wrapper delegating to the module-level shared implementation
+        _record_species_correction, so both species-edit call sites
+        (ResultsBrowserWindow / ResultsBrowserWidget) share one logic path.
+        """
+        _record_species_correction(self, photo, new_cn, new_en, new_latin)
+
+    def _on_submit_corrections(self):
+        """
+        「提交本次纠错」：读 corrections 表，按鸟种分组，弹复审窗打包到桌面。
+        首次使用先弹一次自愿说明并记住同意。
+
+        "Submit corrections": read the corrections table, group by species,
+        and open the review dialog to pack results to the desktop. Shows a
+        one-time voluntary consent prompt on first use.
+        """
+        _open_submission_review(self)
+
+    def _open_studio_with_action(self, photo: dict, action: str):
+        """
+        打开 Crop Studio 后跳到指定功能(大图「手动裁剪」/「自动修图」入口)。
+        复用 _on_crop_advice_requested 打开工作区,再在已持有实例上应用初始动作。
+        """
+        self._on_crop_advice_requested(photo)
+        studio = getattr(self, "_crop_studio", None)
+        if studio is not None:
+            QTimer.singleShot(0, lambda: studio.apply_initial_action(action))
 
     def _on_crop_advice_requested(self, photo: dict):
         """
-        打开裁剪建议弹窗（非破坏性预览）。
-        Open the crop advisor dialog (non-destructive preview).
+        打开全屏「后期工作区」Crop Studio（非破坏性预览 + 裁剪导出）。
+        Open the fullscreen Crop Studio (non-destructive preview + crop export).
         """
-        from ui.crop_advisor_dialog import CropAdvisorDialog
         # 复用详情面板的显示图解析：优先可解码的 temp JPEG，
-        # 避免把 RAW(current_path)喂给弹窗——cv2/PIL 解不了 RAW 会报 TIFF 错。
+        # 避免把 RAW(current_path)喂给工作区——cv2/PIL 解不了 RAW 会报 TIFF 错。
         # Reuse the detail panel's display-path resolution: prefer the decodable
         # temp JPEG, never feed a RAW file (cv2/PIL can't decode it).
         rp = self._resolve_photo_paths(photo)
@@ -1292,7 +3174,7 @@ class ResultsBrowserWindow(QMainWindow):
             else:
                 path = None
         print(
-            f"🪶 [CropAdvisor] 入口解析: temp_jpeg={rp.get('temp_jpeg_path')!r} "
+            f"🪶 [CropStudio] 入口解析: temp_jpeg={rp.get('temp_jpeg_path')!r} "
             f"debug_crop={rp.get('debug_crop_path')!r} current={rp.get('current_path')!r} "
             f"original={rp.get('original_path')!r} → 选用={path!r}"
         )
@@ -1304,8 +3186,22 @@ class ResultsBrowserWindow(QMainWindow):
                 self.i18n.t("crop_advisor.no_decodable_image"),
             )
             return
-        dialog = CropAdvisorDialog(image_path=path, parent=self)
-        dialog.exec()
+
+        # 合并显示字段(鸟种/星级/罕见度/IUCN)与解析出的绝对路径；把可解码图注入
+        # temp_jpeg_path 使工作区按同一坐标系分析/导出。
+        # Merge display fields with resolved absolute paths; inject the decodable
+        # image as temp_jpeg_path so the studio analyzes/exports in one coord space.
+        studio_photo = dict(photo)
+        for k in ("original_path", "current_path"):
+            if rp.get(k):
+                studio_photo[k] = rp.get(k)
+        studio_photo["temp_jpeg_path"] = path
+
+        from ui.crop_studio import CropStudio
+        studio = CropStudio(studio_photo, self.i18n, parent=self)
+        studio.closed.connect(lambda: setattr(self, "_crop_studio", None))
+        self._crop_studio = studio  # 持有引用,避免被 GC / keep a reference
+        studio.showFullScreen()
 
     @Slot(list)
     def _on_multi_selection_changed(self, photos: list):
@@ -1318,6 +3214,270 @@ class ResultsBrowserWindow(QMainWindow):
             self._select_count_label.hide()
         # C5：仅当选中 2 张时显示对比按钮
         self._compare_btn.setVisible(n == 2)
+
+    def _apple_photos_target_photos(self) -> list[dict]:
+        """
+        返回 Apple Photos 导入目标：明确勾选优先，否则使用当前可见过滤结果。
+
+        折叠连拍组在 ``_filtered_photos`` 中只有封面，因此未展开时只导入用户
+        实际看到的代表图；展开后则按每张可见成员导入。只要存在一个或多个
+        蓝色勾选项目，就严格按勾选集合导入，不包含双图对比自动补入的锚点。
+
+        Return Apple Photos targets: one or more explicitly checked photos take
+        precedence; otherwise use the currently visible filtered list.
+        Collapsed bursts contribute only their visible representative. The
+        unchecked anchor automatically added for two-photo comparison is never
+        included in an import.
+        """
+
+        selected = self._thumb_grid.get_explicitly_selected_photos()
+        if selected:
+            return list(selected)
+        return list(self._filtered_photos)
+
+    def _update_apple_photos_button(self) -> None:
+        """按结果和任务状态更新 macOS 导入按钮。/ Update import action availability."""
+
+        button = getattr(self, "_apple_photos_btn", None)
+        if button is None:
+            return
+        importer = self._apple_photos_importer
+        is_running = bool(importer is not None and importer.is_running)
+        button.setEnabled(bool(self._filtered_photos) and not is_running)
+
+    @Slot()
+    def _start_apple_photos_import(self) -> None:
+        """
+        预检目标、确认相册名并异步启动 Apple Photos 导入。
+
+        Preflight targets, confirm the album name, and start a non-blocking
+        Apple Photos import.
+        """
+
+        if sys.platform != "darwin":
+            return
+
+        from ui.apple_photos_importer import (
+            ApplePhotosImporter,
+            ApplePhotosImportRequest,
+            default_album_name,
+            preflight_photos,
+            sanitize_album_name,
+        )
+
+        target_photos = self._apple_photos_target_photos()
+        preflight = preflight_photos(
+            target_photos,
+            prefer_english=self.i18n.current_lang.startswith("en"),
+        )
+        if not preflight.candidates:
+            QMessageBox.warning(
+                self,
+                self.i18n.t("browser.photos_import_unavailable_title"),
+                self.i18n.t("browser.photos_import_no_files").format(
+                    count=preflight.requested,
+                ),
+            )
+            return
+
+        suggested_name = default_album_name(self._directory)
+        album_name, accepted = QInputDialog.getText(
+            self,
+            self.i18n.t("browser.photos_import_confirm_title"),
+            self.i18n.t("browser.photos_import_confirm_message").format(
+                count=len(preflight.candidates),
+                skipped=preflight.skipped,
+            ),
+            QLineEdit.Normal,
+            suggested_name,
+        )
+        if not accepted:
+            return
+        album_name = sanitize_album_name(album_name)
+        if not album_name:
+            QMessageBox.warning(
+                self,
+                self.i18n.t("browser.photos_import_unavailable_title"),
+                self.i18n.t("browser.photos_import_empty_album"),
+            )
+            return
+
+        importer = self._apple_photos_importer
+        if importer is None:
+            importer = ApplePhotosImporter(self)
+            importer.progress.connect(self._on_apple_photos_progress)
+            importer.completed.connect(self._on_apple_photos_completed)
+            self._apple_photos_importer = importer
+
+        request = ApplePhotosImportRequest(
+            album_name=album_name,
+            candidates=preflight.candidates,
+            requested=preflight.requested,
+            preflight_skipped=preflight.skipped,
+        )
+        progress = QProgressDialog(
+            self.i18n.t("browser.photos_import_progress").format(
+                completed=0,
+                total=len(preflight.candidates),
+            ),
+            self.i18n.t("browser.photos_import_cancel"),
+            0,
+            len(preflight.candidates),
+            self,
+        )
+        progress.setWindowTitle(self.i18n.t("browser.photos_import_confirm_title"))
+        progress.setWindowModality(Qt.WindowModal)
+        progress.setAutoClose(False)
+        progress.setAutoReset(False)
+        progress.canceled.connect(importer.cancel)
+        self._apple_photos_progress = progress
+        progress.show()
+
+        try:
+            importer.start(request)
+            self._update_apple_photos_button()
+        except (RuntimeError, ValueError) as error:
+            progress.close()
+            progress.deleteLater()
+            self._apple_photos_progress = None
+            self._update_apple_photos_button()
+            QMessageBox.critical(
+                self,
+                self.i18n.t("browser.photos_import_failed_title"),
+                str(error),
+            )
+
+    @Slot(int, int)
+    def _on_apple_photos_progress(self, completed: int, total: int) -> None:
+        """同步批次进度到进度框。/ Synchronize batch progress to the dialog."""
+
+        progress = self._apple_photos_progress
+        if progress is None:
+            return
+        progress.setMaximum(total)
+        progress.setValue(completed)
+        progress.setLabelText(
+            self.i18n.t("browser.photos_import_progress").format(
+                completed=completed,
+                total=total,
+            )
+        )
+
+    @Slot(object)
+    def _on_apple_photos_completed(self, result) -> None:
+        """关闭进度框并展示成功、取消或错误摘要。/ Present the final import summary."""
+
+        progress = self._apple_photos_progress
+        if progress is not None:
+            progress.close()
+            progress.deleteLater()
+            self._apple_photos_progress = None
+        self._update_apple_photos_button()
+
+        if result.error:
+            from ui.apple_photos_importer import is_automation_permission_error
+
+            message = self.i18n.t("browser.photos_import_failed_message").format(
+                imported=result.newly_imported,
+                not_imported=result.photos_not_imported,
+                indeterminate=result.indeterminate,
+                remaining=result.remaining,
+                metadata_applied=result.metadata_applied,
+                metadata_partial=result.metadata_partially_applied,
+                metadata_not_applied=result.metadata_not_applied,
+                error=result.error,
+            )
+            if is_automation_permission_error(result.error):
+                message += "\n\n" + self.i18n.t("browser.photos_import_permission_help")
+            title = self.i18n.t("browser.photos_import_failed_title")
+            icon = QMessageBox.Critical
+        elif result.cancelled:
+            title = self.i18n.t("browser.photos_import_cancelled_title")
+            message = self.i18n.t("browser.photos_import_cancelled_message").format(
+                imported=result.newly_imported,
+                not_imported=result.photos_not_imported,
+                indeterminate=result.indeterminate,
+                metadata_applied=result.metadata_applied,
+                metadata_partial=result.metadata_partially_applied,
+                metadata_not_applied=result.metadata_not_applied,
+                remaining=result.remaining,
+            )
+            icon = QMessageBox.Information
+        else:
+            title = self.i18n.t("browser.photos_import_done_title")
+            message = self.i18n.t("browser.photos_import_done_message").format(
+                imported=result.newly_imported,
+                not_imported=result.photos_not_imported,
+                indeterminate=result.indeterminate,
+                remaining=result.remaining,
+                metadata_applied=result.metadata_applied,
+                metadata_partial=result.metadata_partially_applied,
+                metadata_not_applied=result.metadata_not_applied,
+                skipped=result.preflight_skipped,
+            )
+            icon = QMessageBox.Information
+
+        if result.retryable_metadata:
+            message += "\n\n" + self.i18n.t(
+                "browser.photos_import_retry_metadata_message"
+            ).format(count=result.retryable_metadata)
+            dialog = QMessageBox(icon, title, message, parent=self)
+            retry_button = dialog.addButton(
+                self.i18n.t("browser.photos_import_retry_metadata"),
+                QMessageBox.AcceptRole,
+            )
+            dialog.addButton(QMessageBox.Close)
+            dialog.exec()
+            if dialog.clickedButton() is retry_button:
+                self._retry_apple_photos_metadata(result.retryable_metadata)
+            return
+
+        QMessageBox(icon, title, message, QMessageBox.Ok, self).exec()
+
+    def _retry_apple_photos_metadata(self, count: int) -> None:
+        """
+        启动仅元数据重试，不再次导入 RAW。
+
+        Start a metadata-only retry without importing RAW files again.
+        """
+
+        importer = self._apple_photos_importer
+        if importer is None:
+            return
+        progress = QProgressDialog(
+            self.i18n.t("browser.photos_import_progress").format(
+                completed=0,
+                total=count,
+            ),
+            self.i18n.t("browser.photos_import_cancel"),
+            0,
+            count,
+            self,
+        )
+        progress.setWindowTitle(self.i18n.t("browser.photos_import_confirm_title"))
+        progress.setWindowModality(Qt.WindowModal)
+        progress.setAutoClose(False)
+        progress.setAutoReset(False)
+        progress.canceled.connect(importer.cancel)
+        self._apple_photos_progress = progress
+        progress.show()
+        try:
+            importer.retry_metadata()
+            self._update_apple_photos_button()
+        except RuntimeError as error:
+            progress.close()
+            progress.deleteLater()
+            self._apple_photos_progress = None
+            # 与 _start_apple_photos_import 的失败分支保持一致：任务未能启动时
+            # 必须把按钮恢复可用，否则导入入口会一直保持禁用。
+            # Mirror the failure path in _start_apple_photos_import: re-enable the
+            # action when the task fails to start, or it stays disabled forever.
+            self._update_apple_photos_button()
+            QMessageBox.critical(
+                self,
+                self.i18n.t("browser.photos_import_failed_title"),
+                str(error),
+            )
 
     def _show_context_menu(self, photo: dict, pos):
         base_dir = photo.get('_base_dir', self._directory)
@@ -1383,6 +3543,11 @@ class ResultsBrowserWindow(QMainWindow):
         # 5. 缩略图同步
         self._thumb_grid.remove_photo(photo)
         self._fullscreen.set_photo_list(self._filtered_photos)
+        # 导入按钮的可用性取决于 _filtered_photos 是否为空，删空后必须同步禁用，
+        # 否则点击只会弹「没有可导入文件」。
+        # The import action keys off _filtered_photos; refresh it after deletion
+        # so an emptied list disables the button instead of failing on click.
+        self._update_apple_photos_button()
 
         # 6. 跳转逻辑：跳到被删除位置的下一张，已是末尾则跳上一张
         if self._filtered_photos:
@@ -1503,7 +3668,12 @@ class ResultsBrowserWindow(QMainWindow):
         # Sync the grid UI
         for photo in deleted_photos:
             self._thumb_grid.remove_photo(photo)
-            
+
+        # 同上：批量删除后同步导入按钮可用性。
+        # As above: refresh the import action after a batch deletion.
+        self._update_apple_photos_button()
+
+
         # Reset selection if it was deleted
         if self._thumb_grid._selected_key in deleted_identities:
             self._thumb_grid._selected_key = None
@@ -1561,16 +3731,29 @@ class ResultsBrowserWindow(QMainWindow):
         key = event.key()
         in_fullscreen = (self._stack.currentIndex() == 1)
 
-        if key in (Qt.Key_Left, Qt.Key_Up):
+        if key == Qt.Key_Left:
             if in_fullscreen:
                 self._fullscreen_prev()
             else:
                 self._prev_photo()
-        elif key in (Qt.Key_Right, Qt.Key_Down):
+        elif key == Qt.Key_Right:
             if in_fullscreen:
                 self._fullscreen_next()
             else:
                 self._next_photo()
+        elif key in _RATING_KEYS:
+            # 键盘打星(Paul P0-3):Up/Down 由翻图改为星级±1,数字键 0-5 直设。
+            # Keyboard rating: Up/Down now step the rating; digits set it.
+            photo = (getattr(self._fullscreen, "_current_photo", None) if in_fullscreen
+                     else getattr(self._detail_panel, "_current_photo", None))
+            if photo:
+                new_rating = _rating_key_action(key, photo.get("rating"))
+                if new_rating is not None:
+                    self._on_rating_changed(photo, new_rating)
+                    if in_fullscreen:
+                        self._fullscreen.update_rating_display(photo)
+                    else:
+                        self._detail_panel.show_photo(photo)
         elif key == Qt.Key_Tab:
             # Tab: 开关右侧详情面板
             self._detail_panel.setVisible(not self._detail_panel.isVisible())
@@ -1635,6 +3818,13 @@ class ResultsBrowserWindow(QMainWindow):
 
     def cleanup(self):
         """释放线程和 DB 连接。"""
+        importer = self._apple_photos_importer
+        if importer is not None:
+            try:
+                importer.shutdown()
+            except Exception:
+                pass
+            self._apple_photos_importer = None
         try:
             self._thumb_grid.cleanup()
         except Exception:
@@ -1662,982 +3852,3 @@ class ResultsBrowserWindow(QMainWindow):
 # ============================================================
 #  ResultsBrowserWidget — 嵌入式浏览器（供主窗口 QStackedWidget 使用）
 # ============================================================
-
-class ResultsBrowserWidget(QWidget):
-    """
-    与 ResultsBrowserWindow 相同的三栏布局，但以 QWidget 形式嵌入主窗口 QStackedWidget。
-    信号 back_requested 在用户点击「返回」时发出。
-    """
-    back_requested = Signal()
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.i18n = get_i18n()
-        self._db: Optional[ReportDB] = None
-        self._directory: str = ""
-        self._all_photos: list = []
-        self._filtered_photos: list = []
-        self._raw_filtered_photos: list = [] # V5: Store unfiltered sorted photos
-        self._expanded_bursts: set = set()   # V5: Track expanded burst IDs
-        self._is_merged: bool = False
-        self._sub_dirs: list = []
-
-        self.setStyleSheet(GLOBAL_STYLE)
-        self.setFocusPolicy(Qt.StrongFocus)
-        self._setup_ui()
-
-    # ------------------------------------------------------------------
-    #  UI 构建
-    # ------------------------------------------------------------------
-
-    def _setup_ui(self):
-        main_v = QVBoxLayout(self)
-        main_v.setContentsMargins(0, 0, 0, 0)
-        main_v.setSpacing(0)
-
-        self._toolbar = self._build_toolbar()
-        main_v.addWidget(self._toolbar)
-
-        outer_h = QHBoxLayout()
-        outer_h.setContentsMargins(0, 0, 0, 0)
-        outer_h.setSpacing(0)
-        main_v.addLayout(outer_h, 1)
-
-        self._stack = QStackedWidget()
-        outer_h.addWidget(self._stack, 1)
-
-        # Page 0: 过滤面板 + 缩略图网格
-        two_col = QWidget()
-        main_h = QHBoxLayout(two_col)
-        main_h.setContentsMargins(0, 0, 0, 0)
-        main_h.setSpacing(0)
-
-        self._filter_panel = FilterPanel(self.i18n, self)
-        self._filter_panel.filters_changed.connect(self._apply_filters)
-        main_h.addWidget(self._filter_panel)
-
-        center_widget = QWidget()
-        center_widget.setStyleSheet(f"background-color: {COLORS['bg_primary']};")
-        center_layout = QVBoxLayout(center_widget)
-        center_layout.setContentsMargins(0, 0, 0, 0)
-        center_layout.setSpacing(0)
-
-        self._thumb_grid = ThumbnailGrid(self.i18n, self)
-        self._thumb_grid.photo_selected.connect(self._on_photo_selected)
-        self._thumb_grid.photo_double_clicked.connect(self._enter_fullscreen)
-        self._thumb_grid.multi_selection_changed.connect(self._on_multi_selection_changed)
-        self._thumb_grid.burst_badge_clicked.connect(self._toggle_burst)
-        center_layout.addWidget(self._thumb_grid, 1)
-
-        main_h.addWidget(center_widget, 1)
-        self._stack.addWidget(two_col)
-
-        # Page 1: 全屏查看器
-        self._fullscreen = FullscreenViewer(self.i18n, self)
-        self._fullscreen.close_requested.connect(self._exit_fullscreen)
-        self._fullscreen.prev_requested.connect(self._fullscreen_prev)
-        self._fullscreen.next_requested.connect(self._fullscreen_next)
-        self._fullscreen.delete_requested.connect(self._on_delete_photo)
-        self._fullscreen.context_menu_requested.connect(self._on_fullscreen_context_menu)
-        self._fullscreen.species_edit_requested.connect(self._on_species_edit_requested)
-        self._fullscreen.crop_advice_requested.connect(self._on_crop_advice_requested)
-        self._stack.addWidget(self._fullscreen)
-
-        # Page 2: 对比查看器（C5）
-        self._comparison = ComparisonViewer(self.i18n, self)
-        self._comparison.close_requested.connect(self._exit_comparison)
-        self._comparison.rating_changed.connect(self._on_rating_changed)
-        self._stack.addWidget(self._comparison)
-
-        # 右侧详情面板
-        self._detail_panel = DetailPanel(self.i18n, self)
-        self._detail_panel.prev_requested.connect(self._prev_photo)
-        self._detail_panel.next_requested.connect(self._next_photo)
-        self._detail_panel.rating_change_requested.connect(self._on_rating_changed)
-        self._detail_panel.species_edit_requested.connect(self._on_species_edit_requested)
-        self._detail_panel.crop_advice_requested.connect(self._on_crop_advice_requested)
-        outer_h.addWidget(self._detail_panel, 0)
-
-        # 底部状态栏（简单 label）
-        self._status_label = QLabel("—")
-        self._status_label.setFixedHeight(24)
-        self._status_label.setStyleSheet(f"""
-            QLabel {{
-                background-color: {COLORS['bg_elevated']};
-                color: {COLORS['text_secondary']};
-                font-size: 11px;
-                border-top: 1px solid {COLORS['border_subtle']};
-                padding: 4px 16px;
-            }}
-        """)
-        main_v.addWidget(self._status_label)
-
-    def _build_toolbar(self) -> QWidget:
-        bar = QWidget()
-        bar.setObjectName("toolbar")
-        bar.setFixedHeight(52)
-        bar.setStyleSheet(f"""
-            QWidget#toolbar {{
-                background-color: {COLORS['bg_elevated']};
-                border-bottom: 1px solid {COLORS['border_subtle']};
-            }}
-        """)
-        layout = QHBoxLayout(bar)
-        layout.setContentsMargins(16, 8, 16, 8)
-        layout.setSpacing(12)
-
-        back_btn = QPushButton("  " + self.i18n.t("browser.back"))
-        back_btn.setIcon(load_tinted_icon("birdhouse.svg", ICON_IDLE, 16))
-        back_btn.setIconSize(QSize(16, 16))
-        back_btn.setObjectName("tertiary")
-        back_btn.setFixedHeight(32)
-        back_btn.setToolTip(self.i18n.t("browser.back_tooltip"))
-        back_btn.clicked.connect(self.back_requested)
-        layout.addWidget(back_btn)
-
-        layout.addSpacing(8)
-
-        # Directory switcher combo box (hidden by default, shown for batch dirs)
-        self._dir_combo = QComboBox()
-        self._dir_combo.setFixedHeight(32)
-        self._dir_combo.setMinimumWidth(200)
-        self._dir_combo.setMaximumWidth(400)
-        self._dir_combo.setStyleSheet(f"""
-            QComboBox {{
-                color: {COLORS['text_secondary']};
-                background: {COLORS['bg_primary']};
-                border: 1px solid {COLORS['border_subtle']};
-                border-radius: 4px;
-                padding: 4px 8px;
-                font-size: 12px;
-                font-family: {FONTS['mono']};
-            }}
-            QComboBox::drop-down {{ border: none; width: 20px; }}
-        """)
-        self._dir_combo.currentIndexChanged.connect(self._on_subdir_changed)
-        self._dir_combo.hide()
-        layout.addWidget(self._dir_combo)
-
-        self._dir_label = QLabel(self.i18n.t("browser.open_dir"))
-        self._dir_label.setStyleSheet(f"""
-            QLabel {{
-                color: {COLORS['text_secondary']};
-                font-size: 12px;
-                font-family: {FONTS['mono']};
-                background: transparent;
-            }}
-        """)
-        self._dir_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-        layout.addWidget(self._dir_label)
-
-        layout.addSpacing(16)
-
-        # 多选计数标签（C3，默认隐藏）
-        self._select_count_label = QLabel("")
-        self._select_count_label.setStyleSheet(f"""
-            QLabel {{
-                color: {COLORS['accent']};
-                font-size: 12px;
-                background: transparent;
-            }}
-        """)
-        self._select_count_label.hide()
-        layout.addWidget(self._select_count_label)
-
-        # 对比按钮（C5，默认隐藏，多选2张时显示）
-        self._compare_btn = QPushButton(self.i18n.t("browser.compare_btn"))
-        self._compare_btn.setObjectName("secondary")
-        self._compare_btn.setFixedHeight(32)
-        self._compare_btn.hide()
-        self._compare_btn.clicked.connect(self._enter_comparison)
-        layout.addWidget(self._compare_btn)
-
-        size_label = QLabel(self.i18n.t("browser.size_label"))
-        size_label.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 10px; background: transparent;")
-        layout.addWidget(size_label)
-
-        self._size_slider = QSlider(Qt.Horizontal)
-        self._size_slider.setRange(80, 300)
-        self._size_slider.setValue(160)
-        self._size_slider.setFixedWidth(100)
-        self._size_slider.valueChanged.connect(self._on_size_changed)
-        layout.addWidget(self._size_slider)
-
-        return bar
-
-    # ------------------------------------------------------------------
-    #  公共接口
-    # ------------------------------------------------------------------
-
-    def open_directory(self, directory: str):
-        """Load report.db from directory. Supports batch multi-dir mode."""
-        if not directory:
-            return
-
-        if self._db:
-            try:
-                self._db.close()
-            except Exception:
-                pass
-            self._db = None
-
-        self._is_merged = False
-        self._sub_dirs = []
-
-        from tools.merged_report_db import find_processed_subdirs
-        processed = find_processed_subdirs(directory)
-
-        self._dir_combo.blockSignals(True)
-        self._dir_combo.clear()
-
-        if len(processed) > 1:
-            self._sub_dirs = processed
-            total = sum(self._count_db_photos(d) for d in processed)
-            self._dir_combo.addItem(f"\U0001f4c2 All ({total})", "__ALL__")
-            for d in processed:
-                rel = os.path.relpath(d, directory)
-                n = self._count_db_photos(d)
-                label = f"  ./ ({n})" if rel == '.' else f"  {rel}/ ({n})"
-                self._dir_combo.addItem(label, d)
-            self._dir_combo.show()
-            self._dir_label.hide()
-        else:
-            self._dir_combo.hide()
-            self._dir_label.show()
-            if not processed:
-                db_path = os.path.join(directory, ".superpicky", "report.db")
-                if not os.path.exists(db_path):
-                    QMessageBox.information(
-                        self,
-                        self.i18n.t("browser.no_db"),
-                        f"{directory}\n\n{self.i18n.t('browser.no_db_hint')}"
-                    )
-                    self._dir_combo.blockSignals(False)
-                    return
-
-        self._dir_combo.blockSignals(False)
-        self._directory = directory
-
-        if len(processed) > 1:
-            self._load_merged(directory, processed)
-        elif len(processed) == 1:
-            self._load_single(processed[0])
-        else:
-            self._load_single(directory)
-
-    def _count_db_photos(self, directory: str) -> int:
-        db_path = os.path.join(directory, ".superpicky", "report.db")
-        if not os.path.exists(db_path):
-            return 0
-        try:
-            import sqlite3 as _sql
-            conn = _sql.connect(db_path)
-            n = conn.execute("SELECT COUNT(*) FROM photos WHERE rating != -1").fetchone()[0]
-            conn.close()
-            return n
-        except Exception:
-            return 0
-
-    def _load_single(self, directory: str):
-        self._is_merged = False
-        try:
-            self._db = ReportDB(directory)
-        except Exception as e:
-            QMessageBox.warning(self, "Error", str(e))
-            return
-        self._directory = directory
-        short_name = os.path.basename(directory) or directory
-        self._dir_label.setText(short_name)
-        self._dir_label.setToolTip(directory)
-        self._all_photos = self._db.get_all_photos()
-        self._compute_burst_ids()
-        self._filter_panel.reset_all()
-        species = self._db.get_distinct_species(use_en=self.i18n.current_lang.startswith('en'))
-        self._filter_panel.update_species_list(species)
-        if len(self._all_photos) > 0 and len(self._filtered_photos) == 0:
-            self._filter_panel.select_all_ratings()
-
-    def _load_merged(self, root_dir: str, sub_dirs: list):
-        from tools.merged_report_db import MergedReportDB
-        self._is_merged = True
-        try:
-            self._db = MergedReportDB(root_dir, sub_dirs)
-        except Exception as e:
-            QMessageBox.warning(self, "Error", str(e))
-            return
-        self._directory = root_dir
-        self._all_photos = self._db.get_all_photos()
-        self._compute_burst_ids()
-        self._filter_panel.reset_all()
-        species = self._db.get_distinct_species(use_en=self.i18n.current_lang.startswith('en'))
-        self._filter_panel.update_species_list(species)
-        if len(self._all_photos) > 0 and len(self._filtered_photos) == 0:
-            self._filter_panel.select_all_ratings()
-
-    def _on_subdir_changed(self, index: int):
-        if index < 0:
-            return
-        value = self._dir_combo.itemData(index)
-        if value == "__ALL__":
-            self._load_merged(self._directory, self._sub_dirs)
-        else:
-            self._load_single(value)
-
-    def _compute_burst_ids(self):
-        """基于拍摄时间做 burst 分组，时间差 <= 1 秒视为同一组。"""
-        if not self._db:
-            return
-
-        photos = self._db.get_all_photos()
-        self._db.clear_burst_ids()
-        burst_map = _build_burst_update_map(photos)
-        if burst_map:
-            self._db.update_burst_ids(burst_map)
-            self._all_photos = self._db.get_all_photos()
-        else:
-            self._all_photos = photos
-
-        if not self._all_photos:
-            self._burst_totals = Counter()
-            return
-
-        self._burst_totals = _burst_totals_from_photos(self._all_photos)
-
-    def cleanup(self):
-        """释放 DB 连接（切换回处理页前调用）。"""
-        try:
-            self._thumb_grid.cleanup()
-        except Exception:
-            pass
-        try:
-            self._fullscreen.cleanup()
-        except Exception:
-            pass
-        try:
-            self._comparison.cleanup()
-        except Exception:
-            pass
-        try:
-            self._detail_panel.cleanup()
-        except Exception:
-            pass
-        if self._db:
-            try:
-                self._db.close()
-            except Exception:
-                pass
-            self._db = None
-
-    # ------------------------------------------------------------------
-    #  私有槽
-    # ------------------------------------------------------------------
-
-    def _resolve_photo_paths(self, photo: dict) -> dict:
-        _PATH_KEYS = ('original_path', 'current_path', 'temp_jpeg_path',
-                      'debug_crop_path', 'yolo_debug_path')
-        resolved = dict(photo)
-        if self._is_merged and 'source_dir' in photo:
-            base_dir = os.path.join(self._directory, photo['source_dir'])
-        else:
-            base_dir = self._directory
-        resolved['_base_dir'] = base_dir
-        for key in _PATH_KEYS:
-            val = photo.get(key)
-            if val and not os.path.isabs(val):
-                resolved[key] = os.path.join(base_dir, val)
-        bid = resolved.get("burst_id")
-        if bid is not None and hasattr(self, '_burst_totals'):
-            resolved["burst_total"] = self._burst_totals.get(bid, 1)
-        return resolved
-
-    @Slot(dict)
-    def _apply_filters(self, filters: dict):
-        if not self._db:
-            self._thumb_grid.load_photos([])
-            self._update_status(0, 0)
-            return
-
-        # 动态刷新鸟种下拉：只显示当前星级筛选下有照片的鸟种
-        use_en = self.i18n.current_lang.startswith('en')
-        species = self._db.get_distinct_species(use_en=use_en, ratings=filters.get('ratings'))
-        self._filter_panel.update_species_list(species)
-
-        raw_photos = self._db.get_photos_by_filters(filters)
-        self._raw_filtered_photos = [self._resolve_photo_paths(p) for p in raw_photos]
-        total = len(self._all_photos)
-        filtered = len(self._raw_filtered_photos)
-        self._update_status(total, filtered)
-        self._filter_panel.update_count(filtered)
-        self._update_display_list()
-
-    def _update_display_list(self):
-        burst_map = {}
-        for photo in self._raw_filtered_photos:
-            burst_id = photo.get("burst_id")
-            if burst_id is None:
-                continue
-            burst_map.setdefault(burst_id, []).append(photo)
-        burst_map = {burst_id: photos for burst_id, photos in burst_map.items() if len(photos) > 1}
-
-        best_burst_photos = {}
-        for burst_id, photos in burst_map.items():
-            best_photo = _burst_representative(photos)  # 折叠封面=组内锐度最高的一张
-            best_burst_photos[burst_id] = _photo_identity(best_photo)
-
-        grouped_photos = []
-        processed_bursts = set()
-        for photo in self._raw_filtered_photos:
-            burst_id = photo.get("burst_id")
-            if burst_id is None or burst_id not in burst_map:
-                grouped_photos.append(dict(photo))
-                continue
-            if burst_id in processed_bursts:
-                continue
-
-            processed_bursts.add(burst_id)
-            burst_photos = sorted(burst_map[burst_id], key=_burst_sort_key)
-            if burst_id in self._expanded_bursts:
-                for pos, burst_photo in enumerate(burst_photos, 1):
-                    expanded_photo = dict(burst_photo)
-                    expanded_photo["is_expanded_burst_member"] = True
-                    expanded_photo["burst_position_index"] = pos
-                    expanded_photo["burst_total_count"] = len(burst_photos)
-                    expanded_photo["is_burst_best"] = (_photo_identity(burst_photo) == best_burst_photos[burst_id])
-                    grouped_photos.append(expanded_photo)
-            else:
-                best_identity = best_burst_photos[burst_id]
-                best_photo = next(x for x in burst_photos if _photo_identity(x) == best_identity)
-                group_photo = dict(best_photo)
-                group_photo["is_burst_group"] = True
-                group_photo["burst_count"] = len(burst_photos)
-                group_photo["burst_photos"] = burst_photos
-                grouped_photos.append(group_photo)
-
-        self._filtered_photos = grouped_photos
-        current_selection = self._thumb_grid._selected_key
-        self._thumb_grid.load_photos(self._filtered_photos, keep_scroll=True)
-        self._fullscreen.set_photo_list(self._filtered_photos)
-
-        if self._filtered_photos:
-            target_identity = current_selection or _photo_identity(self._filtered_photos[0])
-            if not any(_photo_identity(p) == target_identity for p in self._filtered_photos):
-                target_identity = _photo_identity(self._filtered_photos[0])
-            selected_photo = next(p for p in self._filtered_photos if _photo_identity(p) == target_identity)
-            self._thumb_grid.select_photo(selected_photo, ensure_visible=False)
-            self._detail_panel.show_photo(selected_photo)
-        else:
-            self._detail_panel.clear()
-
-    @Slot(int)
-    def _toggle_burst(self, burst_id: int):
-        if len([p for p in self._raw_filtered_photos if p.get("burst_id") == burst_id]) <= 1:
-            self._expanded_bursts.discard(burst_id)
-            return
-        if burst_id in self._expanded_bursts:
-            self._expanded_bursts.remove(burst_id)
-        else:
-            self._expanded_bursts.add(burst_id)
-        self._update_display_list()
-
-    @Slot(dict)
-    def _on_photo_selected(self, photo: dict):
-        self._detail_panel.show_photo(photo)
-
-    @Slot()
-    def _prev_photo(self):
-        photo = self._thumb_grid.select_prev()
-        if photo:
-            self._detail_panel.show_photo(photo)
-            if self._stack.currentIndex() == 1:   # 全屏模式同步大图
-                self._fullscreen.show_photo(photo)
-
-    @Slot()
-    def _next_photo(self):
-        photo = self._thumb_grid.select_next()
-        if photo:
-            self._detail_panel.show_photo(photo)
-            if self._stack.currentIndex() == 1:   # 全屏模式同步大图
-                self._fullscreen.show_photo(photo)
-
-    @Slot(dict)
-    def _enter_fullscreen(self, photo: dict):
-        if photo.get("is_expanded_burst_member"):
-            self._open_burst_sequence(photo)
-            return
-
-        self._show_fullscreen_photo(photo)
-        self._detail_panel._switch_view(True)
-        self._toolbar.hide()
-        self._stack.setCurrentIndex(1)
-        self._fullscreen.setFocus()
-
-    @Slot()
-    def _exit_fullscreen(self):
-        self._toolbar.show()
-        self._stack.setCurrentIndex(0)
-        self._fullscreen_nav_photos = list(self._filtered_photos)
-        self._detail_panel._switch_view(False)
-        self.setFocus()
-
-    @Slot()
-    def _fullscreen_prev(self):
-        if not self._fullscreen_nav_photos:
-            return
-        current_key = _photo_identity(getattr(self._fullscreen, "_current_photo", {}) or {})
-        nav_keys = [_photo_identity(p) for p in self._fullscreen_nav_photos]
-        try:
-            idx = nav_keys.index(current_key)
-        except ValueError:
-            idx = -1
-        new_idx = idx - 1
-        if 0 <= new_idx < len(self._fullscreen_nav_photos):
-            self._show_fullscreen_photo(self._fullscreen_nav_photos[new_idx], nav_photos=self._fullscreen_nav_photos)
-
-    @Slot()
-    def _fullscreen_next(self):
-        if not self._fullscreen_nav_photos:
-            return
-        current_key = _photo_identity(getattr(self._fullscreen, "_current_photo", {}) or {})
-        nav_keys = [_photo_identity(p) for p in self._fullscreen_nav_photos]
-        try:
-            idx = nav_keys.index(current_key)
-        except ValueError:
-            idx = -1
-        new_idx = idx + 1
-        if 0 <= new_idx < len(self._fullscreen_nav_photos):
-            self._show_fullscreen_photo(self._fullscreen_nav_photos[new_idx], nav_photos=self._fullscreen_nav_photos)
-
-    @Slot(object, int)
-    def _on_rating_changed(self, photo_or_filename, new_rating: int):
-        """详情面板评分修改：写入 DB + 刷新缩略图角标 + 异步写 EXIF + 后台移动文件。"""
-        current_photo = _coerce_photo(
-            photo_or_filename,
-            self._filtered_photos,
-            getattr(self._detail_panel, "_current_photo", None),
-        ) or {}
-        filename = current_photo.get("filename") or (photo_or_filename if isinstance(photo_or_filename, str) else "")
-        db_key = _photo_db_key(current_photo) if current_photo else filename
-        if self._db:
-            self._db.update_photo(db_key, {"rating": new_rating})
-        for p in self._filtered_photos:
-            if _photo_identity(p) == _photo_identity(current_photo) or (
-                not current_photo and p.get("filename") == filename
-            ):
-                p["rating"] = new_rating
-                break
-        self._thumb_grid.refresh_photo(current_photo or filename, new_rating)
-        # 异步写 EXIF（遵守 metadata_write_mode 设置，mode=none 时内部自动跳过）
-        file_path = self._get_photo_file_path(current_photo or filename)
-        if file_path:
-            import threading
-            from tools.exiftool_manager import get_exiftool_manager
-            threading.Thread(
-                target=get_exiftool_manager().set_rating_and_pick,
-                args=(file_path, new_rating),
-                daemon=True,
-            ).start()
-        # 后台移动文件（仅已整理的照片；burst / 根目录 / 新旧相同 时内部自动跳过）
-        if current_photo:
-            base_dir = current_photo.get("_base_dir") or self._directory
-            _trigger_rating_move(base_dir, current_photo, new_rating, self.i18n, self._db, db_key)
-
-    def _get_photo_file_path(self, photo_or_filename) -> "str | None":
-        """根据 photo 或 filename 查找照片绝对路径。"""
-        photo = _coerce_photo(photo_or_filename, self._filtered_photos)
-        if photo:
-            path = photo.get("current_path") or photo.get("original_path") or ""
-            return path if path and os.path.exists(path) else None
-        return None
-
-    def _on_species_edit_requested(self, photo: dict):
-        """
-        用户点击铅笔图标 → 弹出鸟种搜索对话框，确认后后台更新 DB + 移动文件。
-        User clicks pencil icon → open bird species search dialog; on confirm, update DB and move files in background.
-        """
-        from ui.bird_species_edit_dialog import BirdSpeciesEditDialog
-        from PySide6.QtWidgets import QDialog
-
-        dialog = BirdSpeciesEditDialog(parent=self)
-        if dialog.exec() != QDialog.Accepted:
-            return
-
-        new_cn = dialog.selected_cn
-        new_en = dialog.selected_en
-        if not new_cn and not new_en:
-            return
-
-        db_key = _photo_db_key(photo)
-        base_dir = photo.get("_base_dir") or self._directory
-
-        # 1. 同步更新 photo 副本 + 缓存列表
-        # Update both the local photo copy and the cached list so show_photo displays the new name.
-        photo["bird_species_cn"] = new_cn
-        photo["bird_species_en"] = new_en
-        for p in self._filtered_photos:
-            if _photo_identity(p) == _photo_identity(photo):
-                p["bird_species_cn"] = new_cn
-                p["bird_species_en"] = new_en
-                break
-
-        # 2. 同步写入 DB 鸟种字段（使下拉刷新立即生效；文件移动仍在后台执行）
-        # Write species fields to DB synchronously so the dropdown refresh sees new data immediately.
-        if self._db:
-            self._db.update_photo(db_key, {
-                "bird_species_cn": new_cn or None,
-                "bird_species_en": new_en or None,
-            })
-
-        # 3. 刷新详情面板
-        self._detail_panel.show_photo(photo)
-
-        # 4. 刷新左侧鸟种下拉
-        use_en = self.i18n.current_lang.startswith("en")
-        current_filters = self._filter_panel.get_filters()
-        new_species = self._db.get_distinct_species(
-            use_en=use_en, ratings=current_filters.get("ratings")
-        )
-        self._filter_panel.update_species_list(new_species)
-
-        # 5. 后台执行文件移动（同时更新连拍组其他成员的 DB 鸟种字段及 current_path）
-        # Background: move files and update burst group members' DB records.
-        _trigger_species_change(base_dir, photo, new_cn, new_en, self._db, db_key)
-
-    def _on_crop_advice_requested(self, photo: dict):
-        """
-        打开裁剪建议弹窗（非破坏性预览）。
-        Open the crop advisor dialog (non-destructive preview).
-        """
-        from ui.crop_advisor_dialog import CropAdvisorDialog
-        # 复用详情面板的显示图解析：优先可解码的 temp JPEG，
-        # 避免把 RAW(current_path)喂给弹窗——cv2/PIL 解不了 RAW 会报 TIFF 错。
-        # Reuse the detail panel's display-path resolution: prefer the decodable
-        # temp JPEG, never feed a RAW file (cv2/PIL can't decode it).
-        rp = self._resolve_photo_paths(photo)
-        path = rp.get("temp_jpeg_path")
-        if not path or not os.path.exists(path):
-            path = rp.get("debug_crop_path")
-        if not path or not os.path.exists(path):
-            op = rp.get("original_path") or rp.get("current_path")
-            if op and os.path.exists(op) and os.path.splitext(op)[1].lower() in ('.jpg', '.jpeg'):
-                path = op
-            else:
-                path = None
-        print(
-            f"🪶 [CropAdvisor] 入口解析: temp_jpeg={rp.get('temp_jpeg_path')!r} "
-            f"debug_crop={rp.get('debug_crop_path')!r} current={rp.get('current_path')!r} "
-            f"original={rp.get('original_path')!r} → 选用={path!r}"
-        )
-        if not path or not os.path.exists(path):
-            from ui.custom_dialogs import StyledMessageBox
-            StyledMessageBox.warning(
-                self,
-                self.i18n.t("crop_advisor.title"),
-                self.i18n.t("crop_advisor.no_decodable_image"),
-            )
-            return
-        dialog = CropAdvisorDialog(image_path=path, parent=self)
-        dialog.exec()
-
-    @Slot(list)
-    def _on_multi_selection_changed(self, photos: list):
-        """C3：多选状态变化，更新工具栏显示。"""
-        n = len(photos)
-        if n > 1:
-            self._select_count_label.setText(self.i18n.t("browser.selected_count").format(n=n))
-            self._select_count_label.show()
-        else:
-            self._select_count_label.hide()
-        # C5：仅当选中 2 张时显示对比按钮
-        self._compare_btn.setVisible(n == 2)
-
-    def _show_context_menu(self, photo: dict, pos):
-        """C4: context menu."""
-        base_dir = photo.get('_base_dir', self._directory)
-        _show_context_menu_impl(self, photo, pos, base_dir)
-
-    @Slot(dict)
-    def _on_delete_photo(self, photo: dict):
-        """全屏模式删除图片：确认 → 回收站 → DB 删除 → 缩略图同步 → 跳下一张。"""
-        from advanced_config import get_advanced_config
-        cfg = get_advanced_config()
-        filename = photo.get("filename", "")
-        if not filename:
-            return
-
-        # 1. 确认弹窗
-        if cfg.delete_confirm:
-            from PySide6.QtWidgets import QCheckBox
-            msg_box = QMessageBox(self)
-            msg_box.setWindowTitle(self.i18n.t("browser.delete_title"))
-            msg_box.setText(self.i18n.t("browser.delete_msg").format(filename=filename))
-            msg_box.setIcon(QMessageBox.Warning)
-            yes_btn = msg_box.addButton(self.i18n.t("browser.delete_confirm_btn"), QMessageBox.AcceptRole)
-            msg_box.addButton(self.i18n.t("browser.delete_cancel_btn"), QMessageBox.RejectRole)
-            cb = QCheckBox(self.i18n.t("browser.delete_no_ask"))
-            msg_box.setCheckBox(cb)
-            msg_box.exec()
-            if msg_box.clickedButton() != yes_btn:
-                return
-            if cb.isChecked():
-                cfg.set_delete_confirm(False)
-                cfg.save()
-
-        # 2. 移入回收站
-        filepath = photo.get("current_path") or photo.get("original_path") or ""
-        if filepath and not _move_to_trash(filepath):
-            QMessageBox.warning(
-                self,
-                self.i18n.t("browser.delete_failed"),
-                self.i18n.t("browser.delete_failed_msg").format(error=filepath)
-            )
-            return
-
-        # 3. DB 删除
-        if self._db:
-            self._db.delete_photo(_photo_db_key(photo))
-
-        # 4. 从内存列表移除
-        target_identity = _photo_identity(photo)
-        # 记录被删除照片在过滤列表中的位置，用于删除后正确跳转
-        _del_identities = [_photo_identity(p) for p in self._filtered_photos]
-        try:
-            _deleted_idx = _del_identities.index(_photo_identity(photo))
-        except ValueError:
-            _deleted_idx = 0
-        self._filtered_photos = [p for p in self._filtered_photos if _photo_identity(p) != target_identity]
-        self._all_photos = [p for p in self._all_photos if _photo_identity(p) != target_identity]
-
-        # 5. 缩略图同步
-        self._thumb_grid.remove_photo(photo)
-        self._fullscreen.set_photo_list(self._filtered_photos)
-
-        # 6. 跳转逻辑：跳到被删除位置的下一张，已是末尾则跳上一张
-        if self._filtered_photos:
-            next_idx = min(_deleted_idx, len(self._filtered_photos) - 1)
-            nxt = self._filtered_photos[next_idx]
-            self._thumb_grid.select_photo(nxt)
-            self._fullscreen.show_photo(nxt)
-            self._detail_panel.show_photo(nxt)
-        else:
-            self._exit_fullscreen()
-
-        # 7. 更新状态栏
-        self._update_status(len(self._all_photos), len(self._filtered_photos))
-
-    @Slot(dict, object)
-    def _on_fullscreen_context_menu(self, photo: dict, global_pos):
-        """全屏大图右键菜单。"""
-        _show_context_menu_impl(self, photo, global_pos, self._directory)
-
-    def _delete_selected_photos(self):
-        """Delete currently selected photo(s) in grid view or fullscreen view with Command + Backspace."""
-        in_fullscreen = (self._stack.currentIndex() == 1)
-        
-        # 1. Gather target photos to delete
-        if in_fullscreen:
-            if not self._fullscreen._current_photo:
-                return
-            target_photos = [self._fullscreen._current_photo]
-        else:
-            target_photos = self._thumb_grid.get_multi_selected_photos()
-            if not target_photos and self._detail_panel._current_photo:
-                target_photos = [self._detail_panel._current_photo]
-                
-        if not target_photos:
-            return
-
-        from advanced_config import get_advanced_config
-        cfg = get_advanced_config()
-        
-        # 2. Confirmation Dialog (if enabled in config)
-        if cfg.delete_confirm:
-            from PySide6.QtWidgets import QCheckBox
-            msg_box = QMessageBox(self)
-            msg_box.setWindowTitle(self.i18n.t("browser.delete_title"))
-            msg_box.setIcon(QMessageBox.Warning)
-            yes_btn = msg_box.addButton(self.i18n.t("browser.delete_confirm_btn"), QMessageBox.AcceptRole)
-            msg_box.addButton(self.i18n.t("browser.delete_cancel_btn"), QMessageBox.RejectRole)
-            cb = QCheckBox(self.i18n.t("browser.delete_no_ask"))
-            msg_box.setCheckBox(cb)
-            
-            if len(target_photos) == 1:
-                filename = target_photos[0].get("filename", "")
-                msg_box.setText(self.i18n.t("browser.delete_msg").format(filename=filename))
-            else:
-                count = len(target_photos)
-                if self.i18n.current_lang.startswith('en'):
-                    msg_text = f"Move {count} selected photos to Trash?\n\n❗ This will also delete their database records. You'll need to reprocess after restoring."
-                else:
-                    msg_text = f"将选中的 {count} 张图片移入回收站？\n\n❗ 此操作会同时从数据库删除记录，恢复文件后需重新处理。"
-                msg_box.setText(msg_text)
-                
-            msg_box.exec()
-            if msg_box.clickedButton() != yes_btn:
-                return
-            if cb.isChecked():
-                cfg.set_delete_confirm(False)
-                cfg.save()
-                
-        # 3. Perform Deletion
-        deleted_photos = []
-        failed_paths = []
-        for photo in target_photos:
-            filepath = photo.get("current_path") or photo.get("original_path") or ""
-            if filepath:
-                if _move_to_trash(filepath):
-                    deleted_photos.append(photo)
-                else:
-                    failed_paths.append(filepath)
-            else:
-                # If no filepath (rare DB fallback), count as deleted from DB at least
-                deleted_photos.append(photo)
-                
-        # If any failed to move to trash, alert the user and stop DB/memory sync for them
-        if failed_paths:
-            QMessageBox.warning(
-                self,
-                self.i18n.t("browser.delete_failed"),
-                self.i18n.t("browser.delete_failed_msg").format(error="\n".join(failed_paths))
-            )
-            
-        if not deleted_photos:
-            return
-            
-        # 4. DB Deletion
-        if self._db:
-            for photo in deleted_photos:
-                self._db.delete_photo(_photo_db_key(photo))
-                
-        # 5. Memory & UI Sync
-        deleted_identities = {_photo_identity(p) for p in deleted_photos}
-        
-        # If we are in fullscreen and deleting the current photo, determine the next photo to show
-        next_photo = None
-        if in_fullscreen and self._fullscreen._current_photo:
-            curr_id = _photo_identity(self._fullscreen._current_photo)
-            if curr_id in deleted_identities:
-                # Find its index in filtered photos list
-                _del_identities = [_photo_identity(p) for p in self._filtered_photos]
-                try:
-                    curr_idx = _del_identities.index(curr_id)
-                except ValueError:
-                    curr_idx = 0
-                # Filter out all deleted photos
-                remaining_photos = [p for p in self._filtered_photos if _photo_identity(p) not in deleted_identities]
-                if remaining_photos:
-                    next_idx = min(curr_idx, len(remaining_photos) - 1)
-                    next_photo = remaining_photos[next_idx]
-                    
-        # Update our in-memory lists
-        self._filtered_photos = [p for p in self._filtered_photos if _photo_identity(p) not in deleted_identities]
-        self._all_photos = [p for p in self._all_photos if _photo_identity(p) not in deleted_identities]
-        
-        # Sync the grid UI
-        for photo in deleted_photos:
-            self._thumb_grid.remove_photo(photo)
-            
-        # Reset selection if it was deleted
-        if self._thumb_grid._selected_key in deleted_identities:
-            self._thumb_grid._selected_key = None
-            
-        # Clear grid multi-select state
-        self._thumb_grid.clear_multi_select()
-        
-        # Sync fullscreen viewer list
-        self._fullscreen.set_photo_list(self._filtered_photos)
-        
-        # 6. Navigation / Transition UI state
-        if in_fullscreen:
-            if next_photo:
-                self._thumb_grid.select_photo(next_photo)
-                self._fullscreen.show_photo(next_photo)
-                self._detail_panel.show_photo(next_photo)
-            else:
-                self._exit_fullscreen()
-        else:
-            # If not in fullscreen, just select the first available photo or clear panel
-            if self._filtered_photos:
-                first_remaining = self._filtered_photos[0]
-                self._thumb_grid.select_photo(first_remaining)
-                self._detail_panel.show_photo(first_remaining)
-            else:
-                self._detail_panel.show_photo(None)
-                
-        # 7. Update Status bar
-        self._update_status(len(self._all_photos), len(self._filtered_photos))
-
-    def _enter_comparison(self):
-        """C5：进入 2-up 对比视图。"""
-        photos = self._thumb_grid.get_multi_selected_photos()
-        if len(photos) >= 2:
-            self._comparison.show_pair(photos[0], photos[1])
-            self._toolbar.hide()
-            self._detail_panel.hide()   # 对比模式不显示详情面板
-            self._stack.setCurrentIndex(2)
-            self._comparison.setFocus()
-
-    def _exit_comparison(self):
-        """C5：退出对比视图，回到 grid。"""
-        self._toolbar.show()
-        self._detail_panel.show()
-        self._stack.setCurrentIndex(0)
-        self.setFocus()
-
-    @Slot(int)
-    def _on_size_changed(self, value: int):
-        self._thumb_grid.set_thumb_size(value)
-
-    def _update_status(self, total: int, filtered: int):
-        t = self.i18n.t("browser.total_photos").format(total=total)
-        f = self.i18n.t("browser.filtered_photos").format(count=filtered)
-        self._status_label.setText(f"{t}  |  {f}")
-
-    def keyPressEvent(self, event: QKeyEvent):
-        key = event.key()
-        in_fullscreen = (self._stack.currentIndex() == 1)
-
-        if key in (Qt.Key_Left, Qt.Key_Up):
-            if in_fullscreen:
-                self._fullscreen_prev()
-            else:
-                self._prev_photo()
-        elif key in (Qt.Key_Right, Qt.Key_Down):
-            if in_fullscreen:
-                self._fullscreen_next()
-            else:
-                self._next_photo()
-        elif key == Qt.Key_Tab:
-            self._detail_panel.setVisible(not self._detail_panel.isVisible())
-        elif key == Qt.Key_Plus or key == Qt.Key_Equal:
-            self._size_slider.setValue(min(300, self._size_slider.value() + 20))
-        elif key == Qt.Key_Minus:
-            self._size_slider.setValue(max(80, self._size_slider.value() - 20))
-        elif key == Qt.Key_Escape:
-            current_page = self._stack.currentIndex()
-            if current_page == 1:
-                self._exit_fullscreen()
-            elif current_page == 2:
-                self._exit_comparison()
-            else:
-                # grid 模式：有多选时先清选，否则返回主界面
-                if self._thumb_grid.get_multi_selected_photos():
-                    self._thumb_grid.clear_multi_select()
-                else:
-                    self.back_requested.emit()
-        elif key == Qt.Key_C:
-            if not in_fullscreen and self._stack.currentIndex() == 0:
-                photos = self._thumb_grid.get_multi_selected_photos()
-                if len(photos) >= 2:
-                    self._enter_comparison()
-        elif key == Qt.Key_F:
-            if in_fullscreen:
-                self._fullscreen.toggle_focus()
-            else:
-                self._detail_panel._switch_view(not self._detail_panel._use_crop_view)
-        elif key == Qt.Key_A and (event.modifiers() & Qt.ControlModifier):
-            if not in_fullscreen and self._stack.currentIndex() != 2:
-                self._thumb_grid.select_all()
-        elif key == Qt.Key_Backspace and (event.modifiers() & Qt.ControlModifier):
-            self._delete_selected_photos()
-        else:
-            super().keyPressEvent(event)

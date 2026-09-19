@@ -17,7 +17,7 @@ import sys
 import tempfile
 
 from PySide6.QtCore import Qt, QRectF
-from PySide6.QtGui import QColor, QIcon, QImage, QPainter, QPixmap
+from PySide6.QtGui import QColor, QFont, QIcon, QImage, QPainter, QPixmap
 from PySide6.QtSvg import QSvgRenderer
 
 from ui.styles import COLORS
@@ -69,6 +69,68 @@ def load_tinted_icon(svg_name: str, color: str, size: int = 20, dpr: float = 1.0
     return QIcon(QPixmap.fromImage(render_tinted_image(svg_name, color, size, dpr)))
 
 
+_GLYPH_PIXMAP_CACHE: dict = {}
+
+
+def glyph_pixmap(glyph: str, color: str, size: int = 16, dpr: float = 2.0,
+                 fill_ratio: float = 0.80) -> QPixmap:
+    """
+    把单个字形渲染成固定 size 的方形 pixmap,并按其「实际墨水边界」缩放+居中,
+    使一组字形(如罕见度 ○◔◑◕●)视觉大小一致 —— 规避 Unicode 几何字符在各平台
+    字体下大小/基线不一的问题。墨水边界用像素扫描求得(比 tightBoundingRect 更
+    可靠,直接量渲染结果)。结果按 (字形,色,尺寸,dpr,比例) 缓存。
+
+    Render a single glyph into a fixed square pixmap, scaled & centered by its
+    actual ink bounding box (found by pixel scan) so a set of glyphs renders at a
+    consistent visual size across platform fonts. Cached.
+    """
+    key = (glyph, color, size, round(dpr, 2), fill_ratio)
+    cached = _GLYPH_PIXMAP_CACHE.get(key)
+    if cached is not None:
+        return cached
+
+    px = max(1, int(round(size * dpr)))
+    work = 48
+    tmp = QImage(work, work, QImage.Format_ARGB32_Premultiplied)
+    tmp.fill(Qt.transparent)
+    p = QPainter(tmp)
+    p.setRenderHint(QPainter.Antialiasing, True)
+    p.setRenderHint(QPainter.TextAntialiasing, True)
+    f = QFont()
+    f.setPixelSize(int(work * 0.72))
+    p.setFont(f)
+    p.setPen(QColor(color))
+    p.drawText(QRectF(0, 0, work, work), int(Qt.AlignCenter), glyph)
+    p.end()
+
+    # 扫描非透明像素的实际边界 / scan ink bbox
+    minx, miny, maxx, maxy = work, work, -1, -1
+    for y in range(work):
+        for x in range(work):
+            if (tmp.pixel(x, y) >> 24) & 0xFF:
+                minx = x if x < minx else minx
+                maxx = x if x > maxx else maxx
+                miny = y if y < miny else miny
+                maxy = y if y > maxy else maxy
+
+    out = QImage(px, px, QImage.Format_ARGB32_Premultiplied)
+    out.fill(Qt.transparent)
+    if maxx >= minx and maxy >= miny:
+        gw, gh = maxx - minx + 1, maxy - miny + 1
+        scale = (px * fill_ratio) / max(gw, gh)
+        tw, th = gw * scale, gh * scale
+        p2 = QPainter(out)
+        p2.setRenderHint(QPainter.SmoothPixmapTransform, True)
+        p2.drawImage(QRectF((px - tw) / 2.0, (px - th) / 2.0, tw, th),
+                     tmp, QRectF(minx, miny, gw, gh))
+        p2.end()
+
+    pm = QPixmap.fromImage(out)
+    pm.setDevicePixelRatio(dpr)
+    _GLYPH_PIXMAP_CACHE[key] = pm
+    return pm
+
+
 def stars_image(count: int, color: str, size: int = 16, gap: int = 2, dpr: float = 2.0) -> QImage:
     """
     横排渲染 count 颗 star.svg 染成 color,返回一张 QImage(headless 安全)。
@@ -117,6 +179,24 @@ def tinted_png_path(svg_name: str, color: str, size: int = 12, dpr: float = 2.0)
     return path.replace(os.sep, "/")
 
 
+def glyph_png_path(glyph: str, color: str, size: int = 14, dpr: float = 2.0) -> str:
+    """
+    把单个字形按「实际墨水边界」归一化渲染为 PNG(视觉大小统一,见 glyph_pixmap),
+    返回正斜杠路径,供富文本 QLabel `<img src=...>` 使用(如详情面板罕见度图标,
+    统一 ○◔◑◕● 大小)。结果按参数缓存。
+
+    Render a single glyph (size-normalized via glyph_pixmap) to a PNG and return a
+    forward-slash path for rich-text QLabel `<img src=...>` (e.g. detail-panel rarity
+    icon, unifying ○◔◑◕● sizes). Cached by params.
+    """
+    os.makedirs(_PNG_CACHE_DIR, exist_ok=True)
+    key = hashlib.md5(f"glyph|{glyph}|{color}|{size}|{dpr}".encode("utf-8")).hexdigest()[:12]
+    path = os.path.join(_PNG_CACHE_DIR, f"{key}.png")
+    if not os.path.exists(path):
+        glyph_pixmap(glyph, color, size, dpr).save(path, "PNG")
+    return path.replace(os.sep, "/")
+
+
 def checkbox_indicator_qss(size: int = 15, unchecked_color: str = None, checked_color: str = None) -> str:
     """
     返回把 QCheckBox 指示器换成 circle.svg(未选)/circle-check.svg(选中)的样式片段。
@@ -138,4 +218,55 @@ def checkbox_indicator_qss(size: int = 15, unchecked_color: str = None, checked_
         f"QCheckBox::indicator:checked {{ image: url({c}); border: none; background: transparent; }}"
         f"QCheckBox::indicator:hover {{ border: none; background: transparent; }}"
         f"QCheckBox::indicator:checked:hover {{ image: url({c}); border: none; background: transparent; }}"
+    )
+
+
+def radio_indicator_qss(size: int = 15, unchecked_color: str = None, checked_color: str = None) -> str:
+    """
+    返回把 QRadioButton 指示器换成 circle.svg(未选)/circle-check.svg(选中)的样式片段。
+    与 checkbox_indicator_qss 同一套视觉语言：未选=圆圈(灰)，选中=带勾圆圈(accent 绿)。
+
+    必要性：QRadioButton 一旦挂了任何自定义 stylesheet，Qt 会切到
+    QStyleSheetStyle 渲染指示器，Windows 深色界面下选中态圆点的颜色会与
+    背景融合——用户看到「未选中的空心圆圈可见、被选中那项反而隐形」
+    （4.5.0RC2 用户实测反馈）。显式指定两种状态的图标可跨平台稳定渲染。
+
+    参数:
+    size (int): 指示器边长(px)，默认 15，与 checkbox 版一致。
+    unchecked_color (str): 未选中圆圈颜色，默认 text_muted 灰。
+    checked_color (str): 选中图标颜色，默认 accent 绿。
+
+    返回:
+    str: 追加到控件现有 QRadioButton 样式后面的 QSS 片段。
+
+    Return a QSS snippet replacing the QRadioButton indicator with circle.svg
+    (unchecked) and circle-check.svg (checked) — the same visual language as
+    checkbox_indicator_qss.
+
+    Why: once a QRadioButton carries any custom stylesheet, Qt renders its
+    indicator via QStyleSheetStyle, and on Windows dark UI the checked dot's
+    color blends into the background — users see the hollow circles on
+    unselected options while the selected one appears indicator-less
+    (reported on 4.5.0RC2). Explicit per-state icons render consistently
+    across platforms.
+
+    Parameters:
+    size (int): Indicator edge length in px, default 15 (matches checkbox).
+    unchecked_color (str): Unchecked circle color, defaults to muted gray.
+    checked_color (str): Checked icon color, defaults to accent green.
+
+    Return:
+    str: QSS snippet to append to a widget's existing QRadioButton style.
+    """
+    uc = unchecked_color or COLORS.get("text_muted", "#8a8a8a")
+    cc = checked_color or COLORS.get("accent", "#00d4aa")
+    u = tinted_png_path("circle.svg", uc, size)
+    c = tinted_png_path("circle-check.svg", cc, size)
+    return (
+        f"QRadioButton::indicator {{ width: {size}px; height: {size}px;"
+        f" border: none; background: transparent; border-radius: 0px; }}"
+        f"QRadioButton::indicator:unchecked {{ image: url({u}); border: none; background: transparent; }}"
+        f"QRadioButton::indicator:checked {{ image: url({c}); border: none; background: transparent; }}"
+        f"QRadioButton::indicator:hover {{ border: none; background: transparent; }}"
+        f"QRadioButton::indicator:checked:hover {{ image: url({c}); border: none; background: transparent; }}"
     )

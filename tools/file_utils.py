@@ -5,6 +5,38 @@ import os
 import stat
 import subprocess
 import sys
+from typing import Optional
+
+
+def sibling_jpeg(base_path: Optional[str]) -> Optional[str]:
+    """
+    返回与 base_path 同目录、同主名的 JPG/JPEG 边车路径(存在则返回,否则 None)。
+
+    用途:SuperPicky 的 RAW+JPG 成对拍摄中,配对 JPG 与 RAW 始终位于同一目录、
+    同主名,并随整理移动一起搬动。当数据库里的 temp_jpeg_path 因多轮整理/连拍
+    重组而失同步时,可用可靠的 current_path/original_path 推导出真正的显示用 JPG,
+    避免缩略图/预览丢失。大小写扩展名都尝试以兼容大小写敏感文件系统。
+
+    Return the JPG/JPEG sidecar that sits next to base_path (same directory,
+    same stem) if it exists, else None. In SuperPicky's RAW+JPG workflow the
+    paired JPG always lives beside the RAW and moves with it, so it can be
+    derived from the reliable current_path even when the DB temp_jpeg_path has
+    drifted out of sync after organizing/burst-regrouping.
+
+    参数 / Parameters:
+        base_path (Optional[str]): 任意成员文件的绝对路径(RAW 或 JPG 均可)。
+
+    返回 / Returns:
+        Optional[str]: 存在的同名 JPG 路径 / the existing sibling JPG path.
+    """
+    if not base_path:
+        return None
+    stem = os.path.splitext(base_path)[0]
+    for ext in ('.jpg', '.jpeg', '.JPG', '.JPEG'):
+        candidate = stem + ext
+        if os.path.exists(candidate):
+            return candidate
+    return None
 
 
 def hide_path(path):
@@ -31,10 +63,18 @@ def hide_path(path):
             # 如果 ctypes 失败，尝试使用 attrib 命令
             try:
                 import subprocess
+                # 不加 shell=True：attrib.exe 是独立可执行文件，无需 cmd.exe。
+                # 经 shell 转发时路径会被 list2cmdline 拼成字符串，若路径含 & | 等
+                # 元字符且不含空格(如 Birds&Wildlife)就不会被加引号，cmd 会把后半段
+                # 当成另一条命令执行；含 % 的路径(如 100%Birds)还会被变量展开而损坏。
+                # Do not pass shell=True: attrib.exe needs no cmd.exe. Going through
+                # the shell means the path is flattened by list2cmdline, and a path
+                # containing & or | without spaces (e.g. Birds&Wildlife) is left
+                # unquoted — cmd then runs the tail as a separate command. Paths
+                # containing % would also be corrupted by variable expansion.
                 result = subprocess.run(
                     ['attrib', '+H', path],
                     capture_output=True,
-                    shell=True,
                     timeout=5
                 )
                 return result.returncode == 0
@@ -160,10 +200,12 @@ def unhide_path(path):
         except Exception:
             try:
                 import subprocess
+                # 同 set_hidden_attribute：不经 cmd.exe，避免路径中的 & | % 被 shell 解释。
+                # Same as the hide path: bypass cmd.exe so & | % in the path are not
+                # interpreted by the shell.
                 result = subprocess.run(
                     ['attrib', '-H', path],
                     capture_output=True,
-                    shell=True,
                     timeout=5
                 )
                 return result.returncode == 0
