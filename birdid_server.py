@@ -17,6 +17,7 @@ from typing import Optional
 # 确保模块路径正确
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from tools.i18n import t
+from tools.pinyin_names import pinyin_for
 from config import config
 
 from flask import Flask, request, jsonify
@@ -243,6 +244,7 @@ def recognize_bird():
             {
                 "rank": 1,
                 "cn_name": "白头鹎",
+                "pinyin_name": "bái tóu bēi",
                 "en_name": "Light-vented Bulbul",
                 "scientific_name": "Pycnonotus sinensis",
                 "confidence": 95.5,
@@ -269,7 +271,7 @@ def recognize_bird():
         image_path = data.get('image_path')
         image_base64 = data.get('image_base64')
         temp_file = None
-        
+
         # 日志：显示请求信息
         if image_path:
             print(t("server.log_request_file", file=os.path.basename(image_path)))
@@ -300,13 +302,13 @@ def recognize_bird():
         use_yolo = data.get('use_yolo', True)
         use_gps = data.get('use_gps', True)
         top_k = data.get('top_k', 3)
-        
+
         # 读取 GUI 设置的国家/地区过滤
         gui_settings = get_gui_settings()
         country_code = data.get('country_code', gui_settings['country_code'])
         region_code = data.get('region_code', gui_settings['region_code'])
         use_geo_filter = data.get('use_geo_filter', gui_settings['use_geo_filter'])
-        
+
         # 日志：显示识别参数
         print(t("server.log_params"))
         print(t("server.log_yolo", value=t("server.yes") if use_yolo else t("server.no")))
@@ -328,7 +330,7 @@ def recognize_bird():
             use_geo_filter=use_geo_filter,
             name_format=get_advanced_config().name_format,
         )
-        
+
         # 日志：显示识别结果
         if result.get('success'):
             results = result.get('results', [])
@@ -355,11 +357,13 @@ def recognize_bird():
 
         # 格式化结果（兼容 Lightroom 插件格式）
         formatted_results = []
-        
+
         # 获取语言设置，决定 display_name 使用中文还是英文
         gui_language = get_gui_language()
         use_chinese = gui_language is None or gui_language == 'zh_CN'
-        
+
+        # 拼音随 API 数据返回，不受界面语言限制；查不到时为空串。
+        # Return pinyin regardless of UI language; use an empty string on a miss.
         for i, r in enumerate(result.get('results', []), 1):
             cn_name = r.get('cn_name', '')
             en_name = r.get('en_name', '')
@@ -368,26 +372,29 @@ def recognize_bird():
                 display_name = cn_name if cn_name else en_name
             else:
                 display_name = en_name if en_name else cn_name
-            
-            formatted_results.append({
-                'rank': i,
-                'cn_name': cn_name,
-                'en_name': en_name,
-                'display_name': display_name,  # 根据语言设置自动选择
-                'scientific_name': r.get('scientific_name', ''),
-                'confidence': float(r.get('confidence', 0)),
-                'ebird_match': r.get('ebird_match', False),
-                'description': r.get('description', '')
-            })
-        
+
+            formatted_results.append(
+                {
+                    "rank": i,
+                    "cn_name": cn_name,
+                    "pinyin_name": pinyin_for(cn_name),
+                    "en_name": en_name,
+                    "display_name": display_name,  # 根据语言设置自动选择
+                    "scientific_name": r.get("scientific_name", ""),
+                    "confidence": float(r.get("confidence", 0)),
+                    "ebird_match": r.get("ebird_match", False),
+                    "description": r.get("description", ""),
+                }
+            )
+
         # 智能候选筛选：根据置信度差距决定返回多少个候选
         if len(formatted_results) >= 2:
             top_confidence = formatted_results[0]['confidence']
-            
+
             # 计算与第一名的相对差距（百分比）
             # 如果第1名 = 50%, 第2名 = 40%, 相对差距 = (50-40)/50 = 20%
             smart_results = [formatted_results[0]]  # 总是包含第1名
-            
+
             for r in formatted_results[1:]:
                 if top_confidence > 0:
                     relative_gap = (top_confidence - r['confidence']) / top_confidence * 100
@@ -396,15 +403,15 @@ def recognize_bird():
                         smart_results.append(r)
                     else:
                         break  # 后面的差距只会更大，停止添加
-            
+
             # 日志：显示筛选结果
             if len(smart_results) == 1:
                 print(t("server.log_smart_filter_1", conf=top_confidence))
             else:
                 print(t("server.log_smart_filter_n", count=len(smart_results)))
-            
+
             formatted_results = smart_results
-        
+
         # 如果没有结果，返回详细的错误信息
         if not formatted_results:
             geo_info = result.get('geo_info')
